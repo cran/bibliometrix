@@ -1,0 +1,17 @@
+# last modified 07 May 2016 by Massimo Aria
+
+import("stats", "Matrix")
+importFrom("dplyr", "mutate_each","funs")
+importFrom("stringr", "str_replace_all")
+importFrom("graphics", "barplot", "legend", "lines", "plot")
+importFrom("utils", "data")
+
+S3method(plot, bibliometrix)
+S3method(summary, bibliometrix)
+
+export(biblioAnalysis, biblioNetwork, cocMatrix, convert2df, dominance,    
+       isi2df, isibib2df, lotka, metaTagExtraction, plot.bibliometrix, scopus2df, 
+       summary.bibliometrix, tableTag, trim.leading
+       )
+	   
+
