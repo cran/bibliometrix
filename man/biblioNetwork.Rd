@@ -38,6 +38,7 @@ Typical networks output of \code{biblioNetwork} are:\cr\cr
 -- Reference co-citation (analysis = "co-citation", network = "references")\cr
 -- Source co-citation (analysis = "co-citation", network = "sources")\cr\cr
 #### Coupling Networks ################\cr
+-- Manuscript coupling (analysis = "coupling", network = "references")\cr
 -- Authors coupling (analysis = "coupling", network = "authors")\cr
 -- Source coupling (analysis = "coupling", network = "sources")\cr
 -- Keyword coupling (analysis = "coupling", network = "keywords")\cr

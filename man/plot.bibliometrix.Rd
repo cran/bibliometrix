@@ -14,7 +14,7 @@
 \code{pause} is a logical, used to allow pause in screen scrolling of results. Default value is \code{pause = TRUE}.}
 }
 \value{
-The function \code{plot} returns a set of plots of the object of class \code{bibliometrix}.
+none. The function \code{plot} returns a set of plots of the object of class \code{bibliometrix}.
 }
 \description{
 \code{plot} method for class '\code{bibliometrix}'

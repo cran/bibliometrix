@@ -77,22 +77,26 @@ if ("PY" %in% Tags){Years=table(PY)}
 if ("AU" %in% Tags){
   listAU=strsplit(as.character(M$AU),sep)
   listAU=lapply(listAU, function(l) trim.leading(l))
-  if (M$DB[1]=="ISI"){
-    listAU=lapply(listAU,function(l){
-      l=trim.leading(l)
-      l=gsub(" ","",l, fixed = TRUE)
-    })}
-    
-  if (M$DB[1]=="SCOPUS"){
-      listAU=lapply(listAU,function(l){
+  #if (M$DB[1]=="ISI"){
+     listAU=lapply(listAU,function(l){
       l=trim.leading(l)
       l=sub(" ",",",l, fixed = TRUE)
-      l=gsub(" ","",l, fixed = TRUE)})}
+      l=sub(",,",",",l, fixed = TRUE)
+      l=gsub(" ","",l, fixed = TRUE)})
+     #}
+    
+  #if (M$DB[1]=="SCOPUS"){
+      #listAU=lapply(listAU,function(l){
+      #l=trim.leading(l)
+      #l=sub(" ",",",l, fixed = TRUE)
+      #l=gsub(" ","",l, fixed = TRUE)})
+      #}
     
   nAU=unlist(lapply(listAU,length))  # num. of authors per paper
   fracAU=unlist(sapply(nAU,function(x){rep(1/x,x)}))  # fractional frequencies
-  if (M$DB[1]=="ISI"){AU=gsub(" ", "", unlist(listAU), fixed = TRUE)} # delete spaces
-  if (M$DB[1]=="SCOPUS"){AU=sub(" ",",",unlist(listAU),fixed=TRUE);AU=gsub(" ","",AU,fixed=TRUE)}
+  AU=gsub(" ", "", unlist(listAU), fixed = TRUE)
+  #if (M$DB[1]=="ISI"){AU=gsub(" ", "", unlist(listAU), fixed = TRUE)} # delete spaces
+  #if (M$DB[1]=="SCOPUS"){AU=sub(" ",",",unlist(listAU),fixed=TRUE);AU=gsub(" ","",AU,fixed=TRUE)}
   Authors=sort(table(AU),decreasing=TRUE)
   Authors_frac=aggregate(fracAU,by=list(AU),'sum')
   names(Authors_frac)=c("Author","Frequency")

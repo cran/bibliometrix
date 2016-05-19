@@ -12,6 +12,7 @@
 #' -- Reference co-citation (analysis = "co-citation", network = "references")\cr
 #' -- Source co-citation (analysis = "co-citation", network = "sources")\cr\cr
 #' #### Coupling Networks ################\cr
+#' -- Manuscript coupling (analysis = "coupling", network = "references")\cr
 #' -- Authors coupling (analysis = "coupling", network = "authors")\cr
 #' -- Source coupling (analysis = "coupling", network = "sources")\cr
 #' -- Keyword coupling (analysis = "coupling", network = "keywords")\cr
@@ -82,6 +83,10 @@ biblioNetwork <- function(M, analysis = "coupling", network = "authors", sep = "
       WCR=cocMatrix(M, Field="CR", type = "sparse", sep)
       CRA = crossprod(WCR, WA)
       NetMatrix = crossprod(CRA, CRA)
+      },
+      references={
+        WCR=Matrix::t(cocMatrix(M, Field="CR", type = "sparse", sep))
+        NetMatrix = crossprod(WCR, WCR)
       },
     keywords={
       WK=cocMatrix(M, Field="ID", type = "sparse", sep)

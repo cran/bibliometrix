@@ -18,7 +18,9 @@ The function \code{summary} computes and returns a list of summary statistics of
 
 the list contains the following objects:
 \tabular{lll}{
+\code{MainInformation}   \tab   \tab Main Information about Data\cr
 \code{AnnualProduction}  \tab   \tab Annual Scientific Production\cr
+\code{AnnualGrowthRate}  \tab   \tab Annual Percentage Growth Rate\cr
 \code{MostProdAuthors}   \tab   \tab Most Productive Authors\cr
 \code{MostProdCountries} \tab   \tab Most Productive Countries\cr
 \code{TCperCountries}    \tab   \tab Total Citation per Countries\cr

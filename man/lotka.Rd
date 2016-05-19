@@ -2,7 +2,7 @@
 % Please edit documentation in R/lotka.R
 \name{lotka}
 \alias{lotka}
-\title{Lotka's law estimation}
+\title{Lotka's law coefficient estimation}
 \usage{
 lotka(results)
 }
@@ -17,6 +17,8 @@ the list contains the following objects:
 \code{Beta}  \tab   \tab Beta coefficient\cr
 \code{C}   \tab   \tab Constant coefficient\cr
 \code{R2} \tab   \tab Goodness of Fit\cr
+\code{fitted} \tab     \tab Fitted Values\cr
+\code{p.value} \tab     \tab Pvalue of two-sample Kolmogorov-Smirnov test between the empirical and the theorical Lotka's Law distribution (with Beta=2)\cr
 \code{AuthorProd}    \tab   \tab Authors' Productivity frequency table}
 }
 \description{

@@ -73,7 +73,7 @@ size<-dim(M)
 if (Field=="CR"){M$CR<-str_replace_all(as.character(M$CR),"DOI;","DOI ")}
 
 if (Field %in% names(M)){
-  Fi<-strsplit(M[,Field],";")} else{return(print(paste("Field",Field,"is not a column name of input data frame")))}
+  Fi<-strsplit(M[,Field],sep)} else{return(print(paste("Field",Field,"is not a column name of input data frame")))}
   Fi<-lapply(Fi,trim.leading)
 if (Field=="CR"){Fi<-lapply(Fi,function(l) l<-l[nchar(l)>10])}  ## delete not congruent references
 

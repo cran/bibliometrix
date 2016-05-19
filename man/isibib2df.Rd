@@ -26,7 +26,7 @@ It converts an ISI WoK Export file and create a data frame from it, with cases c
 # The original file (exported by ISI search web site) can be modified
 # using an advanced text editor like Notepad++ or Emacs.
 
-# largechar <- readLines('~/extdata/ranking_bib.txt')
+# largechar <- readLines('http://www.bibliometrix.org/datasets/ranking.bib')
 
 # ranking <- isibib2df(largechar)
 

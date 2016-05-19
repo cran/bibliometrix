@@ -9,7 +9,9 @@
 #'
 #' the list contains the following objects:
 #' \tabular{lll}{
+#' \code{MainInformation}   \tab   \tab Main Information about Data\cr
 #' \code{AnnualProduction}  \tab   \tab Annual Scientific Production\cr
+#' \code{AnnualGrowthRate}  \tab   \tab Annual Percentage Growth Rate\cr
 #' \code{MostProdAuthors}   \tab   \tab Most Productive Authors\cr
 #' \code{MostProdCountries} \tab   \tab Most Productive Countries\cr
 #' \code{TCperCountries}    \tab   \tab Total Citation per Countries\cr
@@ -31,24 +33,27 @@
 
 summary.bibliometrix<-function(object, ...){
 
+  if (class(object)!="bibliometrix"){cat('\n argument "object" have to be an object of class "bibliometrix"\n');return(NA)}
+  
   arguments <- list(...)
   if (sum(names(arguments)=="k")==0){k=10} else {k=arguments$k}
   if (sum(names(arguments)=="pause")==0){pause=TRUE} else {pause=arguments$pause}
   
 
   #Main Information about data
-  cat("\n\nMain Information about data\n\n")
-  cat("Articles                             ",object$Articles,"\n")
-  cat("Authors                              ",object$nAuthors,"\n")
-  cat("Author Appearances                   ",object$Apparences,"\n")
-  cat("Authors of single authored articles  ",object$nAuthors-object$AuMultiAuthoredArt,"\n")
-  cat("Authors of multi authored articles   ",object$AuMultiAuthoredArt,"\n")
-  cat("Articles per Author                  ",format(object$Articles/object$nAuthors,digits=3),"\n")
-  cat("Authors per Article                  ",format(object$nAuthors/object$Articles,digits=3),"\n")
-  cat("Co-Authors per Articles              ",format(mean(object$nAUperPaper),digits=3),"\n")
+  MainInfo=("\n\nMain Information about data\n\n")
+  MainInfo[2]=paste("Articles                             ",object$Articles,"\n")
+  MainInfo[3]=paste("Authors                              ",object$nAuthors,"\n")
+  MainInfo[4]=paste("Author Appearances                   ",object$Apparences,"\n")
+  MainInfo[5]=paste("Authors of single authored articles  ",object$nAuthors-object$AuMultiAuthoredArt,"\n")
+  MainInfo[6]=paste("Authors of multi authored articles   ",object$AuMultiAuthoredArt,"\n")
+  MainInfo[7]=paste("Articles per Author                  ",format(object$Articles/object$nAuthors,digits=3),"\n")
+  MainInfo[8]=paste("Authors per Article                  ",format(object$nAuthors/object$Articles,digits=3),"\n")
+  MainInfo[9]=paste("Co-Authors per Articles              ",format(mean(object$nAUperPaper),digits=3),"\n")
   CollIndex=format(object$AuMultiAuthoredArt/sum(object$nAUperPaper>1),digits=3)  # Collaboration Index
-  cat("Collaboration Index                  ",CollIndex,"\n")
-  cat("\n")
+  MainInfo[10]=paste("Collaboration Index                  ",CollIndex,"\n")
+  MainInfo[11]=paste("\n")
+  cat(MainInfo)
 
   if (pause==TRUE){
   cat("Hit <Return> to see next table: ")
@@ -157,7 +162,7 @@ summary.bibliometrix<-function(object, ...){
   row.names(AAA)=1:k
   print(AAA,row.names=TRUE);cat("\n")}
 
-  summaryresults=list(AnnualProduction=Y,MostProdAuthors=A,MostProdCountries=Co,TCperCountries=AC,MostRelSources=AA,MostRelKeywords=AAA)
+  summaryresults=list(MainInformation=MainInfo,AnnualProduction=Y,AnnualGrowthRate=GR,MostProdAuthors=A,MostProdCountries=Co,TCperCountries=AC,MostRelSources=AA,MostRelKeywords=AAA)
 
   invisible(summaryresults)
   }

@@ -5,7 +5,7 @@
 #' @param ... can accept two arguments:\cr 
 #' \code{k} is an integer, used for plot formatting (number of objects). Default value is 10.\cr
 #' \code{pause} is a logical, used to allow pause in screen scrolling of results. Default value is \code{pause = TRUE}.
-#' @return The function \code{plot} returns a set of plots of the object of class \code{bibliometrix}.
+#' @return none. The function \code{plot} returns a set of plots of the object of class \code{bibliometrix}.
 #'
 #' @method plot bibliometrix
 #' @examples
@@ -22,6 +22,8 @@
 
 plot.bibliometrix<-function(x, ...){
 
+  if (class(x)!="bibliometrix"){cat('\n argument "x" have to be an object of class "bibliometrix"\n');return(NA)}
+  
   arguments <- list(...)
   if (sum(names(arguments)=="k")==0){k=10} else {k=arguments$k}
   if (sum(names(arguments)=="pause")==0){pause=TRUE} else {pause=arguments$pause}

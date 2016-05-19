@@ -1,0 +1,13 @@
+bibliometrix v0.2 (Release date: 2016-05-19)
+==============
+
+Changes:
+* Additional vignettes and documentation
+
+New functionality::
+* citations() to generate the frequency table of the most cited references or the most cited first authors (of references).
+* lotka() now performs Kolmogorov-Smirnoff two sample test among observed and theoretical Lotka's distributions.
+
+Bug Fixes:
+* Minor fixes in importing routines and summary function.
+      

@@ -15,7 +15,7 @@
 #' # The original file (exported by ISI search web site) can be modified
 #' # using an advanced text editor like Notepad++ or Emacs.
 #'
-#' # scientometrics_text <- readLines('~/extdata/scientometrics.txt')
+#' # scientometrics_text <- readLines('http://www.bibliometrix.org/datasets/scientometrics.txt')
 #' # data(scientometrics_text)
 #' # scient_df <- isi2df(scientometrics_text)
 #'

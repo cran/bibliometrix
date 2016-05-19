@@ -30,7 +30,7 @@
 biblio_df
 }
 \description{
-Manuscripts with a title containing the word "bibliometrics" and published in a journal indexed by ISI WoK database.\cr
+The set of manuscripts which the title containing the word "bibliometrics" and published in a journal indexed by ISI WoK database.\cr
 Period: 2006 - 2015\cr
 Database: \href{http://www.webofknowledge.com}{ISI Web of Knowledge}\cr
 }

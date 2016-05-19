@@ -15,7 +15,7 @@
 #' # The original file (exported by ISI search web site) can be modified
 #' # using an advanced text editor like Notepad++ or Emacs.
 #'
-#' # largechar <- readLines('~/extdata/ranking_bib.txt')
+#' # largechar <- readLines('http://www.bibliometrix.org/datasets/ranking.bib')
 #' 
 #' # ranking <- isibib2df(largechar)
 #'
@@ -44,7 +44,7 @@ isibib2df<-function(D){
   for (i in 1:nP){
 
     iP=Papers[i]
-    iPs=Papers[i+1]-2
+    iPs=Papers[i+1]-1
     if (i%%100==0 | i==nP) cat("Articles extracted  ",i,"\n")
 
     for (j in 1:length(Tag)){

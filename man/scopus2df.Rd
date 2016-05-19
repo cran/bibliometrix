@@ -26,7 +26,7 @@ It converts a SCOPUS Export file and create a data frame from it, with cases cor
 # The original file (exported by SCOPUS search web site) can be modified
 # using an advanced text editor like Notepad++ or Emacs.
 
-#largechar <- readLines('http://wpage.unina.it/aria/scopus.bib')
+#largechar <- readLines('http://www.bibliometrix.org/datasets/scopus.bib')
 
 
 #scopus_df <- scopus2df(largechar)

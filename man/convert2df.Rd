@@ -55,7 +55,7 @@ Actually the function allows to convert both SCOPUS/ISI files in bibtext format 
 # The original file (exported by ISI or SCOPUS search web site) can be modified
 # using an advanced text editor like Notepad++ or Emacs.
 
-#  biblio <- readLines('~/extdata/bibliometrics_articles.txt')
+#  biblio <- readLines('http://www.bibliometrix.org/datasets/bibliometrics_articles.txt')
 
 data(biblio)
 
