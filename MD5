@@ -1,7 +1,7 @@
 4274b88e8cd54436b1177f3e27cf0c37 *COPYING
-2548f10c5b7657fccbc84dfe4f84c33e *DESCRIPTION
+f9dcee9e074f7eea9103c94fcae1009b *DESCRIPTION
 f8dde7ce83c56fe994e495139105159f *NAMESPACE
-ecb7e6e8a60cb50a31d75f66b43d742f *NEWS
+18f2de959d58e2468499646c9abe0bb6 *NEWS
 abb9237a3176cc6680beafb4618ff4f0 *R/biblio.R
 ec8735e48ab25aa595c5dc7b9f354378 *R/biblioAnalysis.R
 6bef44d48ff539222ed6c3e49b20bba2 *R/biblioNetwork.R
@@ -29,8 +29,8 @@ aa259ff511dc04faaf8eb293f481edd8 *data/countries.rda
 69df2ca103befd4b129dac10c700f1bf *data/scientometrics.rda
 15f34363d4deb8a744d86507d37626b7 *data/scientometrics_text.rda
 e93477fbed7b9c9cb428aca7da8ba13a *inst/doc/bibliometrix-vignette.R
-5a956de8a7b6de1b285857f8882d46e8 *inst/doc/bibliometrix-vignette.Rmd
-8063623bf56ae4d0e6913fdc026945e4 *inst/doc/bibliometrix-vignette.html
+93b8a1edbf290d338b5df7b08cb9fab3 *inst/doc/bibliometrix-vignette.Rmd
+a5410cd0605217ddf441df7c75ec70ce *inst/doc/bibliometrix-vignette.html
 4d3f437e6750c90901ac189f71855931 *man/biblio.Rd
 97036134eea8c5219afbb3baefa2b9d3 *man/biblioAnalysis.Rd
 78e2f102fd9cd43226228581ea15e3da *man/biblioNetwork.Rd
@@ -52,7 +52,7 @@ f907b394b9f0babd7a5f82f0f9bb55d6 *man/scientometrics_text.Rd
 d5dae1f2ef0b95325154e84d18b7eb69 *man/summary.bibliometrix.Rd
 2c402f6330a630219aa60e0c0b2afbc4 *man/tableTag.Rd
 e935121182d25b0730160071a6fc9bfc *man/trim.leading.Rd
-5a956de8a7b6de1b285857f8882d46e8 *vignettes/bibliometrix-vignette.Rmd
+93b8a1edbf290d338b5df7b08cb9fab3 *vignettes/bibliometrix-vignette.Rmd
 c30d45673660afc6a6d05ce1bf5b22e9 *vignettes/figures/cr1.png
 cf942a81f26e77a9fea667d99f1c77bc *vignettes/figures/isi1.png
 3b688500a7dea2e0e2365f026ef7812e *vignettes/figures/isi2.png

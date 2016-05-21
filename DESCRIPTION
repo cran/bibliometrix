@@ -1,8 +1,8 @@
 Package: bibliometrix
 Type: Package
 Title: Bibliometric and Co-Citation Analysis Tool
-Version: 0.2
-Date: 2016-05-17
+Version: 0.3
+Date: 2016-05-21
 Authors@R: c(person("Massimo", "Aria", email = "aria@unina.it", role=c("cre","aut")),
              person("Corrado", "Cuccurullo", email = "cuccurullocorrado@gmail.com", role="aut"))
 Description: Tool for quantitative research in scientometrics and bibliometrics.
@@ -18,10 +18,10 @@ Imports: stats, dplyr, Matrix, stringr
 Suggests: igraph, knitr, rmarkdown
 RoxygenNote: 5.0.1
 NeedsCompilation: no
-Packaged: 2016-05-19 15:36:16 UTC; aria
+Packaged: 2016-05-21 09:45:04 UTC; aria
 Author: Massimo Aria [cre, aut],
   Corrado Cuccurullo [aut]
 Maintainer: Massimo Aria <aria@unina.it>
 VignetteBuilder: knitr
 Repository: CRAN
-Date/Publication: 2016-05-19 17:55:12
+Date/Publication: 2016-05-21 12:03:05

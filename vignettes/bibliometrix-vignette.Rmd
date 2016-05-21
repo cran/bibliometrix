@@ -45,7 +45,7 @@ At the link http://www.webofknowledge.com , select Web of Science Core Collectio
 
 Write the keyword "bibliometrics" in the search field and select title from the dropdown menu (see figure 1).  
 <div style="width:300px; height=200px">
-![Figure 1](figures/ISI1.png)
+![Figure 1](figures/isi1.png)
 </div>
 
 Choose SCI-EXPANDED and SSCI citation indexes.
@@ -57,7 +57,7 @@ Results can be refined using options on the left of the page (type of manuscript
 After refining the query, you can add records to your Marked List by clicking the button "add to marked list" at the end of the page and selecting the records to save (see figure 2).
 
 <div style="width:300px; height=200px">
-![Figure 2](figures/ISI2.png)
+![Figure 2](figures/isi2.png)
 </div>
 
 The Marked List page provides you with a list of publications selected and various means of exporting data. 
@@ -65,7 +65,7 @@ The Marked List page provides you with a list of publications selected and vario
 To export the data you desire, choose the export tool and follow the three intuitive steps (see figure 3).
 
 <div style="width:300px; height=200px">
-![Figure 3](figures/ISI3.png)
+![Figure 3](figures/isi3.png)
 </div>
 
 The export tool allows you to select the diverse fields to save. So, select the fields your are interested in (for example all the available data about marked records).
