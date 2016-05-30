@@ -26,6 +26,10 @@ CR[1:10]
 CR <- citations(M, field = "author", sep = ".  ")
 CR[1:10]
 
+## ----Local Author citation-----------------------------------------------
+CR <- localCitations(M, results, sep = ".  ")
+CR[1:10]
+
 ## ----Dominance Ranking---------------------------------------------------
 DF <- dominance(results, k = 10)
 DF
@@ -70,7 +74,7 @@ sort(Matrix::colSums(A), decreasing = TRUE)[1:5]
 # A <- cocMatrix(M, Field = "CR", sep = ".  ")
 
 ## ------------------------------------------------------------------------
-# A <- cocMatrix(M, Field = "AU", sep = ".  ")
+# A <- cocMatrix(M, Field = "AU", sep = ";")
 
 ## ------------------------------------------------------------------------
 M <- metaTagExtraction(M, Field = "AU_CO", sep = ";")

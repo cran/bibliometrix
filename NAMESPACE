@@ -9,9 +9,7 @@ importFrom("utils", "data")
 S3method(plot, bibliometrix)
 S3method(summary, bibliometrix)
 
-export(biblioAnalysis, biblioNetwork, citations, cocMatrix, convert2df, dominance,    
-       isi2df, isibib2df, lotka, metaTagExtraction, plot.bibliometrix, scopus2df, 
-       summary.bibliometrix, tableTag, trim.leading
-       )
+exportPattern("^[[:alpha:]]+")
+
 	   
 

@@ -1,3 +1,21 @@
+bibliometrix v0.5 (Release date: 2016-05-25)
+==============
+
+New functionality::
+* localCitations() generates the frequency table of the most cited local authors.
+
+Changes:
+* Minor fixes in citations() function
+* Minor corrections in vignettes and documentation
+
+
+bibliometrix v0.4 (Release date: 2016-05-23)
+==============
+
+Changes:
+* Minor fixes in citations() function
+
+
 bibliometrix v0.3 (Release date: 2016-05-21)
 ==============
 
@@ -12,7 +30,7 @@ Changes:
 * Additional vignettes and documentation
 
 New functionality::
-* citations() to generate the frequency table of the most cited references or the most cited first authors (of references).
+* citations() generates the frequency table of the most cited references or the most cited first authors (of references).
 * lotka() now performs Kolmogorov-Smirnoff two sample test among observed and theoretical Lotka's distributions.
 
 Bug Fixes:

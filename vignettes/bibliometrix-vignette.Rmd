@@ -231,6 +231,16 @@ CR <- citations(M, field = "author", sep = ".  ")
 CR[1:10]
 ```
 
+The function *localCitations* generates the frequency table of the most local cited authors.
+Local citations measure how many times an author included in this collection have been cited by other authors also in the collection.
+
+To obtain the most frequent local cited authors:
+```{r Local Author citation}
+CR <- localCitations(M, results, sep = ".  ")
+CR[1:10]
+```
+
+
 ## Authors' Dominance ranking
 
 The function *dominance* calculates the authors' dominance ranking as proposed by Kumar & Kumar, 2008.
@@ -335,7 +345,7 @@ Following this approach, you can compute several bipartite networks:
 
 * Author network
 ```{r}
-# A <- cocMatrix(M, Field = "AU", sep = ".  ")
+# A <- cocMatrix(M, Field = "AU", sep = ";")
 ```
 
 * Country network
