@@ -9,6 +9,12 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
+#### latest version 0.8 
+#### http://www.bibliometrix.org
+
+
+## Introduction
+
 **bibliometrix** package provides a set of tools for quantitative research in bibliometrics and scientometrics.
 
 Bibliometrics turns the main tool of science, quantitative analysis, on itself. Essentially, bibliometrics is the application of quantitative analysis and statistics to publications such as journal articles and their accompanying citation counts. Quantitative evaluation of publication and citation data is now used in almost all science fields to evaluate growth, maturity, leading authors, conceptual and intellectual maps, trend of a scientific community.
@@ -256,6 +262,43 @@ The Dominance Factor is a ratio indicating the fraction of multi authored articl
 
 In this example, Kostoff and Holden dominate their research team because they appear as first authors in all their papers (8 for Kostoff and 3 for Holden). 
 
+## Authors' h-index
+The h-index is an author-level metric that attempts to measure both the productivity and citation impact of the publications of a scientist or scholar. 
+
+The index is based on the set of the scientist's most cited papers and the number of citations that they have received in other publications.
+
+The function *Hindex* calculates the authors' H-index and its variants (g-index and m-index) in a bibliographic collection.
+
+Function arguments are: *M* a bibliographic data frame; *auhtors* a character vector containing the the authors' names for which you want to calculate the H-index. The aurgument has the form C("SURNAME1 N","SURNAME2 N",...). 
+
+In other words, for each author: surname and initials are separated by one blank space. 
+i.e for the authors SEMPRONIO TIZIO CAIO and ARIA MASSIMO *authors* argument is *authors = c("SEMPRONIO TC", "ARIA M")*.
+
+To calculate the h-index of Lutz Bornmann in this collection:
+
+```{r h-index}
+indices <- Hindex(M, authors="BORNMANN L", sep = ";")
+
+# Bornmann's impact indices:
+indices$H
+
+# Bornmann's citations
+indices$CitationList
+
+```
+
+To calculate the h-index of the first 10 most productive authors (in this collection):
+
+```{r h-index 10 authors}
+
+authors=gsub(","," ",names(results$Authors)[1:10])
+
+indices <- Hindex(M, authors, sep = ";")
+
+indices$H
+```
+
+
 ## Lotka's Law coefficient estimation
 The function *lotka* estimates Lotka's law coefficients for scientific productivity (Lotka A.J., 1926).
 
@@ -401,6 +444,28 @@ The following code calculates a classical article coupling network:
 ```{r}
 # NetMatrix <- biblioNetwork(M, analysis = "coupling", network = "references", sep = ".  ")
 ```
+
+Articles with only a few references, therefore, would tend to be more weakly bibliographically coupled, if coupling strength is measured simply according to the number of references articles contain in common. 
+
+This suggests that it might be more practicable to switch to a relative measure of bibliographic coupling.
+
+*couplingSimilarity* function calculates Jaccard or Salton similarity coefficient among manuscripts of a coupling network.
+
+```{r similarity, out.width='700px', dpi=200}
+NetMatrix <- biblioNetwork(M, analysis = "coupling", network = "sources", sep = ";")
+
+# calculate jaccard similarity coefficient
+S <- couplingSimilarity(NetMatrix, type="jaccard")
+
+# plot journals' similarity (with min 3 manuscripts)
+diag <- Matrix::diag
+MapDegree <- 3
+NETMAP <- S[diag(NetMatrix)>=MapDegree,diag(NetMatrix)>=MapDegree]
+diag(NETMAP) <- 0
+
+H <- heatmap(max(NETMAP)-as.matrix(NETMAP),symm=T, cexRow=0.3,cexCol=0.3)
+```
+
 
 ### Bibliographic co-citation
 
@@ -573,6 +638,15 @@ NET <- NET[diag(NET)>=NetDegree,diag(NET)>=NetDegree]
 
 # delete diagonal elements (self-loops)
 diag(NET) <- 0
+
+# Plot Keywords' Heatmap (most frequent 30 words)
+n=30
+NETMAP=NetMatrix[ind,ind]
+MapDegree <- sort(diag(NETMAP),decreasing=TRUE)[n]
+NETMAP <- NETMAP[diag(NETMAP)>=MapDegree,diag(NETMAP)>=MapDegree]
+diag(NETMAP) <- 0
+
+H <- heatmap(max(NETMAP)-as.matrix(NETMAP),symm=T, cexRow=0.3,cexCol=0.3)
 
 # Create igraph object
 bsk.network <- graph.adjacency(NET,mode="undirected")

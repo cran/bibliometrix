@@ -10,12 +10,13 @@ metaTagExtraction(M, Field = "CR_AU", sep = ";")
 \item{M}{is a data frame obtained by the converting function \code{\link{convert2df}}.
 It is a data matrix with cases corresponding to articles and variables to Field Tag in the original ISI or SCOPUS file.}
 
-\item{Field}{is a character object. New tag exctracted from aggregated data is specified by this string.
+\item{Field}{is a character object. New tag exctracted from aggregated data is specified by this string. 
 Field can be equal to one of this tags:
 \tabular{lll}{
 \code{"CR_AU"}\tab   \tab First Author of each cited reference\cr
 \code{"CR_SO"}\tab   \tab Source of each cited reference\cr
-\code{"AU_CO"}\tab   \tab Affiliation Country of each co-author}}
+\code{"AU_CO"}\tab   \tab Country of affiliation for each co-author\cr
+\code{"AU_UN"}\tab   \tab University of affiliation for each co-author}}
 
 \item{sep}{is the field separator character. This character separates strings in each column of the data frame. The default is \code{sep = ";"}.}
 }

@@ -43,16 +43,19 @@ summary.bibliometrix<-function(object, ...){
   #Main Information about data
   MainInfo=("\n\nMain Information about data\n\n")
   MainInfo[2]=paste("Articles                             ",object$Articles,"\n")
-  MainInfo[3]=paste("Authors                              ",object$nAuthors,"\n")
-  MainInfo[4]=paste("Author Appearances                   ",object$Apparences,"\n")
-  MainInfo[5]=paste("Authors of single authored articles  ",object$nAuthors-object$AuMultiAuthoredArt,"\n")
-  MainInfo[6]=paste("Authors of multi authored articles   ",object$AuMultiAuthoredArt,"\n")
-  MainInfo[7]=paste("Articles per Author                  ",format(object$Articles/object$nAuthors,digits=3),"\n")
-  MainInfo[8]=paste("Authors per Article                  ",format(object$nAuthors/object$Articles,digits=3),"\n")
-  MainInfo[9]=paste("Co-Authors per Articles              ",format(mean(object$nAUperPaper),digits=3),"\n")
+  MainInfo[3]=paste("Period                               ",min(object$Years),"-",max(object$Years),"\n")
+  TCm=format(mean(as.numeric(object$TotalCitation), na.rm=TRUE),digits=4)
+  MainInfo[4]=paste("Average citations per article        ",TCm,"\n\n")
+  MainInfo[5]=paste("Authors                              ",object$nAuthors,"\n")
+  MainInfo[6]=paste("Author Appearances                   ",object$Apparences,"\n")
+  MainInfo[7]=paste("Authors of single authored articles  ",object$nAuthors-object$AuMultiAuthoredArt,"\n")
+  MainInfo[8]=paste("Authors of multi authored articles   ",object$AuMultiAuthoredArt,"\n\n")
+  MainInfo[9]=paste("Articles per Author                  ",format(object$Articles/object$nAuthors,digits=3),"\n")
+  MainInfo[10]=paste("Authors per Article                  ",format(object$nAuthors/object$Articles,digits=3),"\n")
+  MainInfo[11]=paste("Co-Authors per Articles              ",format(mean(object$nAUperPaper),digits=3),"\n")
   CollIndex=format(object$AuMultiAuthoredArt/sum(object$nAUperPaper>1),digits=3)  # Collaboration Index
-  MainInfo[10]=paste("Collaboration Index                  ",CollIndex,"\n")
-  MainInfo[11]=paste("\n")
+  MainInfo[12]=paste("Collaboration Index                  ",CollIndex,"\n")
+  MainInfo[13]=paste("\n")
   cat(MainInfo)
 
   if (pause==TRUE){

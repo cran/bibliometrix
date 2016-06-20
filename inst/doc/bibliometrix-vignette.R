@@ -34,6 +34,24 @@ CR[1:10]
 DF <- dominance(results, k = 10)
 DF
 
+## ----h-index-------------------------------------------------------------
+indices <- Hindex(M, authors="BORNMANN L", sep = ";")
+
+# Bornmann's impact indices:
+indices$H
+
+# Bornmann's citations
+indices$CitationList
+
+
+## ----h-index 10 authors--------------------------------------------------
+
+authors=gsub(","," ",names(results$Authors)[1:10])
+
+indices <- Hindex(M, authors, sep = ";")
+
+indices$H
+
 ## ----Lotka law-----------------------------------------------------------
 L <- lotka(results)
 
@@ -88,6 +106,20 @@ M <- metaTagExtraction(M, Field = "AU_CO", sep = ";")
 
 ## ------------------------------------------------------------------------
 # NetMatrix <- biblioNetwork(M, analysis = "coupling", network = "references", sep = ".  ")
+
+## ----similarity, out.width='700px', dpi=200------------------------------
+NetMatrix <- biblioNetwork(M, analysis = "coupling", network = "sources", sep = ";")
+
+# calculate jaccard similarity coefficient
+S <- couplingSimilarity(NetMatrix, type="jaccard")
+
+# plot journals' similarity (with min 3 manuscripts)
+diag <- Matrix::diag
+MapDegree <- 3
+NETMAP <- S[diag(NetMatrix)>=MapDegree,diag(NetMatrix)>=MapDegree]
+diag(NETMAP) <- 0
+
+H <- heatmap(max(NETMAP)-as.matrix(NETMAP),symm=T, cexRow=0.3,cexCol=0.3)
 
 ## ------------------------------------------------------------------------
 # NetMatrix <- biblioNetwork(M, analysis = "co-citation", network = "references", sep = ".  ")
@@ -207,6 +239,15 @@ NET <- NET[diag(NET)>=NetDegree,diag(NET)>=NetDegree]
 
 # delete diagonal elements (self-loops)
 diag(NET) <- 0
+
+# Plot Keywords' Heatmap (most frequent 30 words)
+n=30
+NETMAP=NetMatrix[ind,ind]
+MapDegree <- sort(diag(NETMAP),decreasing=TRUE)[n]
+NETMAP <- NETMAP[diag(NETMAP)>=MapDegree,diag(NETMAP)>=MapDegree]
+diag(NETMAP) <- 0
+
+H <- heatmap(max(NETMAP)-as.matrix(NETMAP),symm=T, cexRow=0.3,cexCol=0.3)
 
 # Create igraph object
 bsk.network <- graph.adjacency(NET,mode="undirected")

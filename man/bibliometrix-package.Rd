@@ -26,7 +26,7 @@ Maintainer: Massimo Aria <massimo.aria@unina.it>
 }
 \references{
 Cuccurullo C., Aria M., Sarto F. (2016) Foundations and Trends in Performance Management. 
-A Twenty-five Years Bibliometric Analysis in Business and Public Administration Domains, forthcoming on Scientometrics.
+A Twenty-five Years Bibliometric Analysis in Business and Public Administration Domains, Scientometrics, DOI: 10.1007/s11192-016-1948-8.
 
 Koseoglu, M. A. (2016). Growth and structure of authorship and co-authorship network in the strategic management realm: 
 Evidence from the Strategic Management Journal. BRQ Business Research Quarterly.

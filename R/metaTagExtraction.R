@@ -3,12 +3,13 @@
 #' It extracts some new useful field tags from standard ISI/SCOPUS fied tag codify.
 #' @param M is a data frame obtained by the converting function \code{\link{convert2df}}.
 #'        It is a data matrix with cases corresponding to articles and variables to Field Tag in the original ISI or SCOPUS file.
-#' @param Field is a character object. New tag exctracted from aggregated data is specified by this string.
+#' @param Field is a character object. New tag exctracted from aggregated data is specified by this string. 
 #' Field can be equal to one of this tags:
 #' \tabular{lll}{
 #' \code{"CR_AU"}\tab   \tab First Author of each cited reference\cr
 #' \code{"CR_SO"}\tab   \tab Source of each cited reference\cr
-#' \code{"AU_CO"}\tab   \tab Affiliation Country of each co-author}
+#' \code{"AU_CO"}\tab   \tab Country of affiliation for each co-author\cr
+#' \code{"AU_UN"}\tab   \tab University of affiliation for each co-author}
 #'
 #' @param sep is the field separator character. This character separates strings in each column of the data frame. The default is \code{sep = ";"}.
 #' @return the bibliometric data frame with a new column containing data about new field tag indicated in the argument \code{Field}.
@@ -103,8 +104,8 @@ if (Field=="AU_CO"){
   data("countries",envir=environment())
   countries=as.character(countries[[1]])
   if (M$DB[1]=="ISI"){
-  countries=as.character(sapply(countries,function(s) paste0(s,".",collapse="")))}
-  else if (M$DB[1]=="SCOPUS"){
+  countries=as.character(sapply(countries,function(s) paste0(s,".",collapse="")))
+  } else if (M$DB[1]=="SCOPUS"){
     countries=as.character(sapply(countries,function(s) paste0(s,";",collapse="")))}
 
   M$AU_CO=NA
@@ -115,7 +116,7 @@ if (Field=="AU_CO"){
   for (i in 1:size[1]){
     if (!is.na(C1[i])){
     ind=unlist(sapply(countries, function (l) (gregexpr ( l , C1[i],fixed=TRUE))))
-    if (sum(ind>-1)>0) {M$AU_CO[i]=paste(names(ind[ind>-1]),collapse=";")}
+    if (sum(ind>-1)>0) {M$AU_CO[i]=paste(unique(names(ind[ind>-1])),collapse=";")}
     }
   }
   M$AU_CO=gsub("[[:digit:]]","",M$AU_CO)
@@ -124,6 +125,54 @@ if (Field=="AU_CO"){
 
 
 }
+
+# UNIVERSITY AFFILIATION
+if (Field=="AU_UN"){
+  
+  AFF=gsub("\\[.*?\\] ", "", M$C1)
+  indna=which(is.na(AFF))
+  if (length(indna)>0){AFF[indna]=M$RP[indna]}
+  
+  listAFF=strsplit(AFF,sep,fixed=TRUE)
+  
+  
+  AFFL=lapply(listAFF, function(l){
+    #l=gsub(","," ,",l)
+    index=NULL
+    
+    for (i in 1:length(l)){
+      ind=list()
+      affL=unlist(strsplit(l[i],",",fixed=TRUE))
+    #affL=l[i]
+      ind[[1]]=which(regexpr("UNIV",affL,fixed=TRUE)!=-1)
+      ind[[2]]=which(regexpr("COLL",affL,fixed=TRUE)!=-1)
+      ind[[3]]=which(regexpr("SCH",affL,fixed=TRUE)!=-1)
+      ind[[4]]=which(regexpr("INST",affL,fixed=TRUE)!=-1)
+      ind[[5]]=which(regexpr("ACAD",affL,fixed=TRUE)!=-1)
+      ind[[6]]=which(regexpr("ECOLE",affL,fixed=TRUE)!=-1)
+      ind[[7]]=which(regexpr("CTR",affL,fixed=TRUE)!=-1)
+      ind[[8]]=which(regexpr("SCI",affL,fixed=TRUE)!=-1)
+      for (a in 1:8){
+        indd=ind[[a]]
+        if (length(indd)>0){break()}
+      }
+      
+      if (length(indd)==0){index=append(index,"NOT UNIVERSITY")
+      } else if (grepl("[[:digit:]]", affL[indd[1]])){index=append(index,"ND")
+      } else {index=append(index,affL[indd[1]])}
+      
+    }
+      #index=unique(c(ind1,ind2,ind3,ind4,ind5,ind6,ind7,ind8))
+    x=""
+    if (length(index)>0){
+      #x=paste0(trim.leading((affL[index])),collapse=",")
+      x=paste0(trim.leading(index),collapse=",")
+      x=gsub(" ,",",",x)}
+    return(x)
+  })
+  AFFL=unlist(AFFL)
+  M$AU_UN=AFFL
+  }
 
 return(M)
 }

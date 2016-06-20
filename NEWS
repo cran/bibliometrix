@@ -1,7 +1,43 @@
+bibliometrix v0.8 (Release date: 2016-06-10)
+==============
+
+New functionality:
+* Hindex() calculates the authors' h-index and its variants (g-index, m-index) in a a bibliographic collection.
+
+New data:
+* garfield dataset
+
+Changes:
+* Minor corrections in vignettes and documentation
+
+
+bibliometrix v0.7 (Release date: 2016-06-04)
+==============
+
+New functionality:
+* timeslice() calculates Jaccard and Salton similarity indices among manuscripts of a coupling network
+* dfMerge() merges two bibliographic data frames deleting duplicate manuscripts.
+* metaTagExtraction() now extracts also university of affiliation for each co-author
+
+Changes:
+* Minor fixes in metaTagExtraction() function 
+* Minor corrections in vignettes and documentation
+
+
+bibliometrix v0.6 (Release date: 2016-05-30)
+==============
+
+New functionality:
+* couplingSimilarity() calculates Jaccard and Salton similarity indices among manuscripts of a coupling network
+
+Changes:
+* Minor corrections in vignettes and documentation
+
+
 bibliometrix v0.5 (Release date: 2016-05-25)
 ==============
 
-New functionality::
+New functionality:
 * localCitations() generates the frequency table of the most cited local authors.
 
 Changes:
@@ -29,7 +65,7 @@ bibliometrix v0.2 (Release date: 2016-05-19)
 Changes:
 * Additional vignettes and documentation
 
-New functionality::
+New functionality:
 * citations() generates the frequency table of the most cited references or the most cited first authors (of references).
 * lotka() now performs Kolmogorov-Smirnoff two sample test among observed and theoretical Lotka's distributions.
 

@@ -4,7 +4,7 @@ import("stats", "Matrix")
 importFrom("dplyr", "mutate_each","funs")
 importFrom("stringr", "str_replace_all")
 importFrom("graphics", "barplot", "legend", "lines", "plot")
-importFrom("utils", "data")
+importFrom("utils", "data", "adist")
 
 S3method(plot, bibliometrix)
 S3method(summary, bibliometrix)
