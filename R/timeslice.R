@@ -24,7 +24,8 @@
 #' @seealso \code{\link{biblioAnalysis}} function for bibliometric analysis.
 #' @seealso \code{\link{summary}} to obtain a summary of the results.
 #' @seealso \code{\link{plot}} to draw some useful plots of the results.
-#'
+#' 
+#' @export
 timeslice <- function(M,breaks=NA,k=5){
 
   M$PY=as.numeric(M$PY)

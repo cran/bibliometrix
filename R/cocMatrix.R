@@ -52,7 +52,7 @@
 #'   Export file in a data frame.
 #' @seealso \code{\link{biblioAnalysis}} to perform a bibliometric analysis.
 #' @seealso \code{\link{biblioNetwork}} to compute a bibliographic network.
-#'
+#' @export
 
 cocMatrix<-function(M, Field = "AU", type = "sparse", sep = ";"){
 #
@@ -84,6 +84,19 @@ if (Field=="CR"){Fi<-lapply(Fi,function(l) l<-l[nchar(l)>10])}  ## delete not co
 # vector of unique units
 uniqueField<-unique(unlist(Fi))
 
+# normalize reference names
+S<-gsub("\\,",";",uniqueField)
+S<-sub("\\;",",",S);S<-sub("\\;",",",S)
+S<-gsub("\\;.*","",S)
+uniqueField<-unique(S)
+
+Fi=lapply(Fi, function(l){
+  l<-gsub("\\,",";",l)
+  l<-sub("\\;",",",l);l<-sub("\\;",",",l)
+  l<-gsub("\\;.*","",l)
+  return(l)
+})
+
 if (type=="matrix"){
   # Initialization of WA matrix
   WF<-matrix(0,size[1],length(uniqueField))}
@@ -91,15 +104,17 @@ else if (type=="sparse"){WF<-Matrix(0,size[1],length(uniqueField))}
 else {print("error in type argument");return()}
   # Population of WA matrix
   for (i in 1:size[1]){
-    if (length(Fi[[i]])>0) {WF[i,uniqueField %in% Fi[[i]]]<-1}
+    if (length(Fi[[i]])>0) {
+      
+      
+      WF[i,uniqueField %in% Fi[[i]]]<-1}
 	}
 
-  # normalize reference names
-  S<-gsub("\\,",";",uniqueField)
-  S<-sub("\\;",",",S);S<-sub("\\;",",",S)
-  S<-gsub("\\;.*","",S)
-  colnames(WF)<-S
+
+  colnames(WF)<-uniqueField
   rownames(WF)<-rownames(M)
+  WF=WF[,!is.na(uniqueField)]
+  
 return(WF)
 }
 

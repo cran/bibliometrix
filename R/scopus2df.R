@@ -22,6 +22,8 @@
 #'
 #' @seealso \code{\link{isi2df}} for converting ISI Export file (in plain text format)
 #' @family converting functions
+#' 
+#' @export
 
 scopus2df<-function(D){
 

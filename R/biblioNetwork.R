@@ -70,7 +70,8 @@
 #'   Reuters' ISI Web of Knowledge export file in a data frame.
 #' @seealso \code{\link{cocMatrix}} to compute a co-occurrence matrix.
 #' @seealso \code{\link{biblioAnalysis}} to perform a bibliometric analysis.
-#'
+#' 
+#' @export
 
 biblioNetwork <- function(M, analysis = "coupling", network = "authors", sep = ";"){
   

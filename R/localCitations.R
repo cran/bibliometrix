@@ -26,7 +26,8 @@
 #' @seealso \code{\link{biblioAnalysis}} function for bibliometric analysis.
 #' @seealso \code{\link{summary}} to obtain a summary of the results.
 #' @seealso \code{\link{plot}} to draw some useful plots of the results.
-#'
+#' 
+#' @export
 
 localCitations <- function(M, results, sep = ";"){
   CR=NULL

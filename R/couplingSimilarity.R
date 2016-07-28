@@ -26,6 +26,7 @@
 #' @seealso \code{\link{biblioNetwork}} function to compute a bibliographic network.
 #' @seealso \code{\link{cocMatrix}} to compute a bibliographic bipartite network.
 #'
+#' @export
 
 couplingSimilarity <- function(NetMatrix, type = "jaccard"){
   

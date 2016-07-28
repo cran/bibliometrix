@@ -19,7 +19,6 @@
 #' \code{MostRelKeywords}   \tab   \tab Most Relevant Keywords}
 #'
 #'
-#' @method summary bibliometrix
 #' @examples
 #' data(scientometrics)
 #' 
@@ -29,7 +28,9 @@
 #'
 #' @seealso \code{\link{biblioAnalysis}} function for bibliometric analysis
 #' @seealso \code{\link{plot}} to draw some useful plots of the results.
-#'
+#' 
+#' @method summary bibliometrix
+#' @export
 
 summary.bibliometrix<-function(object, ...){
 

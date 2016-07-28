@@ -33,6 +33,7 @@
 #' @seealso \code{\link{summary}} to obtain a summary of the results.
 #' @seealso \code{\link{plot}} to draw some useful plots of the results.
 #'
+#' @export
 dfMerge <- function(M1,M2,Field="TI",tol=0.90){
   
   a=M1[[Field]]

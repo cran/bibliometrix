@@ -16,6 +16,7 @@
 #' Tab <- tableTag(scientometrics, Tag = "CR", sep = ";")
 #' Tab[1:10]
 #'
+#' @export
 tableTag <- function(M, Tag = "CR", sep = ";"){
   i<-which(names(M)==Tag)
   Tab<-unlist(strsplit(as.character(M[,i]),sep))

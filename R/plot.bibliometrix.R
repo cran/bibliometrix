@@ -7,7 +7,6 @@
 #' \code{pause} is a logical, used to allow pause in screen scrolling of results. Default value is \code{pause = TRUE}.
 #' @return none. The function \code{plot} returns a set of plots of the object of class \code{bibliometrix}.
 #'
-#' @method plot bibliometrix
 #' @examples
 #' data(scientometrics)
 #'
@@ -17,7 +16,9 @@
 #'
 #' @seealso The bibliometric analysis function \code{\link{biblioAnalysis}}.
 #' @seealso \code{\link{summary}} to compute a list of summary statistics of the object of class \code{bibliometrix}.
-#'
+#' 
+#' @method plot bibliometrix
+#' @export
 
 
 plot.bibliometrix<-function(x, ...){

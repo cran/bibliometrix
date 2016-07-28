@@ -21,6 +21,7 @@
 #'
 #' @seealso \code{\link{scopus2df}} for converting SCOPUS Export file (in bibtex format)
 #' @family converting functions
+#' @export
 
 isi2df<-function(D){
 

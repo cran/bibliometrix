@@ -31,6 +31,7 @@
 #' @seealso \code{\link{summary}} to obtain a summary of the results.
 #' @seealso \code{\link{plot}} to draw some useful plots of the results.
 #'
+#' @export
 
 citations <- function(M, field = "article", sep = ";"){
   CR=NULL

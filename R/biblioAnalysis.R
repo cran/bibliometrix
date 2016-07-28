@@ -44,6 +44,7 @@
 #' @seealso \code{\link{summary}} to obtain a summary of the results.
 #' @seealso \code{\link{plot}} to draw some useful plots of the results.
 #'
+#' @export
 
 biblioAnalysis<-function(M,sep=";"){
 

@@ -38,7 +38,8 @@
 #'
 #' @seealso \code{\link{scopus2df}} for converting ISO or SCPUS Export file into a data frame.
 #' @seealso \code{\link{biblioAnalysis}} function for bibliometric analysis
-#'
+#' 
+#' @export
 
 metaTagExtraction<-function(M, Field = "CR_AU", sep = ";"){
 

@@ -12,7 +12,8 @@
 #' char <- c("  Alfred", "Mary", " John")
 #' char
 #' trim.leading(char)
-#'
+#' 
+#' @export
 trim.leading <- function (x){
 
 sub("^\\s+", "", x)  ## function to delete leading spaces in a string

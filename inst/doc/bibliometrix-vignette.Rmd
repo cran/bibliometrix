@@ -9,7 +9,7 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-#### latest version 0.8 
+#### latest version 1.0 
 #### http://www.bibliometrix.org
 
 
@@ -540,8 +540,8 @@ diag <- Matrix::diag
 colSums <-Matrix::colSums
 
 # delete not linked vertices
-ind=which(Matrix::colSums(NetMatrix)-Matrix::diag(NetMatrix)>0)
-NET=NetMatrix[ind,ind]
+ind <- which(Matrix::colSums(NetMatrix)-Matrix::diag(NetMatrix)>0)
+NET <- NetMatrix[ind,ind]
 
 # Select number of vertices to plot
 n <- 20    # n. of vertices
@@ -623,10 +623,6 @@ NetMatrix <- biblioNetwork(M, analysis = "coupling", network = "keywords", sep =
 diag <- Matrix::diag 
 colSums <-Matrix::colSums
 
-# delete missing keywords
-mis_ind=which(is.na(colnames(NetMatrix)))
-NetMatrix=NetMatrix[-mis_ind,-mis_ind]
-
 # delete not linked vertices
 ind=which(Matrix::colSums(NetMatrix)-Matrix::diag(NetMatrix)>0)
 NET=NetMatrix[ind,ind]
@@ -660,4 +656,33 @@ l = layout.fruchterman.reingold(bsk.network)
 
 ## Plot
 plot(bsk.network,layout = l, vertex.label.dist = 0.5, vertex.frame.color = 'black', vertex.label.color = 'black', vertex.label.font = 1, vertex.label = V(bsk.network)$name, vertex.label.cex = 0.5, main="Keyword coupling")
+```
+
+## Historical Co-Citation Network
+Historiographic map is a graph proposed by E. Garfield to represent a chronological network map of most relevant co-citations resulting from a bibliographic collection.
+
+The function \code{histNetwork} generates a chronological co-citation network matrix which can be plotted using "igraph":
+
+```{r Historical Co-citation network, out.width='700px', dpi=200}
+# Create a historical co-citation network
+
+histResults <- histNetwork(M, n = 15, sep = ".  ")
+
+# Create igraph object
+bsk.network <- graph.adjacency(histResults[[1]],mode="directed")
+
+# Remove loops
+bsk.network <- simplify(bsk.network, remove.multiple = T, remove.loops = T) 
+
+# Create the network layout (fixing vertical vertex coordinates by years)
+l = layout.fruchterman.reingold(bsk.network)
+l[,2]=histResults[[3]]$Year
+
+# Plot the chronological co-citation network
+plot(bsk.network,layout = l, vertex.label.dist = 0.5, vertex.frame.color = 'blue', vertex.label.color = 'black', vertex.label.font = 1, vertex.label = row.names(histResults[[3]]), vertex.label.cex = 0.4, edge.arrow.size=0.1)
+
+# "Historical Network Legend"
+
+print(histResults[[3]])
+
 ```

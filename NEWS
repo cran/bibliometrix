@@ -1,3 +1,14 @@
+bibliometrix v1.0 (Release date: 2016-06-28)
+==============
+
+New functionality:
+* histNetwork() creates a historical co-citation network from a bibliographic data frame.
+
+Changes:
+* Minor fixes in cocMatrix() function
+* Minor corrections in vignettes and documentation
+
+
 bibliometrix v0.8 (Release date: 2016-06-10)
 ==============
 

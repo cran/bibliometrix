@@ -24,6 +24,7 @@
 #' @seealso \code{\link{biblioAnalysis}} function for bibliometric analysis
 #' @seealso \code{\link{summary}} method for class '\code{bibliometrix}'
 #'
+#' @export
 
 dominance<-function(results, k = 10){
   
