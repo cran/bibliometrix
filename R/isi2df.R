@@ -67,6 +67,7 @@ isi2df<-function(D){
   if ("AB" %in% uniqueTag){DATA$AB=str_replace_all(DATA$AB,";  ","")}
   if ("TI" %in% uniqueTag){DATA$TI=str_replace_all(DATA$TI,";  ","")}
   DATA <- mutate_each(DATA, funs(toupper))
+  DATA$UT=gsub("WOS:","ISI",DATA$UT)
   row.names(DATA)=DATA$UT
   if ("PY" %in% names(DATA)){
     DATA$PY=as.numeric(DATA$PY)}

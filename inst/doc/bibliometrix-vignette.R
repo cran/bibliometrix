@@ -1,3 +1,6 @@
+## ----Package citation----------------------------------------------------
+citation("bibliometrix")
+
 ## ----Data loading--------------------------------------------------------
 D <- readLines("http://www.bibliometrix.org/datasets/savedrecs.bib")
 

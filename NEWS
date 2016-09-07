@@ -1,3 +1,11 @@
+bibliometrix v1.1 (Release date: 2016-09-07)
+==============
+
+Changes:
+* Minor fixes in convert2df() function
+* Minor corrections in vignettes and documentation
+
+
 bibliometrix v1.0 (Release date: 2016-06-28)
 ==============
 

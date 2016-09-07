@@ -1,7 +1,7 @@
 4274b88e8cd54436b1177f3e27cf0c37 *COPYING
-3f87f3287535b7af1311334bc1303a2e *DESCRIPTION
+364bb123b3115226473ab0d64f4953bd *DESCRIPTION
 6c0176f0794865c8e9a0b815cb937256 *NAMESPACE
-b9c90cd41586126d25450985ec2bb8f3 *NEWS
+bc628250525a8b23d3ac10dfc1db403a *NEWS
 5ad9a93e31ceb7d57d235898dbd31604 *R/Hindex.R
 abb9237a3176cc6680beafb4618ff4f0 *R/biblio.R
 7d9f7d01107025930e4539b02373707d *R/biblioAnalysis.R
@@ -16,8 +16,8 @@ a30c955fc014e010e5715f9fbf17ca0c *R/couplingSimilarity.R
 a184c7e6292facecb2b54b1d5497c6b0 *R/dominance.R
 944afd5d54f3783728f96d960b9409cf *R/garfield.R
 07fd5042cde94a0e728fe2bb2b64f889 *R/histNetwork.R
-4446e5d90a9ab5a5162a158c2faede62 *R/isi2df.R
-f813ed7dcaac88f784cc4f90bc29e775 *R/isibib2df.R
+250ca8ce1f6defc5949807f4cf56fb6c *R/isi2df.R
+2012473606a94f0b2a791cc84bd09eb7 *R/isibib2df.R
 fae744154a5b32d0c3a5a5830f0e3c59 *R/keywordsAssoc.R
 c605abc858d35a0be5bffcb13f8f6772 *R/localCitations.R
 754c569fca5e08042c975c3b56e9e4bd *R/lotka.R
@@ -37,9 +37,9 @@ d93ae69781d281c7f4ab6718cacfeb06 *data/biblio_df.rda
 2a6549333dfca84bea2d0e5592b0a24a *data/garfield.rda
 69df2ca103befd4b129dac10c700f1bf *data/scientometrics.rda
 15f34363d4deb8a744d86507d37626b7 *data/scientometrics_text.rda
-34c6304cd711cd1a089ee88f01e20771 *inst/doc/bibliometrix-vignette.R
-72390f4d5dab23f22a60e3adb2c7bed3 *inst/doc/bibliometrix-vignette.Rmd
-52e67997247c95da9f16b5e85a506c28 *inst/doc/bibliometrix-vignette.html
+c0c55ae0ad16cedefaa3e829097ae0a8 *inst/doc/bibliometrix-vignette.R
+b100cfb4db3406f4a14233d5ab0831c8 *inst/doc/bibliometrix-vignette.Rmd
+466193ee0d73feb908394903f4ce2313 *inst/doc/bibliometrix-vignette.html
 731d8583de13b82dcbe15a051f04a7dc *man/Hindex.Rd
 4d3f437e6750c90901ac189f71855931 *man/biblio.Rd
 97036134eea8c5219afbb3baefa2b9d3 *man/biblioAnalysis.Rd
@@ -69,7 +69,7 @@ d5dae1f2ef0b95325154e84d18b7eb69 *man/summary.bibliometrix.Rd
 2c402f6330a630219aa60e0c0b2afbc4 *man/tableTag.Rd
 4eee4c19e934acc0cc33770d3f161a5c *man/timeslice.Rd
 e935121182d25b0730160071a6fc9bfc *man/trim.leading.Rd
-72390f4d5dab23f22a60e3adb2c7bed3 *vignettes/bibliometrix-vignette.Rmd
+b100cfb4db3406f4a14233d5ab0831c8 *vignettes/bibliometrix-vignette.Rmd
 c30d45673660afc6a6d05ce1bf5b22e9 *vignettes/figures/cr1.png
 cf942a81f26e77a9fea667d99f1c77bc *vignettes/figures/isi1.png
 3b688500a7dea2e0e2365f026ef7812e *vignettes/figures/isi2.png

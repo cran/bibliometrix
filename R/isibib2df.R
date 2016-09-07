@@ -93,6 +93,10 @@ for (i in 1:length(Tag)){
   DATA$RP=unlist(lapply(strsplit(DATA$C1,"\\."),function (l) l[1]))
 
   DATA <- mutate_each(DATA, funs(toupper))
+  
+  # keywords post-processing (missing ";" in some rows)
+  DATA$ID=gsub("   ",";",DATA$ID)
+  DATA$DE=gsub("   ",";",DATA$DE)
   #row.names(DATA)=DATA$UT
   DATA$DB="ISI"
   return(DATA)
