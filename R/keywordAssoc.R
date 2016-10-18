@@ -1,6 +1,6 @@
-#' ID and DE keyword association
+#' ID and DE keyword associations
 #'
-#' It associates authors' keywords to keyword plus.
+#' It associates authors' keywords to keywords plus.
 #'
 #' @param M is a bibliographic data frame obtained by the converting function \code{\link{convert2df}}.
 #'        It is a data matrix with cases corresponding to manuscripts and variables to Field Tag in the original SCOPUS and Thomson Reuters' ISI Web of Knowledge file.
@@ -15,7 +15,7 @@
 #' 
 #' data(scientometrics)
 #'
-#' KWlist <- keywordsAssoc(scientometrics, sep = ";",n = 10, excludeKW = NA)
+#' KWlist <- keywordAssoc(scientometrics, sep = ";",n = 10, excludeKW = NA)
 #'
 #' # list of first 10 Keywords plus
 #' names(KWlist)
@@ -29,7 +29,7 @@
 #' @seealso \code{\link{plot}} to draw some useful plots of the results.
 #'
 #' @export
-keywordsAssoc <- function(M, sep = ";",n = 10, excludeKW = NA){
+keywordAssoc <- function(M, sep = ";",n = 10, excludeKW = NA){
 
 excludeKW=toupper(excludeKW)
 

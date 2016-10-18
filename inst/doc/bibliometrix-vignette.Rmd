@@ -9,10 +9,10 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-#### latest version 1.0 
+#### latest version 1.2 
 #### http://www.bibliometrix.org
 
-#### Citation of package 'bibliometrix': 
+#### Citation for package 'bibliometrix': 
 
 ```{r Package citation}
 citation("bibliometrix")
@@ -234,13 +234,13 @@ The figure shows the reference string of the first manuscript. In this case, the
 To obtain the most frequent cited manuscripts:
 ```{r Article citation}
 CR <- citations(M, field = "article", sep = ".  ")
-CR[1:10]
+CR$Cited[1:10]
 ```
 
 To obtain the most frequent cited first authors:
 ```{r Author citation}
 CR <- citations(M, field = "author", sep = ".  ")
-CR[1:10]
+CR$Cited[1:10]
 ```
 
 The function *localCitations* generates the frequency table of the most local cited authors.
@@ -664,12 +664,80 @@ l = layout.fruchterman.reingold(bsk.network)
 plot(bsk.network,layout = l, vertex.label.dist = 0.5, vertex.frame.color = 'black', vertex.label.color = 'black', vertex.label.font = 1, vertex.label = V(bsk.network)$name, vertex.label.cex = 0.5, main="Keyword coupling")
 ```
 
+## Co-Word Analysis: Conceptual structure of a field 
+The aim of the co-word analysis is to map the conceptual structure of a framework using the word co-occurrences in a bibliographic collection.
+
+The analysis can be performed through dimensionality reduction techniques such as Multidimensional Scaling (MDS) or Multiple Correspondence Analysis (MCA). 
+
+In the following, we show an example using MCA to draw a conceptual structure of the field and K-means clustering to identify clusters of documents which express common concepts.
+
+```{r Co-Word Analysis, fig.height=7, fig.width=7, warning=FALSE}
+
+# Create a bipartite network of Keyword plus
+#
+# each row represents a manuscript
+# each column represents a keyword (1 if present, 0 if absent in a document)
+
+CW <- cocMatrix(M, Field = "ID", type="matrix", sep=";")
+
+# dimension of CW
+dim(CW)
+
+# Define minimum degree (number of occurrences of each Keyword)
+Degree=5
+CW=CW[,colSums(CW)>=Degree]
+
+# Delete empty rows
+CW=CW[rowSums(CW)>0,]
+
+# Dimension of Data matrix
+dim(CW)
+
+# Recode as dataframe
+CW=data.frame(apply(CW,2,factor))
+
+# Delete not consistent keywords
+names(CW)
+CW=CW[,-5]
+
+# install and load FactoMineR and factoextra packages
+if (!require("FactoMineR")){install.packages("FactoMineR")}
+library(FactoMineR)
+if (!require("factoextra")){install.packages("factoextra")}
+library(factoextra)
+
+# Perform Multiple Correspondence Analysis (MCA)
+res.mca <- MCA(CW, ncp=2, graph=FALSE)
+
+# Get coordinates of keywords (we take only categories "1"")
+coord=get_mca_var(res.mca)
+df=data.frame(coord$coord)[seq(2,dim(coord$coord)[1],by=2),]
+row.names(df)=gsub("_1","",row.names(df))
+
+# K-means clustering
+
+# Selection of optimal number of clusters (silhouette method)
+fviz_nbclust(scale(df), kmeans, method = "silhouette")
+# Partitions with 3 o 4 cluster are equally satisfactory. We prefer the solution with 4 clusters 
+
+# Perform the K-means clustering
+km.res <- kmeans(scale(df), 4, nstart = 25)
+
+# Plot of the conceptual map
+fviz_cluster(km.res, data = df,labelsize=2)+theme_minimal()+
+  scale_color_manual(values = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07"))+
+  scale_fill_manual(values = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07")) +
+  labs(title= "     ") +
+  geom_point()
+
+```
+
 ## Historical Co-Citation Network
 Historiographic map is a graph proposed by E. Garfield to represent a chronological network map of most relevant co-citations resulting from a bibliographic collection.
 
 The function \code{histNetwork} generates a chronological co-citation network matrix which can be plotted using "igraph":
 
-```{r Historical Co-citation network, out.width='700px', dpi=200}
+```{r Historical Co-citation network, fig.height=8, fig.width=7, warning=FALSE}
 # Create a historical co-citation network
 
 histResults <- histNetwork(M, n = 15, sep = ".  ")

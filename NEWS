@@ -1,3 +1,17 @@
+bibliometrix v1.2 (Release date: 2016-10-18)
+==============
+
+New functionality:
+* keywordAssoc() associates authors' keywords to keywords plus
+* keywordGrowth() calculates yearly cumulative occurrences of top keywords.
+* termExtraction() extracts terms from a textual field (abstract, title, author's keywords, etc.) of a bibliographic data frame.
+
+Changes:
+* New statistics in summary() function
+* Minor fixes in convert2df() function
+* Minor corrections in vignettes and documentation
+
+
 bibliometrix v1.1 (Release date: 2016-09-07)
 ==============
 

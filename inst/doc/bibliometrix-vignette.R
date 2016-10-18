@@ -23,11 +23,11 @@ plot(x = results, k = 10, pause = FALSE)
 
 ## ----Article citation----------------------------------------------------
 CR <- citations(M, field = "article", sep = ".  ")
-CR[1:10]
+CR$Cited[1:10]
 
 ## ----Author citation-----------------------------------------------------
 CR <- citations(M, field = "author", sep = ".  ")
-CR[1:10]
+CR$Cited[1:10]
 
 ## ----Local Author citation-----------------------------------------------
 CR <- localCitations(M, results, sep = ".  ")
@@ -261,7 +261,67 @@ l = layout.fruchterman.reingold(bsk.network)
 ## Plot
 plot(bsk.network,layout = l, vertex.label.dist = 0.5, vertex.frame.color = 'black', vertex.label.color = 'black', vertex.label.font = 1, vertex.label = V(bsk.network)$name, vertex.label.cex = 0.5, main="Keyword coupling")
 
-## ----Historical Co-citation network, out.width='700px', dpi=200----------
+## ----Co-Word Analysis, fig.height=7, fig.width=7, warning=FALSE----------
+
+# Create a bipartite network of Keyword plus
+#
+# each row represents a manuscript
+# each column represents a keyword (1 if present, 0 if absent in a document)
+
+CW <- cocMatrix(M, Field = "ID", type="matrix", sep=";")
+
+# dimension of CW
+dim(CW)
+
+# Define minimum degree (number of occurrences of each Keyword)
+Degree=5
+CW=CW[,colSums(CW)>=Degree]
+
+# Delete empty rows
+CW=CW[rowSums(CW)>0,]
+
+# Dimension of Data matrix
+dim(CW)
+
+# Recode as dataframe
+CW=data.frame(apply(CW,2,factor))
+
+# Delete not consistent keywords
+names(CW)
+CW=CW[,-5]
+
+# install and load FactoMineR and factoextra packages
+if (!require("FactoMineR")){install.packages("FactoMineR")}
+library(FactoMineR)
+if (!require("factoextra")){install.packages("factoextra")}
+library(factoextra)
+
+# Perform Multiple Correspondence Analysis (MCA)
+res.mca <- MCA(CW, ncp=2, graph=FALSE)
+
+# Get coordinates of keywords (we take only categories "1"")
+coord=get_mca_var(res.mca)
+df=data.frame(coord$coord)[seq(2,dim(coord$coord)[1],by=2),]
+row.names(df)=gsub("_1","",row.names(df))
+
+# K-means clustering
+
+# Selection of optimal number of clusters (silhouette method)
+fviz_nbclust(scale(df), kmeans, method = "silhouette")
+# Partitions with 3 o 4 cluster are equally satisfactory. We prefer the solution with 4 clusters 
+
+# Perform the K-means clustering
+km.res <- kmeans(scale(df), 4, nstart = 25)
+
+# Plot of the conceptual map
+fviz_cluster(km.res, data = df,labelsize=2)+theme_minimal()+
+  scale_color_manual(values = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07"))+
+  scale_fill_manual(values = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07")) +
+  labs(title= "     ") +
+  geom_point()
+
+
+## ----Historical Co-citation network, fig.height=8, fig.width=7, warning=FALSE----
 # Create a historical co-citation network
 
 histResults <- histNetwork(M, n = 15, sep = ".  ")
