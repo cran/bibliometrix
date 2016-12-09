@@ -28,6 +28,7 @@ nAUperPaper \tab      \tab the number of authors per manuscript\cr
 Apparences \tab      \tab the number of author apparences\cr
 nAuthors \tab       \tab the number of authors\cr
 AuMultiAuthoredArt \tab      \tab the number of authors of multi authored articles\cr
+MostCitedPapers \tab      \tab The list of manuscripts sorted by citations\cr
 Years \tab      \tab pubblication year of each manuscript\cr
 FirstAffiliation \tab      \tab the affiliation of the first author\cr
 Affiliations \tab      \tab the frequency distribution of affiliations (of all co-authors for each paper)\cr

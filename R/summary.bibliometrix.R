@@ -13,6 +13,7 @@
 #' \code{AnnualProduction}  \tab   \tab Annual Scientific Production\cr
 #' \code{AnnualGrowthRate}  \tab   \tab Annual Percentage Growth Rate\cr
 #' \code{MostProdAuthors}   \tab   \tab Most Productive Authors\cr
+#' \code{MostCitedPapers}   \tab   \tab Top manuscripts per number of citations\cr
 #' \code{MostProdCountries} \tab   \tab Most Productive Countries\cr
 #' \code{TCperCountries}    \tab   \tab Total Citation per Countries\cr
 #' \code{MostRelSources}    \tab   \tab Most Relevant Sources\cr
@@ -88,7 +89,17 @@ summary.bibliometrix<-function(object, ...){
   A=format(A,justify="left",digits=3)
   row.names(A)=1:k
   print(A,row.names=TRUE);cat("\n")
+  
+  if (pause==TRUE){
+    cat("Hit <Return> to see next table: ")
+    line <- readline()}
 
+  # Most Cited Manuscipts
+  cat("\nTop manuscripts per citations\n\n")
+  MostCitedPapers=object$MostCitedPapers[1:k,]
+  MostCitedPapers=format(MostCitedPapers,justify="left",digits=3)
+  row.names(MostCitedPapers)=1:k
+  print(MostCitedPapers,row.names=TRUE);cat("\n")
 
   if (pause==TRUE){
     cat("Hit <Return> to see next table: ")
@@ -169,7 +180,7 @@ summary.bibliometrix<-function(object, ...){
   row.names(AAA)=1:k
   print(AAA,row.names=TRUE);cat("\n")}
 
-  summaryresults=list(MainInformation=MainInfo,AnnualProduction=Y,AnnualGrowthRate=GR,MostProdAuthors=A,MostProdCountries=Co,TCperCountries=AC,MostRelSources=AA,MostRelKeywords=AAA)
+  summaryresults=list(MainInformation=MainInfo,AnnualProduction=Y,AnnualGrowthRate=GR,MostProdAuthors=A,MostCitedPapers=MostCitedPapers,MostProdCountries=Co,TCperCountries=AC,MostRelSources=AA,MostRelKeywords=AAA)
 
   invisible(summaryresults)
   }

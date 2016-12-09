@@ -20,6 +20,7 @@
 #' Apparences \tab      \tab the number of author apparences\cr
 #' nAuthors \tab       \tab the number of authors\cr
 #' AuMultiAuthoredArt \tab      \tab the number of authors of multi authored articles\cr
+#' MostCitedPapers \tab      \tab The list of manuscripts sorted by citations\cr
 #' Years \tab      \tab pubblication year of each manuscript\cr
 #' FirstAffiliation \tab      \tab the affiliation of the first author\cr
 #' Affiliations \tab      \tab the frequency distribution of affiliations (of all co-authors for each paper)\cr
@@ -63,6 +64,7 @@ biblioAnalysis<-function(M,sep=";"){
   Country=NULL
   DE=NULL
   ID=NULL
+  MostCitedPapers=NULL
 
 
 
@@ -113,6 +115,10 @@ if ("TC" %in% Tags){
   PY=as.numeric(M$PY)
   CurrentYear=as.numeric(format(Sys.Date(),"%Y"))
   TCperYear=TC/(CurrentYear-PY)
+  
+  MostCitedPapers=data.frame(paste(M$AU,paste("(",M$PY,")",sep=""),M$SO,sep=","),TC,TCperYear)
+  MostCitedPapers=MostCitedPapers[order(TC,decreasing=TRUE),]
+  names(MostCitedPapers)=c("Paper         ","TC","TCperYear")
 }
 
 # References
@@ -186,6 +192,7 @@ results=list(Articles=dim(M)[1],             # Articles
              Apparences=sum(nAU),            # Author apparences
              nAuthors=dim(Authors),          # N. of Authors
              AuMultiAuthoredArt=AuMultiAuthoredArt, # N. of Authors of multi authored articles
+             MostCitedPapers=MostCitedPapers,# Papers sorted by citations
              Years=PY,                       # Years
              FirstAffiliation=unlist(FAffiliation),  # Affiliation of First Author
              Affiliations=Affiliation,       # Affiliations of all authors

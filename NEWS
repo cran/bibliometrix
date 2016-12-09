@@ -1,3 +1,12 @@
+bibliometrix v1.3 (Release date: 2016-11-17)
+==============
+
+New functionality:
+
+* termExtraction() extracts terms from a textual field (abstract, title, author's keywords, etc.) of a bibliographic data frame. 
+Now it integrates Porter's stemming algorithm and term extraction procedure for English, French, German, Italian and Spanish textual contents.
+
+
 bibliometrix v1.2 (Release date: 2016-10-18)
 ==============
 

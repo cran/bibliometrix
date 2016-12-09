@@ -164,12 +164,16 @@
 #' @importFrom dplyr mutate_each
 #' @importFrom dplyr funs
 #' @importFrom stringr str_replace_all
+#' @importFrom stringr str_detect
+#' @importFrom stringr str_replace
 #' @importFrom graphics barplot
 #' @importFrom graphics legend
 #' @importFrom graphics lines
 #' @importFrom graphics plot
 #' @importFrom utils data
 #' @importFrom utils adist
+#' @importFrom SnowballC wordStem
+#' @importFrom SnowballC getStemLanguages
 
 convert2df<-function(file,dbsource="isi",format="bibtex"){
 

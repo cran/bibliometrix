@@ -7,9 +7,12 @@
 #' \tabular{lll}{
 #' \code{"TI"}\tab   \tab Manuscript title\cr
 #' \code{"AB"}\tab   \tab Manuscript abstract\cr
+#' \code{"DE"}\tab   \tab Manuscript keywords plus\cr
 #' \code{"ID"}\tab   \tab Manuscript author's keywords}
 #' The default is \code{Field = "TI"}.
 #'
+#' @param stemming is logical. If TRUE the Porter Stemming algorithm is applied to all extracted terms. The default is \code{stemming = FALSE}.
+#' @param language is a character. It is the language of textual contents ("english", "german","italian","french","spanish"). The default is \code{language="english"}.
 #' @param remove.numbers is logical. If TRUE all numbers are deleted from the documents before term extraction. The default is \code{remove.numbers = TRUE}.
 #' @param remove.terms is a character vector. It contains a list of additional terms to delete from the documents before term extraction. The default is \code{remove.terms = NULL}.
 #' @param keep.terms is a character vector. It contains a list of compound words "formed by two or more terms" to keep in their original form in the term extraction process. The default is \code{keep.terms = NULL}.
@@ -41,7 +44,7 @@
 #' remove.terms=c("analysis","bibliographic")
 #' 
 #' # term extraction
-#' scientometrics <- termExtraction(scientometrics, Field = "AB",
+#' scientometrics <- termExtraction(scientometrics, Field = "AB", stemming=TRUE,language="english",
 #'  remove.numbers=TRUE, remove.terms=remove.terms, keep.terms=NULL, verbose=TRUE)
 #' 
 #' # terms extracted from the first abstract
@@ -53,10 +56,19 @@
 #' 
 #' @export
 
-termExtraction <- function(M, Field="TI", remove.numbers=TRUE, remove.terms=NULL, keep.terms=NULL, verbose=TRUE){
+termExtraction <- function(M, Field="TI", stemming=FALSE,language="english",remove.numbers=TRUE, remove.terms=NULL, keep.terms=NULL, verbose=TRUE){
   
+  # load stopwords
   data("stopwords",envir=environment())
-  stopwords=stopwords
+  switch(language,
+    english={stopwords=stopwords$en},
+    italian={stopwords=stopwords$it},
+    german={stopwords=stopwords$de},
+    french={stopwords=stopwords$fr},
+    spanish={stopwords=stopwords$es}
+    )
+  #stopwords=stopwords
+  
   # remove all special characters (except "-")
   TERMS=toupper(M[,Field])
   TERMS=gsub("[^[:alnum:][:blank:]\\-]", "", TERMS)
@@ -92,6 +104,15 @@ termExtraction <- function(M, Field="TI", remove.numbers=TRUE, remove.terms=NULL
     })
   }
   
+  # word stemming algorithm
+  if (stemming==TRUE){
+    listTERMS=lapply(listTERMS,function(l){
+      l=tolower(l)
+      l=toupper(SnowballC::wordStem(l,language=language))
+    })
+  }
+  
+  
   # create a vector of extracted terms
   TM=unlist(lapply(listTERMS,function(l){
     l=paste0(l,collapse=";")
@@ -101,6 +122,7 @@ termExtraction <- function(M, Field="TI", remove.numbers=TRUE, remove.terms=NULL
   switch(Field,
          TI={M$TI_TM=TM},
          AB={M$AB_TM=TM},
+         ID={M$ID_TM=TM},
          DE={M$DE_TM=TM})
 
   

@@ -4,8 +4,9 @@
 \alias{termExtraction}
 \title{Term extraction tool from textual fields of a manuscript}
 \usage{
-termExtraction(M, Field = "TI", remove.numbers = TRUE,
-  remove.terms = NULL, keep.terms = NULL, verbose = TRUE)
+termExtraction(M, Field = "TI", stemming = FALSE, language = "english",
+  remove.numbers = TRUE, remove.terms = NULL, keep.terms = NULL,
+  verbose = TRUE)
 }
 \arguments{
 \item{M}{is a data frame obtained by the converting function \code{\link{convert2df}}.
@@ -15,8 +16,13 @@ It is a data matrix with cases corresponding to articles and variables to Field 
 \tabular{lll}{
 \code{"TI"}\tab   \tab Manuscript title\cr
 \code{"AB"}\tab   \tab Manuscript abstract\cr
+\code{"DE"}\tab   \tab Manuscript keywords plus\cr
 \code{"ID"}\tab   \tab Manuscript author's keywords}
 The default is \code{Field = "TI"}.}
+
+\item{stemming}{is logical. If TRUE the Porter Stemming algorithm is applied to all extracted terms. The default is \code{stemming = FALSE}.}
+
+\item{language}{is a character. It is the language of textual contents ("english", "german","italian","french","spanish"). The default is \code{language="english"}.}
 
 \item{remove.numbers}{is logical. If TRUE all numbers are deleted from the documents before term extraction. The default is \code{remove.numbers = TRUE}.}
 
@@ -56,7 +62,7 @@ data(scientometrics)
 remove.terms=c("analysis","bibliographic")
 
 # term extraction
-scientometrics <- termExtraction(scientometrics, Field = "AB",
+scientometrics <- termExtraction(scientometrics, Field = "AB", stemming=TRUE,language="english",
  remove.numbers=TRUE, remove.terms=remove.terms, keep.terms=NULL, verbose=TRUE)
 
 # terms extracted from the first abstract

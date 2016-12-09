@@ -9,7 +9,7 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-#### latest version 1.2 
+#### latest version 1.3 
 #### http://www.bibliometrix.org
 
 #### Citation for package 'bibliometrix': 
@@ -185,6 +185,7 @@ nAUperPaper	 | the number of authors per manuscript
 Apparences	 |  the number of author apparences
 nAuthors		 | the number of authors
 AuMultiAuthoredArt | the number of authors of multi authored articles
+MostCitedPapers | the list of manuscripts sorted by citations
 Years		     | pubblication year of each manuscript
 FirstAffiliation | the affiliation of the first author
 Affiliations | the frequency distribution of affiliations (of all co-authors for each paper)
@@ -200,7 +201,7 @@ ID		       | the frequency distribution of keywords associated to the manuscript
 ### Functions *summary* and *plot*
 
 To summarize main results of the bibliometric analysis, use the generic function *summary*.
-It displays main information about the bibliographic data frame and 6 tables: annual scientific production, most productive authors, most productive countries, total citation per country, most relevant sources (journals) and most relevant keywords.
+It displays main information about the bibliographic data frame and 7 tables: annual scientific production, Top manuscripts per number of citations, most productive authors, most productive countries, total citation per country, most relevant sources (journals) and most relevant keywords.
 
 *summary* accepts two additional arguments. *k* is a formatting value that indicates the number of rows of each table. *pause* is a logical value (TRUE or FALSE) used to allow (or not) pause in screen scrolling.
 Choosing k=10 you decide to see the first 10 Authors, the first 10 sources, etc.
@@ -420,7 +421,7 @@ M <- metaTagExtraction(M, Field = "AU_CO", sep = ";")
 
 * Etc.
 
-### Bibliographic coupling
+### Bibliographic coupling 
 
 Two articles are said to be bibliographically coupled if at least one cited source appears in the bibliographies or reference lists of both articles (Kessler, 1963).
 
@@ -442,7 +443,7 @@ The function *biblioNetwork* calculates, starting from a bibliographic  data fra
 
 *biblioNetwork* uses two arguments to define the network to compute:
 
-* *analysis* argument can be "collaboration", "coupling" or "co-citation"
+* *analysis* argument can be "collaboration", "coupling", "co-occurrences" or "co-citation"
 
 * *network* argument can be "authors", "references", "sources", "countries","keywords" or "author_keywords"
 
@@ -618,7 +619,7 @@ plot(bsk.network,layout = l, vertex.label.dist = 0.5, vertex.frame.color = 'blue
 
 ```
 
-### Keyword Coupling
+### Keyword coupling
 
 ```{r Keyword coupling, out.width='700px', dpi=200}
 # Create a co-citation network

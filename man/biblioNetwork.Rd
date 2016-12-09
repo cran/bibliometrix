@@ -12,7 +12,7 @@ biblioNetwork(M, analysis = "coupling", network = "authors", sep = ";")
 manuscripts and variables to Field Tag in the original SCOPUS and Thomson Reuters' ISI Web of Knowledge file.}
 
 \item{analysis}{is a character object. It indicates the type of analysis have to be performed.
-\code{analysis} argument can be \code{"collaboration"}, \code{"coupling"} or \code{"co-citation"}.
+\code{analysis} argument can be \code{"collaboration"}, \code{"coupling"}, \code{"co-occurrences"}  or \code{"co-citation"}.
 Default is \code{analysis = "coupling"}.}
 
 \item{network}{is a character object. It indicates the network typology. The \code{network} aurgument can be
@@ -43,7 +43,16 @@ Typical networks output of \code{biblioNetwork} are:\cr\cr
 -- Source coupling (analysis = "coupling", network = "sources")\cr
 -- Keyword coupling (analysis = "coupling", network = "keywords")\cr
 -- Author-Keyword coupling (analysis = "coupling", network = "author_keywords")\cr
+-- Title content coupling (analysis = "coupling", network = "titles")\cr
+-- Abstract content coupling (analysis = "coupling", network = "abstracts")\cr
 -- Country coupling (analysis = "coupling", network = "countries")\cr\cr
+#### Co-occurrences Networks ################\cr
+-- Authors co-occurrences (analysis = "co-occurrences", network = "authors")\cr
+-- Source co-occurrences (analysis = "co-occurrences", network = "sources")\cr
+-- Keyword co-occurrences (analysis = "co-occurrences", network = "keywords")\cr
+-- Author-Keyword co-occurrences (analysis = "co-occurrences", network = "author_keywords")\cr
+-- Title content co-occurrences (analysis = "co-occurrences", network = "titles")\cr
+-- Abstract content co-occurrences (analysis = "co-occurrences", network = "abstracts")\cr\cr
 }
 \examples{
 # EXAMPLE 1: Authors collaboration network

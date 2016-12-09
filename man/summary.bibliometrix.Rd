@@ -22,6 +22,7 @@ the list contains the following objects:
 \code{AnnualProduction}  \tab   \tab Annual Scientific Production\cr
 \code{AnnualGrowthRate}  \tab   \tab Annual Percentage Growth Rate\cr
 \code{MostProdAuthors}   \tab   \tab Most Productive Authors\cr
+\code{MostCitedPapers}   \tab   \tab Top manuscripts per number of citations\cr
 \code{MostProdCountries} \tab   \tab Most Productive Countries\cr
 \code{TCperCountries}    \tab   \tab Total Citation per Countries\cr
 \code{MostRelSources}    \tab   \tab Most Relevant Sources\cr

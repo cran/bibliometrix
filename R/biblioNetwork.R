@@ -17,13 +17,22 @@
 #' -- Source coupling (analysis = "coupling", network = "sources")\cr
 #' -- Keyword coupling (analysis = "coupling", network = "keywords")\cr
 #' -- Author-Keyword coupling (analysis = "coupling", network = "author_keywords")\cr
+#' -- Title content coupling (analysis = "coupling", network = "titles")\cr
+#' -- Abstract content coupling (analysis = "coupling", network = "abstracts")\cr
 #' -- Country coupling (analysis = "coupling", network = "countries")\cr\cr
+#' #### Co-occurrences Networks ################\cr
+#' -- Authors co-occurrences (analysis = "co-occurrences", network = "authors")\cr
+#' -- Source co-occurrences (analysis = "co-occurrences", network = "sources")\cr
+#' -- Keyword co-occurrences (analysis = "co-occurrences", network = "keywords")\cr
+#' -- Author-Keyword co-occurrences (analysis = "co-occurrences", network = "author_keywords")\cr
+#' -- Title content co-occurrences (analysis = "co-occurrences", network = "titles")\cr
+#' -- Abstract content co-occurrences (analysis = "co-occurrences", network = "abstracts")\cr\cr
 #'
 #' @param M is a bibliographic data frame obtained by the converting function
 #'   \code{\link{convert2df}}. It is a data matrix with cases corresponding to
 #'   manuscripts and variables to Field Tag in the original SCOPUS and Thomson Reuters' ISI Web of Knowledge file.
 #' @param analysis is a character object. It indicates the type of analysis have to be performed.
-#'   \code{analysis} argument can be \code{"collaboration"}, \code{"coupling"} or \code{"co-citation"}.
+#'   \code{analysis} argument can be \code{"collaboration"}, \code{"coupling"}, \code{"co-occurrences"}  or \code{"co-citation"}.
 #'   Default is \code{analysis = "coupling"}.
 #' @param network is a character object. It indicates the network typology. The \code{network} aurgument can be
 #' \code{"authors"}, \code{"references"}, \code{"sources"}, \code{"countries"},\code{"keywords"} or \code{"author_keywords"}.
@@ -101,6 +110,16 @@ biblioNetwork <- function(M, analysis = "coupling", network = "authors", sep = "
       CRK = crossprod(WCR, WK)
       NetMatrix = crossprod(CRK, CRK)
       },
+    titles={
+      WK=cocMatrix(M, Field="TI_TM", type = "sparse", sep)
+      WCR=cocMatrix(M, Field="CR", type = "sparse", sep)
+      CRK = crossprod(WCR, WK)
+      NetMatrix = crossprod(CRK, CRK)
+      },
+    abstracts={
+      WK=cocMatrix(M, Field="AB_TM", type = "sparse", sep)
+      NetMatrix = crossprod(WK,WK)
+    },
     sources={
       WSO=cocMatrix(M, Field="SO", type = "sparse", sep)
       WCR=cocMatrix(M, Field="CR", type = "sparse", sep)
@@ -114,6 +133,35 @@ biblioNetwork <- function(M, analysis = "coupling", network = "authors", sep = "
       NetMatrix = crossprod(CRCO, CRCO)
     }
   )}
+  
+  if (analysis=="co-occurrences"){
+    switch(network,
+           authors={
+             WA=cocMatrix(M, Field="AU", type = "sparse", sep)
+             NetMatrix = crossprod(WA, WA)
+           },
+           keywords={
+             WK=cocMatrix(M, Field="ID", type = "sparse", sep)
+             NetMatrix = crossprod(WK,WK)
+           },
+           author_keywords={
+             WK=cocMatrix(M, Field="DE", type = "sparse", sep)
+             NetMatrix = crossprod(WK,WK)
+           },
+           titles={
+             WK=cocMatrix(M, Field="TI_TM", type = "sparse", sep)
+             NetMatrix = crossprod(WK,WK)
+           },
+           abstracts={
+             WK=cocMatrix(M, Field="AB_TM", type = "sparse", sep)
+             NetMatrix = crossprod(WK,WK)
+           },
+           sources={
+             WSO=cocMatrix(M, Field="SO", type = "sparse", sep)
+             NetMatrix = crossprod(WSO, WSO)
+           }
+    )}
+  
   if (analysis=="co-citation"){
     switch(network,
            authors={
