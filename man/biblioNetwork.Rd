@@ -32,6 +32,7 @@ The function \code{\link{biblioNetwork}} can create a collection of bibliographi
 Typical networks output of \code{biblioNetwork} are:\cr\cr
 #### Collaboration Networks ############\cr
 -- Authors collaboration (analysis = "collaboration", network = "authors")\cr
+-- University collaboration (analysis = "collaboration", network = universities")\cr
 -- Country collabortion (analysis = "collaboration", network = "countries")\cr\cr
 #### Co-citation Networks ##############\cr
 -- Authors co-citation (analysis = "co-citation", network = "authors")\cr
@@ -41,10 +42,6 @@ Typical networks output of \code{biblioNetwork} are:\cr\cr
 -- Manuscript coupling (analysis = "coupling", network = "references")\cr
 -- Authors coupling (analysis = "coupling", network = "authors")\cr
 -- Source coupling (analysis = "coupling", network = "sources")\cr
--- Keyword coupling (analysis = "coupling", network = "keywords")\cr
--- Author-Keyword coupling (analysis = "coupling", network = "author_keywords")\cr
--- Title content coupling (analysis = "coupling", network = "titles")\cr
--- Abstract content coupling (analysis = "coupling", network = "abstracts")\cr
 -- Country coupling (analysis = "coupling", network = "countries")\cr\cr
 #### Co-occurrences Networks ################\cr
 -- Authors co-occurrences (analysis = "co-occurrences", network = "authors")\cr

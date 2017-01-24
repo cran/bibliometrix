@@ -158,7 +158,7 @@ if (Field=="AU_UN"){
         if (length(indd)>0){break()}
       }
       
-      if (length(indd)==0){index=append(index,"NOT UNIVERSITY")
+      if (length(indd)==0){index=append(index,"OTHER CENTER")
       } else if (grepl("[[:digit:]]", affL[indd[1]])){index=append(index,"ND")
       } else {index=append(index,affL[indd[1]])}
       
@@ -167,12 +167,14 @@ if (Field=="AU_UN"){
     x=""
     if (length(index)>0){
       #x=paste0(trim.leading((affL[index])),collapse=",")
-      x=paste0(trim.leading(index),collapse=",")
-      x=gsub(" ,",",",x)}
+      x=paste0(trim.leading(index),collapse=";")
+      x=gsub(" ,",";",x)}
     return(x)
   })
   AFFL=unlist(AFFL)
   M$AU_UN=AFFL
+  M$AU_UN=gsub("\\\\&","AND",M$AU_UN)
+  M$AU_UN=gsub("\\&","AND",M$AU_UN)
   }
 
 return(M)

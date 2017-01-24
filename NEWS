@@ -1,3 +1,19 @@
+bibliometrix v1.4 (Release date: 2017-01-24)
+==============
+
+New functionality:
+
+* concepualStructure() creates and plots conceptual structure map of a scientific field
+* histPlot() plots historical co-citation network
+* networkPlot() plots Bibliographic networks
+* readFiles() loads a sequence of ISI or SCOPUS Export files into a large character object
+ 
+Changes:
+* Minor fixes in metaTagExtraction() function
+* Minor fixes in convert2df() function
+* Minor corrections in vignettes and documentation
+
+
 bibliometrix v1.3 (Release date: 2016-11-17)
 ==============
 

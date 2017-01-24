@@ -115,8 +115,9 @@ if ("TC" %in% Tags){
   PY=as.numeric(M$PY)
   CurrentYear=as.numeric(format(Sys.Date(),"%Y"))
   TCperYear=TC/(CurrentYear-PY)
-  
-  MostCitedPapers=data.frame(paste(M$AU,paste("(",M$PY,")",sep=""),M$SO,sep=","),TC,TCperYear)
+  if (sum(names(M) %in% "JI")==1){
+    MostCitedPapers=data.frame(paste(M$AU,paste("(",M$PY,")",sep=""),M$JI,sep=","),TC,TCperYear)
+  }else{MostCitedPapers=data.frame(paste(M$AU,paste("(",M$PY,")",sep=""),M$SO,sep=","),TC,TCperYear)}
   MostCitedPapers=MostCitedPapers[order(TC,decreasing=TRUE),]
   names(MostCitedPapers)=c("Paper         ","TC","TCperYear")
 }

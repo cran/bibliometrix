@@ -36,7 +36,7 @@ data frame columns are named using the standard ISI WoS Field Tag codify. The ma
 \code{UT}\tab   \tab Unique Article Identifier\cr
 \code{DB}\tab   \tab Database\cr}
 
-for a complete list of filed tags see: \href{https://images.webofknowledge.com/WOK46/help/WOS/h_fieldtags.html}{ISI WoS Field Tags}
+for a complete list of field tags see: \href{https://images.webofknowledge.com/WOK50B6/help/WOS/h_fieldtags.html}{ISI WoS Field Tags}
 }
 \description{
 It converts a SCOPUS and Thomson Reuters' ISI Web of Knowledge export file and create a data frame from it, with cases corresponding to articles and variables to Field Tag in the original file.

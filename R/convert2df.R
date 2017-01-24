@@ -29,7 +29,7 @@
 #' \code{UT}\tab   \tab Unique Article Identifier\cr
 #' \code{DB}\tab   \tab Database\cr}
 #'
-#' for a complete list of filed tags see: \href{https://images.webofknowledge.com/WOK46/help/WOS/h_fieldtags.html}{ISI WoS Field Tags}
+#' for a complete list of field tags see: \href{https://images.webofknowledge.com/WOK50B6/help/WOS/h_fieldtags.html}{ISI WoS Field Tags}
 #' @examples
 #' # An ISI or SCOPUS Export file can be read using \code{\link{readLines}} function:
 #'
@@ -54,6 +54,25 @@
 #' 
 #' @export
 #' @import stats
+#' @import ggplot2
+#' @importFrom FactoMineR MCA
+#' @importFrom factoextra get_mca_var
+#' @importFrom factoextra fviz_nbclust
+#' @importFrom factoextra fviz_cluster
+#' @importFrom igraph graph.adjacency
+#' @importFrom igraph degree
+#' @importFrom igraph plot.igraph
+#' @importFrom igraph delete.vertices
+#' @importFrom igraph E
+#' @importFrom igraph V
+#' @importFrom igraph V<-
+#' @importFrom igraph simplify
+#' @importFrom igraph layout.circle
+#' @importFrom igraph layout.sphere
+#' @importFrom igraph layout.mds
+#' @importFrom igraph layout.kamada.kawai
+#' @importFrom igraph layout.fruchterman.reingold
+#' @importFrom igraph write.graph
 #' @importFrom Matrix %&%
 #' @importFrom Matrix abIseq
 #' @importFrom Matrix abIseq1

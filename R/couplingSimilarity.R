@@ -37,7 +37,10 @@ couplingSimilarity <- function(NetMatrix, type = "jaccard"){
   else if (type=="salton"){denom=sqrt(outer(D,D,"*"))}
   else {cat("\ntype argument is incorrect!\n"); cat("\nIt can be 'jaccard' or 'salton'");return()}
   S=NetMatrix/denom
-  
+  S=as.matrix(S)
+  S[is.nan(S)]=0
+  S=Matrix(S)
+    
   return(S)
   
 }

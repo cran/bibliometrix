@@ -6,6 +6,7 @@
 #' Typical networks output of \code{biblioNetwork} are:\cr\cr
 #' #### Collaboration Networks ############\cr
 #' -- Authors collaboration (analysis = "collaboration", network = "authors")\cr
+#' -- University collaboration (analysis = "collaboration", network = universities")\cr
 #' -- Country collabortion (analysis = "collaboration", network = "countries")\cr\cr
 #' #### Co-citation Networks ##############\cr
 #' -- Authors co-citation (analysis = "co-citation", network = "authors")\cr
@@ -15,10 +16,6 @@
 #' -- Manuscript coupling (analysis = "coupling", network = "references")\cr
 #' -- Authors coupling (analysis = "coupling", network = "authors")\cr
 #' -- Source coupling (analysis = "coupling", network = "sources")\cr
-#' -- Keyword coupling (analysis = "coupling", network = "keywords")\cr
-#' -- Author-Keyword coupling (analysis = "coupling", network = "author_keywords")\cr
-#' -- Title content coupling (analysis = "coupling", network = "titles")\cr
-#' -- Abstract content coupling (analysis = "coupling", network = "abstracts")\cr
 #' -- Country coupling (analysis = "coupling", network = "countries")\cr\cr
 #' #### Co-occurrences Networks ################\cr
 #' -- Authors co-occurrences (analysis = "co-occurrences", network = "authors")\cr
@@ -98,28 +95,6 @@ biblioNetwork <- function(M, analysis = "coupling", network = "authors", sep = "
         WCR=Matrix::t(cocMatrix(M, Field="CR", type = "sparse", sep))
         NetMatrix = crossprod(WCR, WCR)
       },
-    keywords={
-      WK=cocMatrix(M, Field="ID", type = "sparse", sep)
-      WCR=cocMatrix(M, Field="CR", type = "sparse", sep)
-      CRK = crossprod(WCR, WK)
-      NetMatrix = crossprod(CRK, CRK)
-      },
-    author_keywords={
-      WK=cocMatrix(M, Field="DE", type = "sparse", sep)
-      WCR=cocMatrix(M, Field="CR", type = "sparse", sep)
-      CRK = crossprod(WCR, WK)
-      NetMatrix = crossprod(CRK, CRK)
-      },
-    titles={
-      WK=cocMatrix(M, Field="TI_TM", type = "sparse", sep)
-      WCR=cocMatrix(M, Field="CR", type = "sparse", sep)
-      CRK = crossprod(WCR, WK)
-      NetMatrix = crossprod(CRK, CRK)
-      },
-    abstracts={
-      WK=cocMatrix(M, Field="AB_TM", type = "sparse", sep)
-      NetMatrix = crossprod(WK,WK)
-    },
     sources={
       WSO=cocMatrix(M, Field="SO", type = "sparse", sep)
       WCR=cocMatrix(M, Field="CR", type = "sparse", sep)
@@ -183,10 +158,17 @@ biblioNetwork <- function(M, analysis = "coupling", network = "authors", sep = "
              WA=cocMatrix(M, Field="AU", type = "sparse", sep)
              NetMatrix = crossprod(WA, WA)
              },
+           universities={
+             WUN=cocMatrix(M, Field="AU_UN", type = "sparse", sep)
+             NetMatrix = crossprod(WUN, WUN)
+             },
            countries={
              WCO=cocMatrix(M, Field="AU_CO", type = "sparse", sep)
              NetMatrix = crossprod(WCO, WCO)
            })
-    }
-return(NetMatrix)
+  }
+  # delete empty vertices
+  NetMatrix=NetMatrix[nchar(colnames(NetMatrix))!=0,nchar(colnames(NetMatrix))!=0]
+  
+  return(NetMatrix)
 }
