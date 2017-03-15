@@ -6,7 +6,7 @@
 #'        It is a data matrix with cases corresponding to manuscripts and variables to Field Tag in the original SCOPUS and Thomson Reuters' ISI Web of Knowledge file.
 #' @param n is an integer, indicating the number of most cited references to select. Default value is 10.\cr
 #' @param sep is the field separator character. This character separates strings in CR column of the data frame. The default is \code{sep = ";"}.
-#' @return \code{histAnalysis} returns an object of \code{class} "list" containing the following components:
+#' @return \code{histNetwork} returns an object of \code{class} "list" containing the following components:
 #'
 #' \tabular{lll}{
 #' NetMatrix \tab  \tab the historical co-citation network matrix\cr
@@ -19,24 +19,6 @@
 #'
 #' histResults <- histNetwork(scientometrics, n = 10, sep = ";")
 #'
-#' library("igraph")
-#' 
-#' # Create igraph object
-#' bsk.network <- graph.adjacency(histResults[[1]],mode = "directed")
-#' 
-#' # Remove loops
-#' bsk.network <- simplify(bsk.network, remove.multiple = TRUE, remove.loops = TRUE) 
-#'
-#' # Create the network layout (fixing vertical vertex coordinates by years)
-#' l <- layout.fruchterman.reingold(bsk.network)
-#' l[,2] <- histResults[[3]]$Year
-#'
-#' # Plot the hystorical co-citation network
-#' plot(bsk.network,layout = l, vertex.label.dist = 0.5, 
-#' vertex.frame.color = 'blue', vertex.label.color = 'black', 
-#' vertex.label.font = 1, vertex.label = V(bsk.network)$name, 
-#' vertex.label.cex = 0.5,edge.arrow.size=0.1)
-#' 
 #'
 #' @seealso \code{\link{convert2df}} to import and convert an ISI or SCOPUS Export file in a bibliographic data frame.
 #' @seealso \code{\link{summary}} to obtain a summary of the results.
@@ -86,18 +68,6 @@ for (i in 1:length(df$Paper)){
 X[upper.tri(X)]=0
 row.names(X)=colnames(X)=df$PaperShort
 row.names(df)=paste(df$Year,rep("-",dim(df)[1]),1:dim(df)[1])
-
-
-# Create igraph object
-#bsk.network <- graph.adjacency(X,mode="directed")
-
-# Remove loops
-#bsk.network <- simplify(bsk.network, remove.multiple = T, remove.loops = T) 
-
-#l = layout.fruchterman.reingold(bsk.network)
-#l[,2]=df$Year
-
-#plot(bsk.network,layout = l, vertex.label.dist = 0.5, vertex.frame.color = 'blue', vertex.label.color = 'black', vertex.label.font = 1, vertex.label = V(bsk.network)$name, vertex.label.cex = 0.5,edge.arrow.size=0.1)
 
 results=list(NetMatrix=X,Degree=Degree,histData=df[,-4])
 return(results)

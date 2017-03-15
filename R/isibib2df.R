@@ -98,6 +98,8 @@ for (i in 1:length(Tag)){
   DATA$ID=gsub("   ",";",DATA$ID)
   DATA$DE=gsub("   ",";",DATA$DE)
   #row.names(DATA)=DATA$UT
+  
   DATA$DB="ISI"
+  
   return(DATA)
 }

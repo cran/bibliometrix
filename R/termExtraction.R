@@ -75,6 +75,7 @@ termExtraction <- function(M, Field="TI", stemming=FALSE,language="english",remo
   
   if (remove.numbers==TRUE){TERMS=gsub("[[:digit:]]","",TERMS)}
   
+  TERMS=gsub("\\."," ",TERMS)
   TERMS=gsub(" - "," ",TERMS)
     
   # keep terms in the vector keep.terms

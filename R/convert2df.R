@@ -55,6 +55,9 @@
 #' @export
 #' @import stats
 #' @import ggplot2
+#' @importFrom rscopus author_search
+#' @importFrom rscopus get_complete_author_info
+#' @importFrom RColorBrewer brewer.pal
 #' @importFrom FactoMineR MCA
 #' @importFrom factoextra get_mca_var
 #' @importFrom factoextra fviz_nbclust
@@ -73,6 +76,8 @@
 #' @importFrom igraph layout.kamada.kawai
 #' @importFrom igraph layout.fruchterman.reingold
 #' @importFrom igraph write.graph
+#' @importFrom igraph cluster_walktrap
+#' @importFrom igraph membership
 #' @importFrom Matrix %&%
 #' @importFrom Matrix abIseq
 #' @importFrom Matrix abIseq1
@@ -213,7 +218,8 @@ convert2df<-function(file,dbsource="isi",format="bibtex"){
     scopus={M=scopus2df(file)
     }
 )
-
+  M$PY=as.numeric(M$PY)
+  M$TC=as.numeric(M$TC)
   return(M)
 
 }

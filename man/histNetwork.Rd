@@ -15,7 +15,7 @@ It is a data matrix with cases corresponding to manuscripts and variables to Fie
 \item{sep}{is the field separator character. This character separates strings in CR column of the data frame. The default is \code{sep = ";"}.}
 }
 \value{
-\code{histAnalysis} returns an object of \code{class} "list" containing the following components:
+\code{histNetwork} returns an object of \code{class} "list" containing the following components:
 
 \tabular{lll}{
 NetMatrix \tab  \tab the historical co-citation network matrix\cr
@@ -29,24 +29,6 @@ histData \tab      \tab the set of n most cited references}
 data(scientometrics)
 
 histResults <- histNetwork(scientometrics, n = 10, sep = ";")
-
-library("igraph")
-
-# Create igraph object
-bsk.network <- graph.adjacency(histResults[[1]],mode = "directed")
-
-# Remove loops
-bsk.network <- simplify(bsk.network, remove.multiple = TRUE, remove.loops = TRUE) 
-
-# Create the network layout (fixing vertical vertex coordinates by years)
-l <- layout.fruchterman.reingold(bsk.network)
-l[,2] <- histResults[[3]]$Year
-
-# Plot the hystorical co-citation network
-plot(bsk.network,layout = l, vertex.label.dist = 0.5, 
-vertex.frame.color = 'blue', vertex.label.color = 'black', 
-vertex.label.font = 1, vertex.label = V(bsk.network)$name, 
-vertex.label.cex = 0.5,edge.arrow.size=0.1)
 
 
 }

@@ -2,9 +2,9 @@
 % Please edit documentation in R/keywordGrowth.R
 \name{KeywordGrowth}
 \alias{KeywordGrowth}
-\title{Yearly cumulative occurrences of top keywords/terms}
+\title{Yearly occurrences of top keywords/terms}
 \usage{
-KeywordGrowth(M, Tag = "ID", sep = ";", top = 10)
+KeywordGrowth(M, Tag = "ID", sep = ";", top = 10, cdf = TRUE)
 }
 \arguments{
 \item{M}{is a data frame obtained by the converting function \code{\link{convert2df}}.
@@ -16,17 +16,19 @@ standard ISI WoS Field Tag codify (ID or DE) or a field tag created by \code{\li
 \item{sep}{is the field separator character. This character separates strings in each keyword column of the data frame. The default is \code{sep = ";"}.}
 
 \item{top}{is a numeric. It indicates the number of top keywords to analize. The default value is 10.}
+
+\item{cdf}{is a logical. If TRUE, the function calculates the cumulative occurrences distribution.}
 }
 \value{
 an object of class \code{data.frame}
 }
 \description{
-It calculates yearly cumulative occurrences of top keywords/terms.
+It calculates yearly occurrences of top keywords/terms.
 }
 \examples{
 
 data(scientometrics)
-topKW=KeywordGrowth(scientometrics, Tag = "ID", sep = ";", top=5)
+topKW=KeywordGrowth(scientometrics, Tag = "ID", sep = ";", top=5, cdf=TRUE)
 topKW
 
 # Plotting results

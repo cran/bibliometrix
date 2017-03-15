@@ -5,7 +5,7 @@
 \title{Creating and plotting conceptual structure map of a scientific field}
 \usage{
 conceptualStructure(M, field = "ID", minDegree = 2, k.max = 5,
-  stemming = FALSE)
+  stemming = FALSE, labelsize = 3)
 }
 \arguments{
 \item{M}{is a data frame obtained by the converting function
@@ -23,11 +23,13 @@ field can be equal to one of this tags:
 \code{TI}\tab   \tab Terms extracted from titles\cr
 \code{AB}\tab   \tab Terms extracted from abstracts}}
 
-\item{minDegree}{is an integer. It indicates the number of terms to analize and plot. The default value is 2.}
+\item{minDegree}{is an integer. It indicates the minimun occurrences of terms to analize and plot. The default value is 2.}
 
 \item{k.max}{is an integer. It indicates the maximum numebr of cluster to keep. The default value is 5. The max value is 8.}
 
 \item{stemming}{is logical. If TRUE the Porter's Stemming algorithm is applied to all extracted terms. The default is \code{stemming = FALSE}.}
+
+\item{labelsize}{is an integer. It indicates the label size in the plot. Default is \code{labelsize=2}}
 }
 \value{
 It is an object of the class \code{list} containing the following components:

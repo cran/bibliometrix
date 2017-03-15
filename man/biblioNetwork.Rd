@@ -16,7 +16,7 @@ manuscripts and variables to Field Tag in the original SCOPUS and Thomson Reuter
 Default is \code{analysis = "coupling"}.}
 
 \item{network}{is a character object. It indicates the network typology. The \code{network} aurgument can be
-\code{"authors"}, \code{"references"}, \code{"sources"}, \code{"countries"},\code{"keywords"} or \code{"author_keywords"}.
+\code{"authors"}, \code{"references"}, \code{"sources"}, \code{"countries"},\code{"keywords"}, \code{"author_keywords"}, \code{"titles"}, or \code{"abstracts"}.
 Default is \code{network = "authors"}.}
 
 \item{sep}{is the field separator character. This character separates strings in each column of the data frame. The default is \code{sep = ";"}.}
@@ -54,38 +54,22 @@ Typical networks output of \code{biblioNetwork} are:\cr\cr
 \examples{
 # EXAMPLE 1: Authors collaboration network
 
-library(igraph)
 data(scientometrics)
 
 NetMatrix <- biblioNetwork(scientometrics, analysis = "collaboration", 
 network = "authors", sep = ";")
-netDegree <- 2
-diag <- Matrix::diag 
-NetMatrix <- NetMatrix[diag(NetMatrix) >= netDegree,diag(NetMatrix) >= netDegree]
-diag(NetMatrix) <- 0
 
-bsk.network <- graph.adjacency(NetMatrix,mode = "undirected")
-plot(bsk.network,layout = layout.fruchterman.reingold, vertex.label.dist = 0.5,
-vertex.frame.color = 'blue', vertex.label.color = 'black',
-vertex.label.font = 1, vertex.label = V(bsk.network)$name, vertex.label.cex = 0.7)
+net <- networkPlot(NetMatrix, n = 30, type = "kamada", Title = "Collaboration",labelsize=0.5) 
 
 
 # EXAMPLE 2: Co-citation network
 
-library(igraph)
 data(scientometrics)
 
 NetMatrix <- biblioNetwork(scientometrics, analysis = "co-citation", 
 network = "references", sep = ";")
-netDegree=10
-diag <- Matrix::diag
-NetMatrix <- NetMatrix[diag(NetMatrix) >= netDegree,diag(NetMatrix) >= netDegree]
-diag(NetMatrix) <- 0
 
-bsk.network <- graph.adjacency(NetMatrix,mode = "undirected")
-plot(bsk.network,layout = layout.fruchterman.reingold, vertex.label.dist = 0.5,
-vertex.frame.color = 'blue', vertex.label.color = 'black',
-vertex.label.font = 1, vertex.label = V(bsk.network)$name, vertex.label.cex = 0.7)
+net <- networkPlot(NetMatrix, n = 30, type = "kamada", Title = "Co-Citation",labelsize=0.5) 
 
 }
 \seealso{

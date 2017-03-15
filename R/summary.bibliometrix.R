@@ -41,7 +41,9 @@ summary.bibliometrix<-function(object, ...){
   if (sum(names(arguments)=="k")==0){k=10} else {k=arguments$k}
   if (sum(names(arguments)=="pause")==0){pause=TRUE} else {pause=arguments$pause}
   
-
+  Co=NULL
+  AC=NULL
+  
   #Main Information about data
   MainInfo=("\n\nMain Information about data\n\n")
   MainInfo[2]=paste("Articles                             ",object$Articles,"\n")

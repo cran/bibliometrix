@@ -1,6 +1,6 @@
-#' Yearly cumulative occurrences of top keywords/terms 
+#' Yearly occurrences of top keywords/terms 
 #'
-#' It calculates yearly cumulative occurrences of top keywords/terms.
+#' It calculates yearly occurrences of top keywords/terms.
 #'
 #' @param M is a data frame obtained by the converting function \code{\link{convert2df}}.
 #'        It is a data matrix with cases corresponding to articles and variables to Field Tag in the original ISI or SCOPUS file.
@@ -8,11 +8,12 @@
 #'   standard ISI WoS Field Tag codify (ID or DE) or a field tag created by \code{\link{termExtraction}} function (TI_TM, AB_TM, etc.).
 #' @param sep is the field separator character. This character separates strings in each keyword column of the data frame. The default is \code{sep = ";"}.
 #' @param top is a numeric. It indicates the number of top keywords to analize. The default value is 10.
+#' @param cdf is a logical. If TRUE, the function calculates the cumulative occurrences distribution. 
 #' @return an object of class \code{data.frame}
 #' @examples
 #'
 #' data(scientometrics)
-#' topKW=KeywordGrowth(scientometrics, Tag = "ID", sep = ";", top=5)
+#' topKW=KeywordGrowth(scientometrics, Tag = "ID", sep = ";", top=5, cdf=TRUE)
 #' topKW
 #'
 #' # Plotting results
@@ -23,7 +24,7 @@
 #' # ggplot(DF,aes(Year,value, group=variable, color=variable))+geom_line()
 #'
 #' @export
-KeywordGrowth <- function(M, Tag = "ID", sep = ";", top=10){
+KeywordGrowth <- function(M, Tag = "ID", sep = ";", top=10, cdf=TRUE){
   i<-which(names(M)==Tag)
   PY=as.numeric(M$PY)
   Tab<-(strsplit(as.character(M[,i]),sep))
@@ -43,13 +44,13 @@ KeywordGrowth <- function(M, Tag = "ID", sep = ";", top=10){
   words[,1]=Year
   for (j in 1:length(Tab)){
     word=(table(A[A$Tab %in% Tab[j],2]))
-    words[,j+1]=trim.years(word,Year)
+    words[,j+1]=trim.years(word,Year,cdf)
     
   }
   return(words)
 }
 
-trim.years<-function(w,Year){
+trim.years<-function(w,Year,cdf){
 
   Y=as.numeric(names(w))
   W=matrix(0,length(Year),1)
@@ -59,7 +60,7 @@ trim.years<-function(w,Year){
     Y=Y[-1]
     w=w[-1]}
   }
-  W=cumsum(W)
+  if (isTRUE(cdf)) W=cumsum(W)
   names(W)=Year
   W=data.frame(W)
   return(W)}

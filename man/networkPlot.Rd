@@ -5,7 +5,8 @@
 \title{Plotting Bibliographic networks}
 \usage{
 networkPlot(NetMatrix, n = 20, Title = "Plot", type = "kamada",
-  vos.path = NULL, size = FALSE, noloops = TRUE, remove.multiple = TRUE)
+  labelsize = 1, vos.path = NULL, size = FALSE, noloops = TRUE,
+  remove.multiple = TRUE, remove.isolates = FALSE)
 }
 \arguments{
 \item{NetMatrix}{is a network matrix obtained by the function \code{\link{biblioNetwork}}.}
@@ -24,6 +25,8 @@ networkPlot(NetMatrix, n = 20, Title = "Plot", type = "kamada",
 \code{type="kamada"}\tab   \tab  Kamada-Kawai layout\cr
 \code{type="vosviewer"}\tab   \tab Network is plotted using VOSviewer software\cr}}
 
+\item{labelsize}{is an integer. It indicates the label size in the plot. Default is \code{labelsize=1}}
+
 \item{vos.path}{is a character indicating the full path whre VOSviewer.jar is located.}
 
 \item{size}{is logical. If TRUE the point size of each vertex is proportional to its degree.}
@@ -31,6 +34,8 @@ networkPlot(NetMatrix, n = 20, Title = "Plot", type = "kamada",
 \item{noloops}{is logical. If TRUE loops in the network are deleted.}
 
 \item{remove.multiple}{is logical. If TRUE multiple links are plotted using just one edge.}
+
+\item{remove.isolates}{is logical. If TRUE isolates vertices are not plotted.}
 }
 \value{
 It is a network object of the class \code{igraph}.

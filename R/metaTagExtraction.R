@@ -1,6 +1,6 @@
 #' Meta-Field Tag Extraction
 #'
-#' It extracts some new useful field tags from standard ISI/SCOPUS fied tag codify.
+#' It extracts other field tags, different from the standard ISI/SCOPUS codify.
 #' @param M is a data frame obtained by the converting function \code{\link{convert2df}}.
 #'        It is a data matrix with cases corresponding to articles and variables to Field Tag in the original ISI or SCOPUS file.
 #' @param Field is a character object. New tag exctracted from aggregated data is specified by this string. 
@@ -113,11 +113,18 @@ if (Field=="AU_CO"){
   C1=M$C1
   C1[which(is.na(C1))]=M$RP[which(is.na(C1))]
   C1=gsub("\\[.*?\\] ", "", C1)
-  C1=paste(C1,";",sep="")
+  RP=M$RP
+  #RP[which(is.na(RP))]=M$RRP)
+  RP=paste(RP,";",sep="")
+  
   for (i in 1:size[1]){
     if (!is.na(C1[i])){
     ind=unlist(sapply(countries, function (l) (gregexpr ( l , C1[i],fixed=TRUE))))
     if (sum(ind>-1)>0) {M$AU_CO[i]=paste(unique(names(ind[ind>-1])),collapse=";")}
+    }
+    if (is.na(M$AU_CO[i])){
+      ind=unlist(sapply(countries, function (l) (gregexpr ( l , RP[i],fixed=TRUE))))
+      if (sum(ind>-1)>0) {M$AU_CO[i]=paste(unique(names(ind[ind>-1])),collapse=";")}  
     }
   }
   M$AU_CO=gsub("[[:digit:]]","",M$AU_CO)

@@ -24,7 +24,7 @@ Field can be equal to one of this tags:
 the bibliometric data frame with a new column containing data about new field tag indicated in the argument \code{Field}.
 }
 \description{
-It extracts some new useful field tags from standard ISI/SCOPUS fied tag codify.
+It extracts other field tags, different from the standard ISI/SCOPUS codify.
 }
 \examples{
 # Example 1: First Authors for each cited reference

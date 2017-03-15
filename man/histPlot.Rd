@@ -4,7 +4,7 @@
 \alias{histPlot}
 \title{Plotting historical co-citation network}
 \usage{
-histPlot(histResults, size = F)
+histPlot(histResults, size = F, labelsize = 1)
 }
 \arguments{
 \item{histResults}{is an object of \code{class} "list" containing the following components:
@@ -17,6 +17,8 @@ histData \tab      \tab the set of n most cited references}
 is a network matrix obtained by the function \code{\link{biblioNetwork}}.}
 
 \item{size}{is logical. If TRUE the point size of each vertex is proportional to its degree.}
+
+\item{labelsize}{is an integer. It indicates the label size in the plot. Default is \code{labelsize=1}}
 }
 \value{
 It is a network object of the class \code{igraph}.

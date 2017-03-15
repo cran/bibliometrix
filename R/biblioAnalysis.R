@@ -68,7 +68,7 @@ biblioAnalysis<-function(M,sep=";"){
 
 
 
-# M is the dataframe
+# M is the bibliographic dataframe
 Tags<-names(M)
 
 # temporal analyis
@@ -138,7 +138,7 @@ if ("SO" %in% Tags){
   }
 
 # All Affiliations, First Affiliation and Countries
-if ("C1" %in% Tags){
+if (("C1" %in% Tags) & (sum(!is.na(M$C1))>0)){
   AFF=gsub("\\[.*?\\] ", "", M$C1)
   listAFF=strsplit(AFF,sep,fixed=TRUE)
   nAFF=unlist(lapply(listAFF,length))  # num. of references per paper
