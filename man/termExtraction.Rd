@@ -6,7 +6,7 @@
 \usage{
 termExtraction(M, Field = "TI", stemming = FALSE, language = "english",
   remove.numbers = TRUE, remove.terms = NULL, keep.terms = NULL,
-  verbose = TRUE)
+  synonyms = NULL, verbose = TRUE)
 }
 \arguments{
 \item{M}{is a data frame obtained by the converting function \code{\link{convert2df}}.
@@ -30,6 +30,8 @@ The default is \code{Field = "TI"}.}
 
 \item{keep.terms}{is a character vector. It contains a list of compound words "formed by two or more terms" to keep in their original form in the term extraction process. The default is \code{keep.terms = NULL}.}
 
+\item{synonyms}{is a character vector. Each element contains a list of synonyms, separeted by ";",  that will be merged into a single term (the first word contained in the vector element). The default is \code{synonyms = NULL}.}
+
 \item{verbose}{is logical. If TRUE the function prints the most frequent terms extracted from documents. The default is \code{verbose=TRUE}.}
 }
 \value{
@@ -44,7 +46,7 @@ It extracts terms from a textual field (abstract, title, author's keywords, etc.
 data(scientometrics)
 
 # vector of compound words
-keep.terms=c("co-citation analysis","bibliographic coupling")
+keep.terms <- c("co-citation analysis","bibliographic coupling")
 
 # term extraction
 scientometrics <- termExtraction(scientometrics, Field = "TI",
@@ -67,6 +69,17 @@ scientometrics <- termExtraction(scientometrics, Field = "AB", stemming=TRUE,lan
 
 # terms extracted from the first abstract
 scientometrics$AB_TM[1]
+
+# Example 3: Term extraction from keywords with synonyms
+
+data(scientometrics)
+
+# vector of synonyms 
+synonyms <- c("citation; citation analysis", "h-index; index; impact factor")
+
+# term extraction
+scientometrics <- termExtraction(scientometrics, Field = "ID",
+synonyms=synonyms, verbose=TRUE)
 
 
 }

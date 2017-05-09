@@ -55,6 +55,7 @@
 #' @export
 #' @import stats
 #' @import ggplot2
+#' @importFrom stringdist stringdistmatrix
 #' @importFrom rscopus author_search
 #' @importFrom rscopus get_complete_author_info
 #' @importFrom RColorBrewer brewer.pal
@@ -185,8 +186,6 @@
 #' @importFrom Matrix updown
 #' @importFrom Matrix which
 #' @importFrom Matrix writeMM
-#' @importFrom dplyr mutate_each
-#' @importFrom dplyr funs
 #' @importFrom stringr str_replace_all
 #' @importFrom stringr str_detect
 #' @importFrom stringr str_replace
@@ -220,6 +219,24 @@ convert2df<-function(file,dbsource="isi",format="bibtex"){
 )
   M$PY=as.numeric(M$PY)
   M$TC=as.numeric(M$TC)
+  
+  ## Author data cleaning
+  if ("AU" %in% names(M)){
+    M$AU=gsub(","," ",M$AU)
+    AUlist=strsplit(M$AU,";")
+    AU=lapply(AUlist,function(l){
+      l=trim(l)
+      name=strsplit(l," ")
+      lastname=unlist(lapply(name,function(ln){ln[1]}))
+      firstname=lapply(name,function(ln){
+        f=paste(substr(ln[-1],1,1),collapse=" ")
+      })
+      AU=paste(lastname,unlist(firstname),sep=" ",collapse=";")
+      return(AU)
+    })
+    M$AU=unlist(AU)
+    
+  }
   return(M)
 
 }

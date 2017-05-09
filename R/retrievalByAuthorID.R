@@ -6,7 +6,8 @@
 #' SCOPUS IDs con be obtained using the function \code{\link{idByAuthor}}.
 #' @param api_key is a character. It contains the Elsvier API key. Information about how to obtain an API Key \href{https://dev.elsevier.com/sc_apis.html}{Elsevier API website}
 #' @param remove.duplicated is logical. If TRUE duplicated documents will be deleted from the bibliographic collection.
-#' @return a data frame with cases corresponding to articles and variables to main Field Tags named using the standard ISI WoS Field Tag codify. 
+#' @return a list containing two objects: (i) M which is a data frame with cases corresponding to articles and variables to main Field Tags named using the standard ISI WoS Field Tag codify. 
+#' M includes the entire bibliographic collection downloaded from SCOPUS.
 #' The main field tags are:
 #'
 #' \tabular{lll}{
@@ -23,7 +24,8 @@
 #' \code{PY}\tab   \tab Year\cr
 #' \code{UT}\tab   \tab Unique Article Identifier\cr
 #' \code{DB}\tab   \tab Database\cr}
-#'
+#' (ii) authorDocuments which is a list containing a bibliographic data frame for each author.
+#' 
 #' LIMITATIONS: 
 #' Currently, SCOPUS API does not allow to download document references. 
 #' As consequence, it is not possible to perform co-citation analysis (the field CR is empty).
@@ -49,8 +51,10 @@
 #' 
 #' ## create the bibliographic collection
 #' # 
-#' # M <- retrievalByAuthor(id, api_key)
+#' # res <- retrievalByAuthor(id, api_key)
 #' #
+#' # M <- res$M  # the entire bibliographic data frame
+#' # M <- res$authorDocuments # the list containing a bibliographic data frame for each author
 #' 
 #' @seealso \code{\link{idByAuthor}} for downloading auhtor information and SCOPUS ID.
 #' 
@@ -59,6 +63,7 @@
 retrievalByAuthorID<-function(id, api_key, remove.duplicated=TRUE){
   
   id=id[!is.na(id)]
+  M_list=list()
   n=length(id)
   M=data.frame(AU=NA,TI=NA,AB=NA,SO=NA,JI=NA,DOI=NA,DT=NA,DE=NA,PY=NA,TC=NA,C1=NA,RP=NA,UT=NA,AU_CO=NA)
   for (j in 1:n){
@@ -88,6 +93,9 @@ retrievalByAuthorID<-function(id, api_key, remove.duplicated=TRUE){
     for (i in 1:AU_count){
       D=AU_S[[1]][[i]]
       AU[i]=paste(unlist(lapply(D$author,function(l){a=l$authname})),collapse=";")
+      
+      AU[i]=paste(unique(trim(unlist(strsplit(AU[i],";")))),collapse =";")
+      
       if (!is.null(D$`dc:title`)){TI[i]=D$`dc:title`}else{TI[i]=NA}
       if (!is.null(D$`dc:description`)){AB[i]=D$`dc:description`}else{AB[i]=NA}
       if (!is.null(D$subtypeDescription)){DT[i]=D$subtypeDescription}else{DT[i]=NA}
@@ -112,17 +120,22 @@ retrievalByAuthorID<-function(id, api_key, remove.duplicated=TRUE){
     }
     M_AU=data.frame(AU,TI,AB,SO,JI,DOI,DT,DE,PY,TC,C1,RP,UT,AU_CO,stringsAsFactors = FALSE)
     M=rbind(M,M_AU)
+    M_list[[j]]=M_AU
+    names(M_list)[j]=id[j]
   }
   M=M[-1,]  ### remove first empty row
   
   if (isTRUE(remove.duplicated)){
-    d=duplicated(M$UT)
+    d=duplicated(gsub("[^[:alnum:] ]","",M$UT))
     cat("\n",sum(d),"duplicated documents have been removed\n")
     M=M[!d,]
   }
   M$CR=NA
   M$DB="SCOPUS"
   M$ID=M$DE
-  M <- mutate_each(M, funs(toupper))
-  return(M)
+  M <- data.frame(lapply(M,toupper),stringsAsFactors = FALSE)
+  #M <- mutate_each(M, funs(toupper))
+  results=list(M=M,authorDocuments=M_list)
+  return(results)
 }
+
