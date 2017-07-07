@@ -4,14 +4,18 @@
 \alias{networkPlot}
 \title{Plotting Bibliographic networks}
 \usage{
-networkPlot(NetMatrix, n = 20, Title = "Plot", type = "kamada",
-  labelsize = 1, vos.path = NULL, size = FALSE, noloops = TRUE,
-  remove.multiple = TRUE, remove.isolates = FALSE)
+networkPlot(NetMatrix, n = NULL, Degree = NULL, Title = "Plot",
+  type = "kamada", labelsize = 1, halo = FALSE, cluster = "walktrap",
+  vos.path = NULL, size = FALSE, curved = FALSE, noloops = TRUE,
+  remove.multiple = TRUE, remove.isolates = FALSE, weighted = NULL,
+  edgesize = 1)
 }
 \arguments{
 \item{NetMatrix}{is a network matrix obtained by the function \code{\link{biblioNetwork}}.}
 
 \item{n}{is an integer. It indicates the number of vertices to plot.}
+
+\item{Degree}{is an integer. It idicates the min frequency of a vertex. If Degree is not NULL, n is ignored.}
 
 \item{Title}{is a character indicating the plot title.}
 
@@ -27,15 +31,28 @@ networkPlot(NetMatrix, n = 20, Title = "Plot", type = "kamada",
 
 \item{labelsize}{is an integer. It indicates the label size in the plot. Default is \code{labelsize=1}}
 
+\item{halo}{is logical. If TRUE communities are plotted using different colors. Default is \code{halo=FALSE}}
+
+\item{cluster}{is a character. It indicates the type of cluster to perform among ("null", optimal", "lovain","infomap","edge_betweenness","walktrap").}
+
 \item{vos.path}{is a character indicating the full path whre VOSviewer.jar is located.}
 
 \item{size}{is logical. If TRUE the point size of each vertex is proportional to its degree.}
+
+\item{curved}{is a logical. If TRUE edges are plotted with an optimal curvature. Default is \code{curved=FALSE}}
 
 \item{noloops}{is logical. If TRUE loops in the network are deleted.}
 
 \item{remove.multiple}{is logical. If TRUE multiple links are plotted using just one edge.}
 
 \item{remove.isolates}{is logical. If TRUE isolates vertices are not plotted.}
+
+\item{weighted}{This argument specifies whether to create a weighted graph from an adjacency matrix. 
+If it is NULL then an unweighted graph is created and the elements of the adjacency matrix gives the number of edges between the vertices. 
+If it is a character constant then for every non-zero matrix entry an edge is created and the value of the entry is added as an edge attribute 
+named by the weighted argument. If it is TRUE then a weighted graph is created and the name of the edge attribute will be weight.}
+
+\item{edgesize}{is an integer. It indicates the network edge size.}
 }
 \value{
 It is a network object of the class \code{igraph}.
@@ -65,4 +82,3 @@ net <- networkPlot(NetMatrix, n = 20, type = "kamada", Title = "Co-Citation")
 
 \code{\link{biblioAnalysis}} to perform a bibliometric analysis.
 }
-

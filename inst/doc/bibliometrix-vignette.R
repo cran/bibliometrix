@@ -117,7 +117,7 @@ M <- metaTagExtraction(M, Field = "AU_CO", sep = ";")
 NetMatrix <- biblioNetwork(M, analysis = "coupling", network = "authors", sep = ";")
 
 # calculate jaccard similarity coefficient
-S <- couplingSimilarity(NetMatrix, type="jaccard")
+S <- normalizeSimilarity(NetMatrix, type="jaccard")
 
 # plot authors' similarity (first 20 authors)
 net=networkPlot(S, n = 20, Title = "Authors' Coupling", type = "fruchterman", size=FALSE,remove.multiple=TRUE)
@@ -164,7 +164,7 @@ net=networkPlot(NetMatrix, n = 20, Title = "Keyword Co-occurrences", type = "kam
 
 # Conceptual Structure using keywords
 
-CS <- conceptualStructure(M,field="ID", minDegree=4, k.max=5, stemming=FALSE)
+CS <- conceptualStructure(M,field="ID", minDegree=4, k.max=5, stemming=FALSE, labelsize=10)
 
 
 ## ----Historical Co-citation network, fig.height=8, fig.width=7, warning=FALSE----
