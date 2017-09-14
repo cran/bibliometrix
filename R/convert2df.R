@@ -72,6 +72,7 @@
 #' @importFrom igraph V
 #' @importFrom igraph V<-
 #' @importFrom igraph graph_from_incidence_matrix
+#' @importFrom igraph graph_from_adjacency_matrix
 #' @importFrom igraph simplify
 #' @importFrom igraph layout.circle
 #' @importFrom igraph layout.sphere
@@ -85,6 +86,7 @@
 #' @importFrom igraph cluster_edge_betweenness
 #' @importFrom igraph cluster_louvain
 #' @importFrom igraph membership
+#' @importFrom igraph layout.norm
 #' @importFrom Matrix %&%
 #' @importFrom Matrix abIseq
 #' @importFrom Matrix abIseq1
@@ -227,23 +229,34 @@ convert2df<-function(file,dbsource="isi",format="bibtex"){
   M$PY=as.numeric(M$PY)
   M$TC=as.numeric(M$TC)
   
-  ## Author data cleaning
-  if ("AU" %in% names(M)){
-    M$AU=gsub(","," ",M$AU)
-    AUlist=strsplit(M$AU,";")
-    AU=lapply(AUlist,function(l){
-      l=trim(l)
-      name=strsplit(l," ")
-      lastname=unlist(lapply(name,function(ln){ln[1]}))
-      firstname=lapply(name,function(ln){
-        f=paste(substr(ln[-1],1,1),collapse=" ")
-      })
-      AU=paste(lastname,unlist(firstname),sep=" ",collapse=";")
-      return(AU)
-    })
-    M$AU=unlist(AU)
+  ### SR field creation
+  
+  listAU=strsplit(as.character(M$AU),";")
+  listAU=lapply(listAU, function(l) trim.leading(l))
+  if (dbsource=="scopus"){
+  listAU=lapply(listAU,function(l){
+    l=trim(l)
+    l=sub(" ",",",l, fixed = TRUE)
+    l=sub(",,",",",l, fixed = TRUE)
+    l=gsub(" ","",l, fixed = TRUE)})}
+  FirstAuthors=gsub(","," ",unlist(lapply(listAU,function(l) l[[1]])))
+  
+  if (!is.null(M$J9)){
+    SR=paste(FirstAuthors,M$PY,M$J9,sep=", ")}else{J9=trim(gsub("\\."," ",M$JI))
+    SR=paste(FirstAuthors,M$PY,J9,sep=", ")}
     
-  }
+  ## assign an unique name to each document
+  st<-i<-0
+  while(st==0){
+  ind <- which(duplicated(SR))
+  if (length(ind)>0){
+    i <- i+1
+    SR[ind]=paste0(SR[ind],"-",letters[i],sep="")}else{st <- 1}}
+  M$SR<- SR
+  row.names(M) <- SR
+    
+  
+  
   return(M)
 
 }

@@ -1,8 +1,8 @@
 Package: bibliometrix
 Type: Package
-Title: Bibliometric and Co-Citation Analysis Tool
-Version: 1.7
-Date: 2017-06-23
+Title: An R-Tool for Comprehensive Science Mapping Analysis
+Version: 1.8
+Date: 2017-09-13
 Authors@R: c(person("Massimo", "Aria", email = "aria@unina.it", role=c("cre","aut")),
              person("Corrado", "Cuccurullo", email = "cuccurullocorrado@gmail.com", role="aut"))
 Description: Tool for quantitative research in scientometrics and bibliometrics.
@@ -19,10 +19,10 @@ Imports: stats, factoextra, FactoMineR, ggplot2, igraph, Matrix,
 Suggests: knitr, rmarkdown
 RoxygenNote: 6.0.1
 NeedsCompilation: no
-Packaged: 2017-07-07 12:53:30 UTC; Massimo
+Packaged: 2017-09-13 12:39:30 UTC; Massimo
 Author: Massimo Aria [cre, aut],
   Corrado Cuccurullo [aut]
 Maintainer: Massimo Aria <aria@unina.it>
 VignetteBuilder: knitr
 Repository: CRAN
-Date/Publication: 2017-07-07 15:57:03 UTC
+Date/Publication: 2017-09-14 10:46:01 UTC
