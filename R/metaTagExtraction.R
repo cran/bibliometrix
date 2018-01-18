@@ -9,7 +9,8 @@
 #' \code{"CR_AU"}\tab   \tab First Author of each cited reference\cr
 #' \code{"CR_SO"}\tab   \tab Source of each cited reference\cr
 #' \code{"AU_CO"}\tab   \tab Country of affiliation for each co-author\cr
-#' \code{"AU_UN"}\tab   \tab University of affiliation for each co-author}
+#' \code{"AU_UN"}\tab   \tab University of affiliation for each co-author\cr
+#' \code{"SR"}\tab     \tab Short tag of the document (as used in reference lists)}
 #'
 #' @param sep is the field separator character. This character separates strings in each column of the data frame. The default is \code{sep = ";"}.
 #' @return the bibliometric data frame with a new column containing data about new field tag indicated in the argument \code{Field}.
@@ -44,13 +45,51 @@
 metaTagExtraction<-function(M, Field = "CR_AU", sep = ";"){
 
 
+### SR field creation
+
+if (Field=="SR"){
+  
+  listAU=strsplit(as.character(M$AU),";")
+  listAU=lapply(listAU, function(l) trim.leading(l))
+  if (M$DB[1]=="scopus"){
+    listAU=lapply(listAU,function(l){
+      l=trim(l)
+      l=sub(" ",",",l, fixed = TRUE)
+      l=sub(",,",",",l, fixed = TRUE)
+      l=gsub(" ","",l, fixed = TRUE)})}
+  FirstAuthors=gsub(","," ",unlist(lapply(listAU,function(l) l[[1]])))
+  
+  if (!is.null(M$J9)){
+    ## replace full title in no iso names
+    no_art=which(is.na(M$J9) & is.na(M$JI))
+    M$J9[no_art]=M$SO[no_art]
+    ## repleace NA in J9 with JIO
+    ind=which(is.na(M$J9))
+    M$J9[ind]=trim(gsub("\\."," ",M$JI[ind]))
+    SR=paste(FirstAuthors,M$PY,M$J9,sep=", ")}else{
+      no_art=which(is.na(M$JI))
+      M$JI[no_art]=M$SO[no_art]
+      J9=trim(gsub("\\."," ",M$JI))
+      SR=paste(FirstAuthors,M$PY,J9,sep=", ")}
+  
+  ## assign an unique name to each document
+  st<-i<-0
+  while(st==0){
+    ind <- which(duplicated(SR))
+    if (length(ind)>0){
+      i <- i+1
+      SR[ind]=paste0(SR[ind],"-",letters[i],sep="")}else{st <- 1}}
+  
+  M$SR<- gsub("\\s+", " ", SR)
+}
+
+
 size=dim(M)
 FCAU=list(NULL)
 CCR=NULL
 M$CR=str_replace_all(as.character(M$CR),"DOI;","DOI ")
 CR=M$CR
-
-
+  
 if (Field=="CR_AU"){
 
 listCAU=strsplit(as.character(CR),sep)
@@ -140,6 +179,8 @@ if (Field=="AU_UN"){
   AFF=gsub("\\[.*?\\] ", "", M$C1)
   indna=which(is.na(AFF))
   if (length(indna)>0){AFF[indna]=M$RP[indna]}
+  nc=nchar(AFF)
+  AFF[nc==0]=NA
   
   listAFF=strsplit(AFF,sep,fixed=TRUE)
   
@@ -160,12 +201,21 @@ if (Field=="AU_UN"){
       ind[[6]]=which(regexpr("ECOLE",affL,fixed=TRUE)!=-1)
       ind[[7]]=which(regexpr("CTR",affL,fixed=TRUE)!=-1)
       ind[[8]]=which(regexpr("SCI",affL,fixed=TRUE)!=-1)
-      for (a in 1:8){
+      ind[[9]]=which(regexpr("HOSP",affL,fixed=TRUE)!=-1)
+      ind[[10]]=which(regexpr("CENTRE",affL,fixed=TRUE)!=-1)
+      ind[[11]]=which(regexpr("CENTER",affL,fixed=TRUE)!=-1)
+      ind[[12]]=which(regexpr("CENTRO",affL,fixed=TRUE)!=-1)
+      ind[[13]]=which(regexpr("ASSOC",affL,fixed=TRUE)!=-1)
+      ind[[14]]=which(regexpr("FONDAZ",affL,fixed=TRUE)!=-1)
+      ind[[15]]=which(regexpr("FOUNDAT",affL,fixed=TRUE)!=-1)
+      ind[[16]]=which(regexpr("ISTIT",affL,fixed=TRUE)!=-1)
+      
+      for (a in 1:length(ind)){
         indd=ind[[a]]
         if (length(indd)>0){break()}
       }
       
-      if (length(indd)==0){index=append(index,"OTHER CENTER")
+      if (length(indd)==0){index=append(index,"NR")
       } else if (grepl("[[:digit:]]", affL[indd[1]])){index=append(index,"ND")
       } else {index=append(index,affL[indd[1]])}
       

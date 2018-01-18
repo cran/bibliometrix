@@ -50,10 +50,11 @@ histPlot<-function(histResults, remove.isolates=FALSE, size = F, labelsize = 0.8
   # Compute node degrees (#links) and use that to set node size:
   deg <- histResults$LCS
   if (isTRUE(size)){V(bsk.network)$size <- (deg/max(deg)[1])*20}
-  else{V(bsk.network)$size=rep(3,length(V(bsk.network)))}
+  else{V(bsk.network)$size=rep(1,length(V(bsk.network)))}
   
   # Remove loops
   bsk.network <- simplify(bsk.network, remove.multiple = T, remove.loops = T) 
+  
   
   
   #V(bsk.network)$color <- 'red'
@@ -66,10 +67,15 @@ histPlot<-function(histResults, remove.isolates=FALSE, size = F, labelsize = 0.8
   edges1=colSums(NET)
   edges2=rowSums(NET)
   ind=which((edges1==0) & (edges2==0))
-  ma=max(l[-ind,1])
-  mi=min(l[-ind,1])
-  l[ind,1]=sample(seq(ma,ma+((ma-mi)/3),length.out = length(ind)),size=length(ind))}
-  else{
+    if (length(ind)>0){
+      ma=max(l[-ind,1])
+      mi=min(l[-ind,1])
+      l[ind,1]=sample(seq(ma,ma+((ma-mi)/3),length.out = length(ind)),size=length(ind))}
+    else{
+        ma=max(l[,1])
+        mi=min(l[,1])}
+  
+  }else{
     l <- layout.fruchterman.reingold(bsk.network) #default
     l[,2]=(histResults[[3]]$Year)*-1
     edges1=colSums(NET)
@@ -82,7 +88,7 @@ histPlot<-function(histResults, remove.isolates=FALSE, size = F, labelsize = 0.8
   #l[,1]=l[,1]*2
   # Plot the chronological co-citation network
   l=layout.norm(l)
-  plot(bsk.network,layout = l, vertex.color="lightblue", vertex.label.dist = 0.3, vertex.frame.color = 'black', vertex.label.color = 'darkblue', vertex.label.font = 1, vertex.label = V(bsk.network)$id, vertex.label.cex = labelsize, edge.arrow.size=arrowsize, main="Historical citation network")
+  plot(bsk.network,rescale=T,asp=0,ylim=c(-1,1),xlim=c(-1,1),layout = l, vertex.color="lightblue", vertex.label.dist = 0.3, vertex.frame.color = 'black', vertex.label.color = 'black', vertex.label.font = 1, vertex.label = V(bsk.network)$id, vertex.label.cex = labelsize, edge.arrow.size=arrowsize, main="Historical citation network")
   cat("\n Legend\n\n")
   print(histResults[[3]])
   

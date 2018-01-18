@@ -4,14 +4,18 @@
 \alias{networkPlot}
 \title{Plotting Bibliographic networks}
 \usage{
-networkPlot(NetMatrix, n = NULL, Degree = NULL, Title = "Plot",
-  type = "kamada", label = TRUE, labelsize = 1, halo = FALSE,
-  cluster = "walktrap", vos.path = NULL, size = FALSE, curved = FALSE,
-  noloops = TRUE, remove.multiple = TRUE, remove.isolates = FALSE,
-  weighted = NULL, edgesize = 1)
+networkPlot(NetMatrix, normalize = NULL, n = NULL, Degree = NULL,
+  Title = "Plot", type = "kamada", label = TRUE, labelsize = 1,
+  label.cex = FALSE, halo = FALSE, cluster = "walktrap",
+  vos.path = NULL, size = 3, curved = FALSE, noloops = TRUE,
+  remove.multiple = TRUE, remove.isolates = FALSE, weighted = NULL,
+  edgesize = 1, edges.min = 0)
 }
 \arguments{
 \item{NetMatrix}{is a network matrix obtained by the function \code{\link{biblioNetwork}}.}
+
+\item{normalize}{is a character. It can be "association", "jaccard", "inclusion","salton" or "equivalence" to obtain Association Strength, Jaccard, 
+Inclusion, Salton or Equivalence similarity index respectively. The default is type = NULL.}
 
 \item{n}{is an integer. It indicates the number of vertices to plot.}
 
@@ -33,13 +37,16 @@ networkPlot(NetMatrix, n = NULL, Degree = NULL, Title = "Plot",
 
 \item{labelsize}{is an integer. It indicates the label size in the plot. Default is \code{labelsize=1}}
 
+\item{label.cex}{is logical. If TRUE the label size of each vertex is proportional to its degree.}
+
 \item{halo}{is logical. If TRUE communities are plotted using different colors. Default is \code{halo=FALSE}}
 
-\item{cluster}{is a character. It indicates the type of cluster to perform among ("null", optimal", "lovain","infomap","edge_betweenness","walktrap").}
+\item{cluster}{is a character. It indicates the type of cluster to perform among ("none", optimal", "lovain","infomap","edge_betweenness","walktrap").}
 
 \item{vos.path}{is a character indicating the full path whre VOSviewer.jar is located.}
 
-\item{size}{is logical. If TRUE the point size of each vertex is proportional to its degree.}
+\item{size}{is integer or logical. If TRUE the point size of each vertex is proportional to its degree. 
+If it is a integer, the point size of each vertex is constant equal to size. Default is \code{size=3}.}
 
 \item{curved}{is a logical. If TRUE edges are plotted with an optimal curvature. Default is \code{curved=FALSE}}
 
@@ -55,6 +62,8 @@ If it is a character constant then for every non-zero matrix entry an edge is cr
 named by the weighted argument. If it is TRUE then a weighted graph is created and the name of the edge attribute will be weight.}
 
 \item{edgesize}{is an integer. It indicates the network edge size.}
+
+\item{edges.min}{is an integer. It indicates the min frequency of edges between two vertices. If edge.min=0, all edges are plotted.}
 }
 \value{
 It is a network object of the class \code{igraph}.

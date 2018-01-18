@@ -1,4 +1,7 @@
-## ----Package citation----------------------------------------------------
+## ----echo=FALSE----------------------------------------------------------
+cat(paste("bibliometrix ",packageVersion("bibliometrix")))
+
+## ----Package citation, echo=FALSE----------------------------------------
 citation("bibliometrix")
 
 ## ----bibliometrix loading------------------------------------------------
@@ -32,8 +35,9 @@ CR <- citations(M, field = "author", sep = ".  ")
 CR$Cited[1:10]
 
 ## ----Local Author citation-----------------------------------------------
-CR <- localCitations(M, results, sep = ".  ")
-CR[1:10]
+CR <- localCitations(M, sep = ".  ")
+CR$Authors[1:10,]
+CR$Papers[1:10,]
 
 ## ----Dominance Ranking---------------------------------------------------
 DF <- dominance(results, k = 10)
@@ -167,10 +171,10 @@ net=networkPlot(NetMatrix, n = 20, Title = "Keyword Co-occurrences", type = "kam
 CS <- conceptualStructure(M,field="ID", minDegree=4, k.max=5, stemming=FALSE, labelsize=10)
 
 
-## ----Historical Co-citation network, fig.height=8, fig.width=7, warning=FALSE----
+## ----Historical Co-citation network, fig.height=9, fig.width=7, warning=FALSE----
 # Create a historical citation network
 
-histResults <- histNetwork(M, n = 10, sep = ".  ")
+histResults <- histNetwork(M, n = 20, sep = ".  ")
 
 # Plot a historical co-citation network
 net <- histPlot(histResults, size = FALSE,label=FALSE, arrowsize = 0.5)
