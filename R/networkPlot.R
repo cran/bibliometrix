@@ -8,7 +8,7 @@
 #' @param normalize is a character. It can be "association", "jaccard", "inclusion","salton" or "equivalence" to obtain Association Strength, Jaccard, 
 #' Inclusion, Salton or Equivalence similarity index respectively. The default is type = NULL.
 #' @param n is an integer. It indicates the number of vertices to plot.
-#' @param Degree is an integer. It idicates the min frequency of a vertex. If Degree is not NULL, n is ignored.
+#' @param degree is an integer. It idicates the min frequency of a vertex. If degree is not NULL, n is ignored.
 #' @param type is a character object. It indicates the network map layout:
 #' 
 #' \tabular{lll}{
@@ -38,7 +38,14 @@
 #' named by the weighted argument. If it is TRUE then a weighted graph is created and the name of the edge attribute will be weight.
 #' @param edgesize is an integer. It indicates the network edge size.
 #' @param edges.min is an integer. It indicates the min frequency of edges between two vertices. If edge.min=0, all edges are plotted.
-#' @return It is a network object of the class \code{igraph}.
+#' @param label.n is an integer. It indicates the number of vertex labels to draw.
+#' @param label.short is a logical. If TRUE label are plotted in short format.
+#' @return It is a list containing the following elements:
+#' \tabular{lll}{
+#' \code{graph} \tab  \tab a network object of the class \code{igraph}\cr
+#' \code{cluster_obj} \tab  \tab a \code{\link{communities}} object of the package \code{igraph}\cr
+#' \code{cluster_res} \tab  \tab a data frame with main results of clustering procedure.\cr}
+#' 
 #' 
 #' @examples
 #' # EXAMPLE Co-citation network
@@ -48,20 +55,20 @@
 #' NetMatrix <- biblioNetwork(scientometrics, analysis = "co-citation", 
 #' network = "references", sep = ";")
 #' 
-#' net <- networkPlot(NetMatrix, n = 20, type = "kamada", Title = "Co-Citation")
+#' net <- networkPlot(NetMatrix, n = 30, type = "kamada", Title = "Co-Citation",labelsize=0.5) 
 #' 
 #' @seealso \code{\link{biblioNetwork}} to compute a bibliographic network.
 #' @seealso \code{\link{cocMatrix}} to compute a co-occurrence matrix.
 #' @seealso \code{\link{biblioAnalysis}} to perform a bibliometric analysis.
 #' 
 #' @export
-networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, Degree=NULL, Title="Plot", type="kamada", label=TRUE, labelsize=1, label.cex=FALSE, halo=FALSE, cluster="walktrap", vos.path=NULL, size=3, curved=FALSE, noloops=TRUE, remove.multiple=TRUE,remove.isolates=FALSE,weighted=NULL,edgesize=1,edges.min=0){
+networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, degree=NULL, Title="Plot", type="kamada", label=TRUE, labelsize=1, label.cex=FALSE,label.short=TRUE, label.n=NULL, halo=FALSE, cluster="walktrap", vos.path=NULL, size=3, curved=FALSE, noloops=TRUE, remove.multiple=TRUE,remove.isolates=FALSE,weighted=NULL,edgesize=1,edges.min=0){
   
   NET=NetMatrix
   bsk.S=TRUE
   
   if (!is.null(normalize)){
-    S=normalizeSimilarity(NetMatrix, type = "association")
+    S=normalizeSimilarity(NetMatrix, type = normalize)
     bsk.S <- graph.adjacency(S,mode="undirected",weighted=T)
   }
   #diag(NetMatrix)=0
@@ -73,7 +80,25 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, Degree=NULL, Title="Plo
   
   # Create igraph object
   bsk.network <- graph.adjacency(NET,mode="undirected",weighted=weighted)
-  V(bsk.network)$id <- colnames(NET)
+  
+  if (isTRUE(label.short)){
+    LABEL=colnames(NET)
+    LABEL2=regexpr(".([0-9]?[0-9]?[0-9]?[0-9]).*",LABEL)
+    LABEL2[LABEL2==-1 | LABEL2==1]=nchar(LABEL[LABEL2==-1 | LABEL2==1])-4
+    LABEL2=substr(LABEL,1,LABEL2+4)
+    
+    ## assign an unique name to each label
+    tab=sort(table(LABEL2),decreasing=T)
+    dup=names(tab[tab>1])
+    for (i in 1:length(dup)){
+      ind=which(LABEL2 %in% dup[i])
+      if (length(ind)>0){
+        LABEL2[ind]=paste0(LABEL2[ind],"-",as.character(1:length(ind)),sep="")
+      }
+    }
+    
+   V(bsk.network)$name=LABEL2
+  } else {V(bsk.network)$name <- colnames(NET)}
   
   
   # Compute node degrees (#links) and use that to set node size:
@@ -89,10 +114,10 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, Degree=NULL, Title="Plo
   
   # Select number of vertices to plot
   
-  if (!is.null(Degree)){
+  if (!is.null(degree)){
     Deg=deg-diag(NET)
-    Vind=Deg<Degree
-    if (sum(!Vind)==0){cat("\nDegree argument is to high!\n\n")
+    Vind=Deg<degree
+    if (sum(!Vind)==0){cat("\ndegree argument is to high!\n\n")
       return()}
     bsk.network <- delete.vertices(bsk.network,which(Vind))
     if (!isTRUE(bsk.S)){bsk.S <- delete.vertices(bsk.S,which(Vind))}
@@ -115,8 +140,8 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, Degree=NULL, Title="Plo
   }
   
   # Choose Network layout
-  if (!isTRUE(bsk.S)){l <- switchLayout(bsk.S,type)
-  } else{l <- switchLayout(bsk.network,type)}
+  if (!isTRUE(bsk.S)){l <- switchLayout(bsk.S,type,vos.path)
+  } else{l <- switchLayout(bsk.network,type,vos.path)}
   
   
   # Clustering
@@ -132,6 +157,11 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, Degree=NULL, Title="Plo
     LABEL=""
     if (isTRUE(label)){
       LABEL=V(bsk.network)$name
+      if (!is.null(label.n)){
+        q=1-(label.n/length(V(bsk.network)$label.cex))
+        q=quantile(V(bsk.network)$label.cex,q)
+        LABEL[V(bsk.network)$label.cex<q]=""
+      }
     }
     
     E(bsk.network)$num=count_multiple(bsk.network, eids = E(bsk.network))
@@ -144,29 +174,45 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, Degree=NULL, Title="Plo
         E(bsk.network)$width=edges/max(edges)*edgesize}
     }
     
-    bsk.network=delete.edges(bsk.network, which(E(bsk.network)$num<edges.min))
+    bsk.network1=delete.edges(bsk.network, which(E(bsk.network)$num<edges.min))
     
     if (isTRUE(halo) & cluster!="null"){
-      plot(net_groups,bsk.network,layout = l, edge.curved=curved, vertex.label.dist = 0.7, vertex.frame.color = 'black', vertex.label.color = 'black', vertex.label.font = 1, vertex.label = LABEL, main=Title)
+      plot(net_groups,bsk.network1,layout = l, edge.curved=curved, vertex.label.dist = 0.7, vertex.frame.color = 'black', vertex.label.color = 'black', vertex.label.font = 1, vertex.label = LABEL, main=Title)
       
     } else{
-      plot(bsk.network,layout = l, edge.curved=curved, vertex.label.dist = 0.7, vertex.frame.color = 'black', vertex.label.color = 'black', vertex.label.font = 1, vertex.label = LABEL, main=Title)
+      plot(bsk.network1,layout = l, edge.curved=curved, vertex.label.dist = 0.7, vertex.frame.color = 'black', vertex.label.color = 'black', vertex.label.font = 1, vertex.label = LABEL, main=Title)
     }
     
   }  
+  if (cluster!="none"){
+    cluster_res=data.frame(net_groups$names,net_groups$membership,as.numeric(betweenness(bsk.network,directed = F,normalized = F)))
+    names(cluster_res)=c("vertex","cluster","btw_centrality")
+    cluster_res=cluster_res[order(cluster_res$cluster),]
+  } else {cluster_res=NA}
   
   
-  return(bsk.network)}
+  net=list(graph=bsk.network, cluster_obj=net_groups, cluster_res=cluster_res)
+  
+  return(net)}
+
+
+### internal functions:
+
+### deleteIsolates
 
 delete.isolates <- function(graph, mode = 'all') {
   isolates <- which(degree(graph, mode = mode) == 0) - 1
   delete.vertices(graph, names(isolates))
 }
 
+### clusteringNetwork
+
 clusteringNetwork <- function(bsk.network,cluster){
   
   switch(cluster,
-         none={V(bsk.network)$color="#8DD3C7"},
+         none={
+           net_groups=NA
+           V(bsk.network)$color="#8DD3C7"},
          optimal={
            net_groups <- cluster_optimal(bsk.network)
            V(bsk.network)$color <- brewer.pal(12, 'Set3')[membership(net_groups)]},
@@ -189,9 +235,12 @@ clusteringNetwork <- function(bsk.network,cluster){
   return(cl)
 }
 
-switchLayout <- function(bsk.network,type){
+### switchLayout
+
+switchLayout <- function(bsk.network,type,vos.path){
   switch(type,
          circle={l <- layout.circle(bsk.network)},
+         star={l <- layout.star(bsk.network)},
          sphere={l <- layout.sphere(bsk.network)},
          mds={l <- layout.mds(bsk.network)},
          fruchterman={l <- layout.fruchterman.reingold(bsk.network)},
@@ -206,6 +255,6 @@ switchLayout <- function(bsk.network,type){
              system(VOScommand)}
          })
   
-  l=layout.norm(l)
+  if (type!="vosviewer"){l=layout.norm(l)}
   return(l)
 }

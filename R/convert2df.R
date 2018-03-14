@@ -30,7 +30,7 @@
 #' \code{UT}\tab   \tab Unique Article Identifier\cr
 #' \code{DB}\tab   \tab Database\cr}
 #'
-#' for a complete list of field tags see: \href{http://www.bibliometrix.org/documentation/Field_Tags_bibliometrix.pdf}{Field Tags used in bibliometrix}
+#' for a complete list of field tags see: \href{http://www.bibliometrix.org/documents/Field_Tags_bibliometrix.pdf}{Field Tags used in bibliometrix}
 #' 
 #' @examples
 #' # An ISI or SCOPUS Export file can be read using \code{\link{readLines}} function:
@@ -56,6 +56,7 @@
 #' @import stats
 #' @import ggplot2
 #' @import RISmed
+#' @import ggrepel
 #' @importFrom stringdist stringdistmatrix
 #' @importFrom rscopus author_search
 #' @importFrom rscopus get_complete_author_info
@@ -80,6 +81,7 @@
 #' @importFrom igraph layout.mds
 #' @importFrom igraph layout.kamada.kawai
 #' @importFrom igraph layout.fruchterman.reingold
+#' @importFrom igraph layout.star
 #' @importFrom igraph write.graph
 #' @importFrom igraph cluster_walktrap
 #' @importFrom igraph cluster_optimal
@@ -90,6 +92,7 @@
 #' @importFrom igraph membership
 #' @importFrom igraph layout.norm
 #' @importFrom igraph delete.edges
+#' @importFrom igraph betweenness
 #' @importFrom Matrix %&%
 #' @importFrom Matrix abIseq
 #' @importFrom Matrix abIseq1
@@ -233,15 +236,35 @@ convert2df<-function(file,dbsource="isi",format="plaintext"){
     M$CR="none"
     }
 )
-  M$PY=as.numeric(M$PY)
-  M$TC=as.numeric(M$TC)
+  if ("PY" %in% names(M)){M$PY=as.numeric(M$PY)} else {M$PY=NA}
+  if ("TC" %in% names(M)){M$TC=as.numeric(M$TC)} else {M$TC=NA}
   
   ## AU_UN field creation
-  M <- metaTagExtraction(M, Field="AU_UN")
+  if ("C1" %in% names(M)){M <- metaTagExtraction(M, Field="AU_UN")} else{
+    M$C1=NA
+    M$AU_UN=NA}
 
   ### SR field creation
-  M <- metaTagExtraction(M, Field="SR")
-  row.names(M) <- M$SR
+  suppressWarnings(M <- metaTagExtraction(M, Field="SR"))
+  
+  
+  ### identify duplicated SRs 
+    SR=M$SR
+    tab=table(SR)
+    tab2=table(tab)
+    ind=as.numeric(names(tab2))
+    ind=ind[which(ind>1)]
+    if (length(ind)>0){
+      for (i in ind){
+        indice=names(which(tab==i))
+        for (j in indice){
+          indice2=which(SR==j)
+          SR[indice2]=paste(SR[indice2],as.character(1:length(indice2)),sep=" ")
+        }
+      }
+    }
+ 
+  row.names(M) <- SR
     
   
   

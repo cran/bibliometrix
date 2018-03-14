@@ -4,7 +4,7 @@
 #' @param object is the object for which a summary is desired.
 #' @param ... can accept two arguments:\cr
 #' \code{k} integer, used for table formatting (number of rows). Default value is 10.\cr
-#' \code{pause} locical, used to allow pause in screen scrolling of results. Default value is \code{pause = TRUE}.
+#' \code{pause} locical, used to allow pause in screen scrolling of results. Default value is \code{pause = FALSE}.
 #' @return The function \code{summary} computes and returns a list of summary statistics of the object of class \code{bibliometrics}.
 #'
 #' the list contains the following objects:
@@ -39,7 +39,7 @@ summary.bibliometrix<-function(object, ...){
   
   arguments <- list(...)
   if (sum(names(arguments)=="k")==0){k=10} else {k=arguments$k}
-  if (sum(names(arguments)=="pause")==0){pause=TRUE} else {pause=arguments$pause}
+  if (sum(names(arguments)=="pause")==0){pause=FALSE} else {pause=arguments$pause}
   
   Co=NULL
   AC=NULL
@@ -50,7 +50,7 @@ summary.bibliometrix<-function(object, ...){
   MainInfo[3]=paste("Sources (Journals, Books, etc.)      ",length(object$Sources),"\n")
   MainInfo[4]=paste("Keywords Plus (ID)                   ",length(object$ID),"\n")
   MainInfo[5]=paste("Author's Keywords (DE)               ",length(object$DE),"\n")
-  MainInfo[6]=paste("Period                               ",min(object$Years),"-",max(object$Years),"\n")
+  MainInfo[6]=paste("Period                               ",min(object$Years,na.rm=T),"-",max(object$Years,na.rm=T),"\n")
   TCm=format(mean(as.numeric(object$TotalCitation), na.rm=TRUE),digits=4)
   MainInfo[7]=paste("Average citations per article        ",TCm,"\n\n")
   MainInfo[8]=paste("Authors                              ",object$nAuthors,"\n")
@@ -110,7 +110,7 @@ summary.bibliometrix<-function(object, ...){
   kk=k
   if (!is.null(object$Countries)){
   # Most Productive Countries
-  cat("\nMost Productive Countries\n\n")
+  cat("\nMost Productive Countries (of corresponding authors)\n\n")
 
   if (length(object$Countries)<k) {kk=length(object$Countries)}
 
@@ -119,10 +119,12 @@ summary.bibliometrix<-function(object, ...){
   Co$Country=row.names(Co)
   names(Co)=c("Country  ","Articles","Freq")
   Co$Freq=as.numeric(Co[,2])/sum(object$Countries)
+  Co=cbind(Co,object$CountryCollaboration[1:kk,2:3])
   #names(Co)=c("Country  ","Articles","Frequency")
   Co=format(Co,justify="left",digits=3)
   row.names(Co)=1:kk
   print(Co,row.names=TRUE);cat("\n")
+  cat("\nSCP: Single Country Publications\n\nMCP: Multiple Country Publications\n\n")
 
 
   if (pause==TRUE){

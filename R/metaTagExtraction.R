@@ -9,6 +9,7 @@
 #' \code{"CR_AU"}\tab   \tab First Author of each cited reference\cr
 #' \code{"CR_SO"}\tab   \tab Source of each cited reference\cr
 #' \code{"AU_CO"}\tab   \tab Country of affiliation for each co-author\cr
+#' \code{"AU1_CO"}\tab   \tab Country of affiliation for the first author\cr
 #' \code{"AU_UN"}\tab   \tab University of affiliation for each co-author\cr
 #' \code{"SR"}\tab     \tab Short tag of the document (as used in reference lists)}
 #'
@@ -87,8 +88,9 @@ if (Field=="SR"){
 size=dim(M)
 FCAU=list(NULL)
 CCR=NULL
-M$CR=str_replace_all(as.character(M$CR),"DOI;","DOI ")
-CR=M$CR
+if ("CR" %in% names(M)){
+  M$CR=str_replace_all(as.character(M$CR),"DOI;","DOI ")
+  CR=M$CR}
   
 if (Field=="CR_AU"){
 
@@ -102,6 +104,8 @@ listCAU=lapply(listCAU,function(l) l=l[nchar(l)>10])  ## delete not congruent re
 
   M$CR_AU=CCR
   }
+
+### CR_SO field creation
 
 if (Field=="CR_SO"){
   listCAU=strsplit(as.character(CR),sep)
@@ -139,8 +143,11 @@ if (Field=="CR_SO"){
   M$CR_SO=CCR
 }
 
+### AU_CO field creation
+
 if (Field=="AU_CO"){
   # Countries
+  
   data("countries",envir=environment())
   countries=as.character(countries[[1]])
   if (M$DB[1]=="ISI"){
@@ -152,9 +159,14 @@ if (Field=="AU_CO"){
   C1=M$C1
   C1[which(is.na(C1))]=M$RP[which(is.na(C1))]
   C1=gsub("\\[.*?\\] ", "", C1)
+  if (M$DB[1]=="ISI"){ C1=lastChar(C1,last=".")}
+  if (M$DB[1]=="SCOPUS"){ C1=lastChar(C1,last=";")}
+  
+  #C1=gsub("[[:punct:][:blank:]]+", " ", C1)
   RP=M$RP
   #RP[which(is.na(RP))]=M$RRP)
   RP=paste(RP,";",sep="")
+  RP=gsub("[[:punct:][:blank:]]+", " ", RP)
   
   for (i in 1:size[1]){
     if (!is.na(C1[i])){
@@ -169,8 +181,52 @@ if (Field=="AU_CO"){
   M$AU_CO=gsub("[[:digit:]]","",M$AU_CO)
   M$AU_CO=gsub(".", "", M$AU_CO, fixed = TRUE)
   M$AU_CO=gsub(";;", ";", M$AU_CO, fixed = TRUE)
+  
+  if (M$DB[1]=="ISI"){M$AU_CO=removeLastChar(M$AU_CO,last=".")}
+  if (M$DB[1]=="SCOPUS"){M$AU_CO=removeLastChar(M$AU_CO,last=";")}
+  
+  
+}
 
-
+if (Field=="AU1_CO"){
+  # Countries
+  data("countries",envir=environment())
+  countries=as.character(countries[[1]])
+  #if (M$DB[1]=="ISI"){
+  #countries=as.character(sapply(countries,function(s) paste0(" ",s," ",collapse="")))
+  #} else if (M$DB[1]=="SCOPUS"){
+  #  countries=as.character(sapply(countries,function(s) paste0(s,";",collapse="")))}
+  countries=paste(" ",countries," ",sep="")
+  M$AU1_CO=NA
+  C1=M$C1
+  C1[which(!is.na(M$RP))]=M$RP[which(!is.na(M$RP))]
+  C1=unlist(lapply(strsplit(C1,sep),function(l) l[1]))
+  C1=gsub("\\[.*?\\] ", "", C1)
+  C1=gsub("[[:punct:][:blank:]]+", " ", C1)
+  C1=paste(trim(C1)," ",sep="")
+  if (M$DB[1]!="PUBMED"){
+  RP=M$RP
+  #RP[which(is.na(RP))]=M$RRP)
+  RP=paste(RP,";",sep="")
+  RP=gsub("[[:punct:][:blank:]]+", " ", RP)} else {RP=C1}
+  
+  for (i in 1:size[1]){
+    if (!is.na(C1[i])){
+      ind=unlist(sapply(countries, function (l) (gregexpr ( l , C1[i],fixed=TRUE))))
+      if (sum(ind>-1)>0) {M$AU1_CO[i]=paste(unique(names(ind[ind>-1][1])),collapse=";")
+      #print(i)
+      #print(M$AU1_CO[i])
+      }
+    }
+    if (is.na(M$AU1_CO[i])){
+      ind=unlist(sapply(countries, function (l) (gregexpr ( l , RP[i],fixed=TRUE))))
+      if (sum(ind>-1)>0) {M$AU1_CO[i]=paste(unique(names(ind[ind>-1][1])),collapse=";")}  
+    }
+  }
+  M$AU1_CO=trim(gsub("[[:digit:]]","",M$AU1_CO))
+  #M$AU1_CO=gsub(".", "", M$AU1_CO, fixed = TRUE)
+  #M$AU1_CO=gsub(";;", ";", M$AU1_CO, fixed = TRUE)
+  
 }
 
 # UNIVERSITY AFFILIATION
@@ -187,6 +243,7 @@ if (Field=="AU_UN"){
   
   AFFL=lapply(listAFF, function(l){
     #l=gsub(","," ,",l)
+    l<-gsub("\\(REPRINT AUTHOR\\)","",l)
     index=NULL
     
     for (i in 1:length(l)){
@@ -209,6 +266,18 @@ if (Field=="AU_UN"){
       ind[[14]]=which(regexpr("FONDAZ",affL,fixed=TRUE)!=-1)
       ind[[15]]=which(regexpr("FOUNDAT",affL,fixed=TRUE)!=-1)
       ind[[16]]=which(regexpr("ISTIT",affL,fixed=TRUE)!=-1)
+      ind[[17]]=which(regexpr("LAB",affL,fixed=TRUE)!=-1)
+      ind[[18]]=which(regexpr("TECH",affL,fixed=TRUE)!=-1)
+      ind[[19]]=which(regexpr("RES",affL,fixed=TRUE)!=-1)
+      ind[[20]]=which(regexpr("CNR",affL,fixed=TRUE)!=-1)
+      ind[[21]]=which(regexpr("ARCH",affL,fixed=TRUE)!=-1)
+      ind[[22]]=which(regexpr("SCUOLA",affL,fixed=TRUE)!=-1)
+      ind[[23]]=which(regexpr("PATENT OFF",affL,fixed=TRUE)!=-1)
+      ind[[24]]=which(regexpr("CENT LIB",affL,fixed=TRUE)!=-1)
+      ind[[25]]=which(regexpr("LIBRAR",affL,fixed=TRUE)!=-1)
+      ind[[26]]=which(regexpr("CLIN",affL,fixed=TRUE)!=-1)
+      ind[[27]]=which(regexpr("FDN",affL,fixed=TRUE)!=-1)
+      
       
       for (a in 1:length(ind)){
         indd=ind[[a]]
@@ -232,7 +301,35 @@ if (Field=="AU_UN"){
   M$AU_UN=AFFL
   M$AU_UN=gsub("\\\\&","AND",M$AU_UN)
   M$AU_UN=gsub("\\&","AND",M$AU_UN)
+
+  ## identification of NR affiliations
+  M$AU_UN_NR=NA
+  listAFF2=strsplit(M$AU_UN,sep)
+  cont=lapply(listAFF2, function(l){
+    l=unlist(l)
+    ind=which(l %in% "NR")
+  })
+  
+  for (i in 1:length(cont)){
+    if (length(cont[[i]])>0){
+      M$AU_UN_NR[i]=paste(trim(listAFF[[i]][cont[[i]]]),collapse=";")
+    }
   }
+}
 
 return(M)
+}
+
+lastChar<-function(C,last="."){
+  A=substr(C,nchar(C),nchar(C))
+  ind=which((A!=last) & (!is.na(A)))
+  C[ind]=paste0(C[ind],last)
+  return(C)
+}
+
+removeLastChar<-function(C,last="."){
+  A=substr(C,nchar(C),nchar(C))
+  ind=which((A==last) & (!is.na(A)))
+  C[ind]=substr(C[ind],1,(nchar(C[ind])-1))
+  return(C)
 }

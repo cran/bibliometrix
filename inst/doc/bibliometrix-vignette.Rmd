@@ -185,7 +185,7 @@ UT		     | Unique Article Identifier
 DB		     | Bibliographic Database
 
 
-For a complete list of field tags see http://www.bibliometrix.org/documentation/Field_Tags_bibliometrix.pdf
+For a complete list of field tags see http://www.bibliometrix.org/documents/Field_Tags_bibliometrix.pdf
 
 ## Bibliometric Analysis
 
@@ -218,6 +218,7 @@ Affiliations | the frequency distribution of affiliations (of all co-authors for
 Aff_frac		 | the fractionalized frequency distribution of affiliations (of all co-authors for each paper)
 CO		       | the affiliation country of first author
 Countries		 | the affiliation countries' frequency distribution
+CountryCollaboration | the intra-country (SCP) and inter-country (MCP) collaboration indices
 TotalCitation | 		 the number of times each manuscript has been cited
 TCperYear		 | the yearly average number of times each manuscript has been cited
 Sources		   | the frequency distribution of sources (journals, books, etc.)
@@ -233,7 +234,7 @@ It displays main information about the bibliographic data frame and several tabl
 Choosing k=10 you decide to see the first 10 Authors, the first 10 sources, etc.
 
 ```{r summary generic function}
-S=summary(object = results, k = 10, pause = FALSE)
+S <- summary(object = results, k = 10, pause = FALSE)
 ```
 
 Some basic plots can be drawn using the generic function \code{plot}:
@@ -436,7 +437,7 @@ M <- metaTagExtraction(M, Field = "AU_CO", sep = ";")
 # A <- cocMatrix(M, Field = "AU_CO", sep = ";")
 ```
 
-*metaTagExtraction* allows to extract the following additional field tags: *Authors' countries* (`Field = "AU_CO"`); *First author of each cited reference* (`Field = "CR_AU"`); *Publication source of each cited reference* (`Field = "CR_SO"`); and *Authors' affiliations* (`Field = "AU_UN"`).
+*metaTagExtraction* allows to extract the following additional field tags: *Authors' countries* (`Field = "AU_CO"`); *First Author's countries* (`Field = "AU_CO"`); *First author of each cited reference* (`Field = "CR_AU"`); *Publication source of each cited reference* (`Field = "CR_SO"`); and *Authors' affiliations* (`Field = "AU_UN"`).
 
 * Author keyword network
 ```{r}
@@ -485,16 +486,13 @@ Articles with only a few references, therefore, would tend to be more weakly bib
 
 This suggests that it might be more practicable to switch to a relative measure of bibliographic coupling.
 
-*normalizeSimilarity* function calculates Association strength, Inclusion, Jaccard or Salton similarity among vertices of a network.
+*normalizeSimilarity* function calculates Association strength, Inclusion, Jaccard or Salton similarity among vertices of a network. *normalizeSimilarity* can be recalled directly from *networkPlot()* function using the argument *normalize*. 
 
 ```{r similarity, fig.height=7, fig.width=7, warning=FALSE}
 NetMatrix <- biblioNetwork(M, analysis = "coupling", network = "authors", sep = ";")
 
-# calculate jaccard similarity coefficient
-S <- normalizeSimilarity(NetMatrix, type="jaccard")
-
-# plot authors' similarity (first 20 authors)
-net=networkPlot(S, n = 20, Title = "Authors' Coupling", type = "fruchterman", size=FALSE,remove.multiple=TRUE)
+# plot authors' similarity (first 20 authors), using salton similarity index
+net=networkPlot(NetMatrix, normalize = "salton", weighted=T, n = 20, Title = "Authors' Coupling", type = "fruchterman", size=FALSE,remove.multiple=TRUE)
 
 ```
 
@@ -567,7 +565,7 @@ M <- metaTagExtraction(M, Field = "AU_CO", sep = ";")
 NetMatrix <- biblioNetwork(M, analysis = "collaboration", network = "countries", sep = ";")
 
 # Plot the network
-net=networkPlot(NetMatrix, n = 20, Title = "Country Collaboration", type = "circle", size=TRUE, remove.multiple=FALSE)
+net=networkPlot(NetMatrix, n = dim(NetMatrix)[1], Title = "Country Collaboration", type = "circle", size=TRUE, remove.multiple=FALSE,labelsize=0.8)
 
 ```
 
@@ -580,7 +578,7 @@ net=networkPlot(NetMatrix, n = 20, Title = "Country Collaboration", type = "circ
 NetMatrix <- biblioNetwork(M, analysis = "co-citation", network = "references", sep = ".  ")
 
 # Plot the network
-net=networkPlot(NetMatrix, n = 15, Title = "Co-Citation Network", type = "fruchterman", size=T, remove.multiple=FALSE)
+net=networkPlot(NetMatrix, n = 30, Title = "Co-Citation Network", type = "fruchterman", size=T, remove.multiple=FALSE, labelsize=0.7,edgesize = 5)
 
 ```
 
@@ -592,7 +590,7 @@ net=networkPlot(NetMatrix, n = 15, Title = "Co-Citation Network", type = "frucht
 NetMatrix <- biblioNetwork(M, analysis = "co-occurrences", network = "keywords", sep = ";")
 
 # Plot the network
-net=networkPlot(NetMatrix, n = 20, Title = "Keyword Co-occurrences", type = "kamada", size=T)
+net=networkPlot(NetMatrix, normalize="association", weighted=T, n = 30, Title = "Keyword Co-occurrences", type = "fruchterman", size=T,edgesize = 5,labelsize=0.7)
 
 ```
 
@@ -625,7 +623,7 @@ The function \code{histNetwork} generates a chronological co-citation network ma
 histResults <- histNetwork(M, n = 20, sep = ".  ")
 
 # Plot a historical co-citation network
-net <- histPlot(histResults, size = FALSE,label=FALSE, arrowsize = 0.5)
+net <- histPlot(histResults, size = FALSE,label=TRUE, arrowsize = 0.5)
 
 ```
 
@@ -637,7 +635,7 @@ Aria, M. & Cuccurullo, C. (2017).  *bibliometrix*: An R-tool for comprehensive s
 Cuccurullo, C., Aria, M., & Sarto, F. (2016). Foundations and trends in performance management. A twenty-five years bibliometric analysis in business and public administration domains, *Scientometrics*, DOI: 10.1007/s11192-016-1948-8 (https://doi.org/10.1007/s11192-016-1948-8).
 
 
-Cuccurullo, C., Aria, M., & Sarto, F.  (2015). Twenty years of research on performance management in business and public administration domains. Presentation at the *Correspondence Analysis and Related Methods conference (CARME 2015)* in September 2015 (http://www.bibliometrix.org/documentation/2015Carme_cuccurulloetal.pdf).
+Cuccurullo, C., Aria, M., & Sarto, F.  (2015). Twenty years of research on performance management in business and public administration domains. Presentation at the *Correspondence Analysis and Related Methods conference (CARME 2015)* in September 2015 (http://www.bibliometrix.org/documents/2015Carme_cuccurulloetal.pdf).
 
 
 Sarto, F., Cuccurullo, C., & Aria, M. (2014). Exploring healthcare governance literature: systematic review and paths for future research. *Mecosan* (http://www.francoangeli.it/Riviste/Scheda_Rivista.aspx?IDarticolo=52780&lingua=en).

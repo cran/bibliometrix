@@ -4,12 +4,12 @@
 \alias{networkPlot}
 \title{Plotting Bibliographic networks}
 \usage{
-networkPlot(NetMatrix, normalize = NULL, n = NULL, Degree = NULL,
+networkPlot(NetMatrix, normalize = NULL, n = NULL, degree = NULL,
   Title = "Plot", type = "kamada", label = TRUE, labelsize = 1,
-  label.cex = FALSE, halo = FALSE, cluster = "walktrap",
-  vos.path = NULL, size = 3, curved = FALSE, noloops = TRUE,
-  remove.multiple = TRUE, remove.isolates = FALSE, weighted = NULL,
-  edgesize = 1, edges.min = 0)
+  label.cex = FALSE, label.short = TRUE, label.n = NULL, halo = FALSE,
+  cluster = "walktrap", vos.path = NULL, size = 3, curved = FALSE,
+  noloops = TRUE, remove.multiple = TRUE, remove.isolates = FALSE,
+  weighted = NULL, edgesize = 1, edges.min = 0)
 }
 \arguments{
 \item{NetMatrix}{is a network matrix obtained by the function \code{\link{biblioNetwork}}.}
@@ -19,7 +19,7 @@ Inclusion, Salton or Equivalence similarity index respectively. The default is t
 
 \item{n}{is an integer. It indicates the number of vertices to plot.}
 
-\item{Degree}{is an integer. It idicates the min frequency of a vertex. If Degree is not NULL, n is ignored.}
+\item{degree}{is an integer. It idicates the min frequency of a vertex. If degree is not NULL, n is ignored.}
 
 \item{Title}{is a character indicating the plot title.}
 
@@ -38,6 +38,10 @@ Inclusion, Salton or Equivalence similarity index respectively. The default is t
 \item{labelsize}{is an integer. It indicates the label size in the plot. Default is \code{labelsize=1}}
 
 \item{label.cex}{is logical. If TRUE the label size of each vertex is proportional to its degree.}
+
+\item{label.short}{is a logical. If TRUE label are plotted in short format.}
+
+\item{label.n}{is an integer. It indicates the number of vertex labels to draw.}
 
 \item{halo}{is logical. If TRUE communities are plotted using different colors. Default is \code{halo=FALSE}}
 
@@ -66,7 +70,11 @@ named by the weighted argument. If it is TRUE then a weighted graph is created a
 \item{edges.min}{is an integer. It indicates the min frequency of edges between two vertices. If edge.min=0, all edges are plotted.}
 }
 \value{
-It is a network object of the class \code{igraph}.
+It is a list containing the following elements:
+\tabular{lll}{
+\code{graph} \tab  \tab a network object of the class \code{igraph}\cr
+\code{cluster_obj} \tab  \tab a \code{\link{communities}} object of the package \code{igraph}\cr
+\code{cluster_res} \tab  \tab a data frame with main results of clustering procedure.\cr}
 }
 \description{
 \code{networkPlot} plots a bibliographic network.
@@ -83,7 +91,7 @@ data(scientometrics)
 NetMatrix <- biblioNetwork(scientometrics, analysis = "co-citation", 
 network = "references", sep = ";")
 
-net <- networkPlot(NetMatrix, n = 20, type = "kamada", Title = "Co-Citation")
+net <- networkPlot(NetMatrix, n = 30, type = "kamada", Title = "Co-Citation",labelsize=0.5) 
 
 }
 \seealso{

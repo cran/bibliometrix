@@ -25,7 +25,8 @@
 #' NetMatrix1 <- biblioNetwork(M1, analysis = "co-occurrences", 
 #'               network = "keywords", sep = ";")
 #' S1 <- normalizeSimilarity(NetMatrix1, type = "association")
-#' net1 <- networkPlot(S1, n = 50, Title = "co-occurrence network",type="fruchterman",
+#' net1 <- networkPlot(NetMatrix1, normalize = "association",n = 50, 
+#'      Title = "co-occurrence network",type="fruchterman",
 #'      labelsize = 0.7, halo = FALSE, cluster = "walktrap",remove.isolates=FALSE,
 #'      remove.multiple=FALSE, noloops=TRUE, weighted=TRUE)
 #' res1 <- thematicMap(net1, NetMatrix1, S1)
@@ -34,7 +35,8 @@
 #' NetMatrix2 <- biblioNetwork(M2, analysis = "co-occurrences", 
 #'               network = "keywords", sep = ";")
 #' S2 <- normalizeSimilarity(NetMatrix2, type = "association")
-#' net2 <- networkPlot(S2, n = 50, Title = "co-occurrence network",type="fruchterman",
+#' net2 <- networkPlot(NetMatrix2, normalize = "association",n = 50, 
+#'      Title = "co-occurrence network",type="fruchterman",
 #'      labelsize = 0.7, halo = FALSE, cluster = "walktrap",remove.isolates=FALSE,
 #'      remove.multiple=FALSE, noloops=TRUE, weighted=TRUE)
 #' res2 <- thematicMap(net2, NetMatrix2, S2)
@@ -63,8 +65,8 @@ thematicEvolution <- function(...,weighted=FALSE){
   for (k in 2:K){
     res1=arguments[[(k-1)]]
     res2=arguments[[(k)]]
-    CL1=unique(res1$words$Cluster)
-    CL2=unique(res2$words$Cluster)
+    CL1=unique(res1$clusters$label)
+    CL2=unique(res2$clusters$label)
     
     Inc=data.frame(CL1=NA,CL2=NA,Inc_index=NA,Words="NA",Occ=NA,Tot=NA,Inc_Weighted=NA, stringsAsFactors = FALSE)
     cont=0
@@ -80,7 +82,7 @@ thematicEvolution <- function(...,weighted=FALSE){
         Inc[cont,4]=paste(intersect(w1,w2),collapse=";")
         wi=intersect(w1,w2)
         si=sum(res1$words$Occurrences[res1$words$Words %in% wi])
-        s1=min(c(res1$clusters$sum[res1$clusters$label==i],res2$clusters$sum[res2$clusters$label==j]))
+        s1=min(c(res1$clusters$sum[res1$clusters$label==i],res2$clusters$sum[res2$clusters$label==j]),na.rm=T)
         Inc[cont,5]=si
         Inc[cont,6]=s1
         Inc[cont,7]=si/s1
