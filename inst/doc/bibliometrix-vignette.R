@@ -1,4 +1,15 @@
 ## ----echo=FALSE----------------------------------------------------------
+#output: rmarkdown::html_vignette
+#library(knitr)
+
+## Import the style from CSS file 'css_path' 
+#style = paste(readLines("bioc.css"), collapse = "\n")
+
+#opts_knit$set(self.contained = TRUE,
+#              upload.fun = image_uri, ## optional
+#              header = c(highlight = style))
+
+
 cat(paste("bibliometrix ",packageVersion("bibliometrix")))
 
 ## ----Package citation, echo=FALSE----------------------------------------
@@ -20,7 +31,7 @@ results <- biblioAnalysis(M, sep = ";")
 ## ----summary generic function--------------------------------------------
 S <- summary(object = results, k = 10, pause = FALSE)
 
-## ----plot generic function-----------------------------------------------
+## ----plot generic function, fig.width=7----------------------------------
 plot(x = results, k = 10, pause = FALSE)
 
 ## ------------------------------------------------------------------------
@@ -153,7 +164,7 @@ net=networkPlot(NetMatrix, n = 30, Title = "Co-Citation Network", type = "frucht
 
 
 ## ----Keyword c-occurrences, fig.height=7, fig.width=7, warning=FALSE-----
-# Create keyword co-occurrencies network
+# Create keyword co-occurrences network
 
 NetMatrix <- biblioNetwork(M, analysis = "co-occurrences", network = "keywords", sep = ";")
 
@@ -161,11 +172,11 @@ NetMatrix <- biblioNetwork(M, analysis = "co-occurrences", network = "keywords",
 net=networkPlot(NetMatrix, normalize="association", weighted=T, n = 30, Title = "Keyword Co-occurrences", type = "fruchterman", size=T,edgesize = 5,labelsize=0.7)
 
 
-## ----Co-Word Analysis, fig.height=7, fig.width=7, warning=FALSE----------
+## ----Co-Word Analysis, fig.height=9, fig.width=9, warning=FALSE----------
 
-# Conceptual Structure using keywords
+# Conceptual Structure using keywords (method="CA")
 
-CS <- conceptualStructure(M,field="ID", minDegree=4, k.max=5, stemming=FALSE, labelsize=10)
+CS <- conceptualStructure(M,field="ID", method="CA", minDegree=4, k.max=8, stemming=FALSE, labelsize=10, documents=10)
 
 
 ## ----Historical Co-citation network, fig.height=9, fig.width=7, warning=FALSE----
