@@ -132,24 +132,16 @@ if (("C1" %in% Tags) & (sum(!is.na(M$C1))>0)){
   listAFF=strsplit(AFF,sep,fixed=TRUE)
   nAFF=unlist(lapply(listAFF,length))
   listAFF[nAFF==0]="NA"
-  fracAFF=unlist(sapply(nAFF,function(x){rep(1/x,x)}))  # fractional frequencies
+  fracAFF=unlist(sapply(nAFF,function(x){
+    if(x>0){x=rep(1/x,x)}else{
+      x=0}
+    }))  # fractional frequencies
   AFF=trim.leading(unlist(listAFF))  # delete spaces
   Affiliation=sort(table(AFF),decreasing=TRUE)
   Affiliation_frac=aggregate(fracAFF,by=list(AFF),'sum')
   names(Affiliation_frac)=c("Affiliation","Frequency")
   Affiliation_frac=Affiliation_frac[order(-Affiliation_frac$Frequency),]
   
-  # AFF=gsub("\\[.*?\\] ", "", M$C1)
-  # listAFF=strsplit(AFF,sep,fixed=TRUE)
-  # nAFF=unlist(lapply(listAFF,length))  
-  # listAFF[nAFF==0]="NA"
-  # fracAFF=unlist(sapply(nAFF,function(x){rep(1/x,x)}))  # fractional frequencies
-  # AFF=trim.leading(unlist(listAFF))  # delete spaces
-  # Affiliation=sort(table(AFF),decreasing=TRUE)
-  # Affiliation_frac=aggregate(fracAFF,by=list(AFF),'sum')
-  # names(Affiliation_frac)=c("Affiliation","Frequency")
-  # Affiliation_frac=Affiliation_frac[order(-Affiliation_frac$Frequency),]
-
   # First Affiliation
   FAffiliation=lapply(listAFF,function(l) l[1])
 

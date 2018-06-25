@@ -29,7 +29,7 @@
 #'      Title = "co-occurrence network",type="fruchterman",
 #'      labelsize = 0.7, halo = FALSE, cluster = "walktrap",remove.isolates=FALSE,
 #'      remove.multiple=FALSE, noloops=TRUE, weighted=TRUE)
-#' res1 <- thematicMap(net1, NetMatrix1, S1)
+#' res1 <- thematicMap(net1, NetMatrix1, S1, minfreq = 1)
 #' #plot(res1$map)
 #' 
 #' NetMatrix2 <- biblioNetwork(M2, analysis = "co-occurrences", 
@@ -39,7 +39,7 @@
 #'      Title = "co-occurrence network",type="fruchterman",
 #'      labelsize = 0.7, halo = FALSE, cluster = "walktrap",remove.isolates=FALSE,
 #'      remove.multiple=FALSE, noloops=TRUE, weighted=TRUE)
-#' res2 <- thematicMap(net2, NetMatrix2, S2)
+#' res2 <- thematicMap(net2, NetMatrix2, S2, minfreq = 1)
 #' #plot(res2$map)
 #' 
 #' nexus <- thematicEvolution(res1,res2,weighted=FALSE)
@@ -82,7 +82,7 @@ thematicEvolution <- function(...,weighted=FALSE){
         Inc[cont,4]=paste(intersect(w1,w2),collapse=";")
         wi=intersect(w1,w2)
         si=sum(res1$words$Occurrences[res1$words$Words %in% wi])
-        s1=min(c(res1$clusters$sum[res1$clusters$label==i],res2$clusters$sum[res2$clusters$label==j]),na.rm=T)
+        s1=min(c(res1$clusters$freq[res1$clusters$label==i],res2$clusters$freq[res2$clusters$label==j]),na.rm=T)
         Inc[cont,5]=si
         Inc[cont,6]=s1
         Inc[cont,7]=si/s1

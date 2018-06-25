@@ -14,6 +14,8 @@
 #' \code{"SR"}\tab     \tab Short tag of the document (as used in reference lists)}
 #'
 #' @param sep is the field separator character. This character separates strings in each column of the data frame. The default is \code{sep = ";"}.
+#' @param aff.disamb is a logical. If TRUE and Field="AU_UN", then a disambiguation algorithm is used to identify and match scientific affiliations 
+#' (univ, research centers, etc.). The default is \code{aff.disamb=TRUE}.
 #' @return the bibliometric data frame with a new column containing data about new field tag indicated in the argument \code{Field}.
 #'
 #'
@@ -43,7 +45,7 @@
 #' 
 #' @export
 
-metaTagExtraction<-function(M, Field = "CR_AU", sep = ";"){
+metaTagExtraction<-function(M, Field = "CR_AU", sep = ";", aff.disamb=TRUE){
 
 
 ### data cleaning
@@ -81,7 +83,19 @@ metaTagExtraction<-function(M, Field = "CR_AU", sep = ";"){
   
 # UNIVERSITY AFFILIATION OF ALL AUTHORS AND CORRESPONDING AUTHOR
   if (Field=="AU_UN"){
-    M<-AU_UN(M,sep)
+      ### with disambiguation
+    if(isTRUE(aff.disamb)){M<-AU_UN(M,sep)
+    }else{
+      ### without disambiguation
+      M$AU_UN=gsub("\\[.*?\\] ", "", M$C1)
+      M$AU1_UN=unlist(lapply(strsplit(M$RP, sep), function(l){
+        l=l[1]
+        return(l)
+      }))
+      ind=regexpr("\\),", M$AU1_UN)
+      a=which(ind>-1)
+      M$AU1_UN[a]=trim(substr(M$AU1_UN[a],ind[a]+2,nchar(M$AU1_UN[a])))
+      }
   }
   
   return(M)
@@ -219,9 +233,11 @@ AU_CO<-function(M){
       if (sum(ind>-1)>0) {M$AU_CO[i]=paste(unique(names(ind[ind>-1])),collapse=";")}  
     }
   }
+  
   M$AU_CO=gsub("[[:digit:]]","",M$AU_CO)
   M$AU_CO=gsub(".", "", M$AU_CO, fixed = TRUE)
   M$AU_CO=gsub(";;", ";", M$AU_CO, fixed = TRUE)
+  M$AU_CO=gsub("UNITED STATES","USA",M$AU_CO)
   
   if (M$DB[1]=="ISI"){M$AU_CO=removeLastChar(M$AU_CO,last=".")}
   if (M$DB[1]=="SCOPUS"){M$AU_CO=removeLastChar(M$AU_CO,last=";")}
@@ -267,6 +283,7 @@ AU1_CO<-function(M,sep){
     }
   }
   M$AU1_CO=trim(gsub("[[:digit:]]","",M$AU1_CO))
+  M$AU1_CO=gsub("UNITED STATES","USA",M$AU1_CO)
   #M$AU1_CO=gsub(".", "", M$AU1_CO, fixed = TRUE)
   #M$AU1_CO=gsub(";;", ";", M$AU1_CO, fixed = TRUE)
   return(M)
@@ -285,7 +302,7 @@ AU_UN<-function(M,sep){
   uTags=c("UNIV","COLL","SCH","INST","ACAD","ECOLE","CTR","SCI","CENTRE","CENTER","CENTRO","HOSP","ASSOC","COUNCIL",
           "FONDAZ","FOUNDAT","ISTIT","LAB","TECH","RES","CNR","ARCH","SCUOLA","PATENT OFF","CENT LIB","HEALTH","NATL",
           "LIBRAR","CLIN","FDN","OECD","FAC","WORLD BANK","POLITECN","INT MONETARY FUND","CLIMA","METEOR","OFFICE","ENVIR",
-          "CONSORTIUM","OBSERVAT","AGRI")
+          "CONSORTIUM","OBSERVAT","AGRI", "MIT ", "INFN", "SUNY ")
   
   AFFL=lapply(listAFF, function(l){
     #l=gsub(","," ,",l)
@@ -303,8 +320,8 @@ AU_UN<-function(M,sep){
       #   } else if (grepl("[[:digit:]]", affL[indd[1]])){index=append(index,"ND")
       #   } else {index=append(index,affL[indd[1]])}
       
-      if (length(indd)==0){index=append(index,"NR")
-      } else if (isTRUE(ND(affL,indd)$cond)){index=append(index,"ND")
+      if (length(indd)==0){index=append(index,"NOTREPORTED")
+      } else if (isTRUE(ND(affL,indd)$cond)){index=append(index,"NOTDECLARED")
       } else {index=append(index,ND(affL,indd)$affL)}
       
       
@@ -345,8 +362,8 @@ AU_UN<-function(M,sep){
       
       indd=unlist(lapply(uTags,function(x) which(regexpr(x,affL,fixed=TRUE)!=-1)))
       
-      if (length(indd)==0){index=append(index,"NR")
-      } else if (grepl("[[:digit:]]", affL[indd[1]])){index=append(index,"ND")
+      if (length(indd)==0){index=append(index,"NOTREPORTED")
+      } else if (grepl("[[:digit:]]", affL[indd[1]])){index=append(index,"NOTDECLARED")
       } else {index=append(index,affL[indd[1]])}
       
     }
@@ -377,12 +394,12 @@ AU_UN<-function(M,sep){
     }
   }
   M$AU_UN[is.na(AFF)]=NA
-  M$AU_UN[M$AU_UN=="ND"]=NA
-  M$AU_UN[M$AU_UN=="NR"]=NA
-  M$AU_UN=gsub("NR;","",M$AU_UN)
-  M$AU_UN=gsub(";NR","",M$AU_UN)
-  M$AU_UN=gsub("ND;","",M$AU_UN)
-  M$AU_UN=gsub(";ND","",M$AU_UN)
+  M$AU_UN[M$AU_UN=="NOTDECLARED"]=NA
+  M$AU_UN[M$AU_UN=="NOTREPORTED"]=NA
+  M$AU_UN=gsub("NOTREPORTED;","",M$AU_UN)
+  M$AU_UN=gsub(";NOTREPORTED","",M$AU_UN)
+  M$AU_UN=gsub("NOTDECLARED;","",M$AU_UN)
+  M$AU_UN=gsub("NOTDECLARED","",M$AU_UN)
   
   return(M)
 }

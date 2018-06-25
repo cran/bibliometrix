@@ -57,18 +57,23 @@
 #' @import ggplot2
 #' @import RISmed
 #' @import ggrepel
+#' @import ggraph
 #' @importFrom stringdist stringdistmatrix
+#' @importFrom rscopus affiliation_retrieval
+#' @importFrom rscopus author_df_orig
 #' @importFrom rscopus author_search
 #' @importFrom rscopus get_complete_author_info
 #' @importFrom RColorBrewer brewer.pal
 #' @importFrom FactoMineR MCA
 #' @importFrom FactoMineR CA
+#' @importFrom FactoMineR PCA
 #' @importFrom factoextra get_mca_var
 #' @importFrom factoextra get_mca_ind
 #' @importFrom factoextra get_ca_row
 #' @importFrom factoextra get_ca_col
 #' @importFrom factoextra fviz_nbclust
 #' @importFrom factoextra fviz_cluster
+#' @importFrom igraph get.edgelist
 #' @importFrom igraph graph.adjacency
 #' @importFrom igraph degree
 #' @importFrom igraph plot.igraph
@@ -77,9 +82,26 @@
 #' @importFrom igraph E<-
 #' @importFrom igraph V
 #' @importFrom igraph V<-
+#' @importFrom igraph vcount
+#' @importFrom igraph edge_density
+#' @importFrom igraph transitivity
+#' @importFrom igraph diameter
+#' @importFrom igraph degree_distribution
+#' @importFrom igraph centr_degree
+#' @importFrom igraph centr_clo
+#' @importFrom igraph centr_betw
+#' @importFrom igraph centr_eigen
+#' @importFrom igraph mean_distance
+#' @importFrom igraph closeness
+#' @importFrom igraph eigen_centrality
+#' @importFrom igraph arpack_defaults
+#' @importFrom igraph authority_score
+#' @importFrom igraph page_rank
+#' @importFrom igraph hub_score
 #' @importFrom igraph graph_from_incidence_matrix
 #' @importFrom igraph graph_from_adjacency_matrix
 #' @importFrom igraph simplify
+#' @importFrom igraph layout.auto
 #' @importFrom igraph layout.circle
 #' @importFrom igraph layout.sphere
 #' @importFrom igraph layout.mds
@@ -251,7 +273,7 @@ convert2df<-function(file,dbsource="isi",format="plaintext"){
   
   ## AU_UN field creation
   if ("C1" %in% names(M)){
-    cat("\nGenereting affiliation field tag AU_UN from C1:  ")
+    cat("\nGenerating affiliation field tag AU_UN from C1:  ")
     
     M <- metaTagExtraction(M, Field="AU_UN")
     cat("Done!\n\n")

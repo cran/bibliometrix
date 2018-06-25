@@ -29,7 +29,7 @@
 
 localCitations <- function(M, sep = ";"){
   
-  H=histNetwork(M,n=dim(M)[1],sep=sep)
+  H=histNetwork(M,sep=sep)
   LCS=H$histData
   M=H$M
   rm(H)
@@ -41,6 +41,10 @@ localCitations <- function(M, sep = ";"){
   names(AU)=c("Author", "LocalCitations" )
   AU=AU[order(-AU$LocalCitations),]
   
+  if ("SR" %in% names(M)){
+    LCS=data.frame(Paper=M$SR,DOI=M$DI,Year=M$PY,LCS=M$LCS,GCS=M$TC)
+    LCS=LCS[order(-LCS$LCS),]
+  }
   CR=list(Authors=AU,Papers=LCS)
   return(CR)
   
