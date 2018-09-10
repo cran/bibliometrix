@@ -58,6 +58,12 @@
 #' @import RISmed
 #' @import ggrepel
 #' @import ggraph
+#' @import shiny
+#' @import shinycssloaders
+#' @import shinythemes
+#' @importFrom DT DTOutput
+#' @importFrom DT renderDT
+#' @importFrom DT datatable
 #' @importFrom stringdist stringdistmatrix
 #' @importFrom rscopus affiliation_retrieval
 #' @importFrom rscopus author_df_orig

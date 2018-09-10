@@ -6,6 +6,7 @@
 #' SCOPUS IDs con be obtained using the function \code{\link{idByAuthor}}.
 #' @param api_key is a character. It contains the Elsvier API key. Information about how to obtain an API Key \href{https://dev.elsevier.com/sc_apis.html}{Elsevier API website}
 #' @param remove.duplicated is logical. If TRUE duplicated documents will be deleted from the bibliographic collection.
+#' @param country is logical. If TRUE authors' country information will be dowloaded from SCOPUS.
 #' @return a list containing two objects: (i) M which is a data frame with cases corresponding to articles and variables to main Field Tags named using the standard ISI WoS Field Tag codify. 
 #' M includes the entire bibliographic collection downloaded from SCOPUS.
 #' The main field tags are:
@@ -60,12 +61,18 @@
 #' 
 #' @export
 #' 
-retrievalByAuthorID<-function(id, api_key, remove.duplicated=TRUE){
+retrievalByAuthorID<-function(id, api_key, remove.duplicated=TRUE, country=TRUE){
   
   id=id[!is.na(id)]
   M_list=list()
   n=length(id)
-  M=data.frame(AU_ID=NA,AU=NA,C1_ID=NA,C1=NA,nAU=NA,nC1=NA,TC=NA,SO=NA,DT=NA,TI=NA,PII=NA,DI=NA,EID=NA,PY=NA,CDD=NA, URL=NA,UT=NA,AU1=NA,ISSN=NA,EISSN=NA,PAG=NA,AB=NA,PT=NA,SUBTYPE=NA,DE=NA,SO_ID=NA)
+  nomi=c("au_id","name","affil_id","affilname","n_auth","n_affils","citations","journal","description",
+         "title","pii","doi","eid","cover_date","cover_display_date","prism_url","dc_identifier",
+         "dc_creator","prism_issn","prism_eIssn","prism_pageRange","dc_description","prism_aggregationType",
+         "subtype","authkeywords","source_id" )
+  M=data.frame(matrix(NA,1,length(nomi)))
+  names(M)=nomi
+  
   for (j in 1:n){
     AU_ID=id[j]
     cat("\n Query n. ",j,"   Author ID: ",AU_ID)
@@ -80,14 +87,16 @@ retrievalByAuthorID<-function(id, api_key, remove.duplicated=TRUE){
     }
     
     M_AU=data.frame(AU_S,stringsAsFactors = FALSE)
-    names(M_AU)=c("AU_ID","AU","C1_ID","C1","nAU","nC1","TC","SO","DT","TI","PII","DI","EID","PY","CDD", "URL","UT","AU1","ISSN","EISSN","PAG","AB","PT","SUBTYPE","DE","SO_ID")
     
-    M=rbind(M,M_AU)
+    if (dim(M_AU)[2]<=dim(M)[2]){
+      M_AU[setdiff(names(M),names(M_AU))]=NA
+    }
+    M=rbind(M,M_AU[names(M)])
     M_list[[j]]=M_AU
     names(M_list)[j]=id[j]
   }
   M=M[-1,]  ### remove first empty row
-  
+  names(M)=c("AU_ID","AU","C1_ID","C1","nAU","nC1","TC","SO","DT","TI","PII","DI","EID","PY","CDD", "URL","UT","AU1","ISSN","EISSN","PAG","AB","PT","SUBTYPE","DE","SO_ID")
   if (isTRUE(remove.duplicated)){
     d=duplicated(gsub("[^[:alnum:] ]","",M$UT))
     cat("\n",sum(d),"duplicated documents have been removed\n")
@@ -98,6 +107,9 @@ retrievalByAuthorID<-function(id, api_key, remove.duplicated=TRUE){
   M$DE=gsub("\\| ",";",M$DE)
   M$ID=M$DE
   
+  
+  ### da rivedere ###
+  if (isTRUE(country)){
   M$AU_CO=paste(M$C1_ID,";",sep="")
   
   ### country retrieval
@@ -109,9 +121,9 @@ retrievalByAuthorID<-function(id, api_key, remove.duplicated=TRUE){
   for (i in 1:length(aff_id)){
     a=affiliation_retrieval(aff_id[i],api_key=api_key,verbose=FALSE)
     AFF[i,1]=aff_id[i]
-    AFF[i,2]=a$content$`affiliation-retrieval-response`$`affiliation-name`
-    AFF[i,3]=a$content$`affiliation-retrieval-response`$country
-    cat("\nAffiliation ID: ", AFF[i,1],"   Name: ",AFF[i,2], " ,", AFF[i,3])
+    if(length(a$content$`affiliation-retrieval-response`$`affiliation-name`)>0){AFF[i,2]=a$content$`affiliation-retrieval-response`$`affiliation-name`}
+    if(length(a$content$`affiliation-retrieval-response`$country)>0){AFF[i,3]=a$content$`affiliation-retrieval-response`$country}
+    cat("\nAffiliation ID: ", AFF[i,1],"   Name: ",AFF[i,2], ",", AFF[i,3])
     M$AU_CO=gsub(paste(aff_id[i],";",sep = ""),paste(AFF[i,3],";",sep=""),M$AU_CO)
   }
   M$AU_CO=gsub(";;",";",M$AU_CO)
@@ -126,7 +138,7 @@ retrievalByAuthorID<-function(id, api_key, remove.duplicated=TRUE){
     M$C1[i]=paste(paste(UN[[i]],", ",CO[[i]],sep=""),collapse=";")
   }
   #########
-  
+  }
   M <- data.frame(lapply(M,toupper),stringsAsFactors = FALSE)
   M$TC=as.numeric(M$TC)
   M$PY=as.numeric(M$PY)
