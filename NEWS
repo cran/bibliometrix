@@ -1,3 +1,20 @@
+bibliometrix v2.0.1 (Release date: 2018-10-09)
+==============
+
+New functionality:
+* added the possibility to load Rdata files in biblioshiny()
+* added Thematic Evolution to biblioshiny()
+* added the function plotThematicEvolution() to draw thematic evolution
+* added Thematic Map to biblioshiny()
+* added TreeMap plot to biblioshiny()
+* added Word Dynamic Analysis biblioshiny()
+* added Source Dynamic Analysis to biblioshiny()
+* added the function rpys() to perform the Reference Publication Year Spectroscopy
+* added the function sourceGrowth to calculate source publication time series
+* new white layout for biblioshiny()
+
+
+
 bibliometrix v2.0.0 (Release date: 2018-09-03)
 ==============
 

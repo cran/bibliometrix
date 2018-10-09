@@ -132,6 +132,11 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, degree=NULL, Title="Plo
     l <- switchLayout(bsk.network,type,vos.path)
     }
   
+  ### graph to write in pajek format ###
+  bsk.save=bsk.network
+  V(bsk.save)$id=V(bsk.save)$name
+  
+  ### 
   
   # Clustering
   if (type!="vosviewer"){
@@ -155,7 +160,9 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, degree=NULL, Title="Plo
     
     
     ## Edge size
-    E(bsk.network)$num=count_multiple(bsk.network, eids = E(bsk.network))
+    E(bsk.network)$num=E(bsk.save)$num=count_multiple(bsk.network, eids = E(bsk.network))
+    if (is.null(weighted)){E(bsk.save)$weight=E(bsk.save)$num}
+    
     if (!is.null(weighted)){
       E(bsk.network)$width <- (E(bsk.network)$weight + min(E(bsk.network)$weight))/max(E(bsk.network)$weight + min(E(bsk.network)$weight)) *edgesize
     } else{
@@ -192,7 +199,7 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, degree=NULL, Title="Plo
   } else {cluster_res=NA}
   
   
-  net=list(graph=bsk.network, cluster_obj=net_groups, cluster_res=cluster_res)
+  net=list(graph=bsk.network, graph_pajek=bsk.save, cluster_obj=net_groups, cluster_res=cluster_res)
   
   return(net)}
 
@@ -213,7 +220,7 @@ delete.isolates <- function(graph, mode = 'all') {
 ### clusteringNetwork
 
 clusteringNetwork <- function(bsk.network,cluster){
-  colorlist= c(brewer.pal(12, 'Paired'),brewer.pal(12, 'Set3'), brewer.pal(8, 'Set2'),brewer.pal(8, 'Set1'))
+  colorlist= c(brewer.pal(9, 'Set1'), brewer.pal(8, 'Set2'),brewer.pal(12, 'Set3'),brewer.pal(12, 'Paired'))
   
   switch(cluster,
          none={
@@ -242,9 +249,9 @@ clusteringNetwork <- function(bsk.network,cluster){
   
   
   E(bsk.network)$color <- apply(El, 1, function(x){
-                        #print(x)
+                        colorlist= c(brewer.pal(9, 'Set1'), brewer.pal(8, 'Set2'),brewer.pal(12, 'Set3'),brewer.pal(12, 'Paired'))
                         if (V(bsk.network)$community[x[1]] == V(bsk.network)$community[x[2]]){
-                          C=brewer.pal(12, 'Paired')[V(bsk.network)$community[x[1]]]
+                          C=colorlist[V(bsk.network)$community[x[1]]]
                         }else{C='#E8E8E8'}
                         return(C)
                         })

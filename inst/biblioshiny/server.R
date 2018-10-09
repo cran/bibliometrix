@@ -14,12 +14,15 @@ server <- function(input, output, session) {
   values$log="working..."
   values$load="FALSE"
   values$field="NA"
-  values$citField=values$colField="NA"
+  values$citField=values$colField=values$citSep="NA"
   values$NetWords=values$NetRefs=values$ColNetRefs=matrix(NA,1,1)
   values$Title="Network"
   values$Histfield="NA"
   values$histlog="working..."
   values$kk=0
+  values$M=data.frame(PY=0)
+  
+
   
   
   
@@ -36,6 +39,7 @@ server <- function(input, output, session) {
     
     if (is.null(inFile)) {return(NULL)}
     
+    ### excel format
     if (grepl(".*\\.xlsx",inFile$name)){
       M <- rio::import(inFile$datapath)
       #values$log<-"Data imported from XLSX file"
@@ -60,52 +64,64 @@ server <- function(input, output, session) {
       row.names(M) <- SR
       
       
-    }else{
-      
-      if (grepl(".*\\.zip",inFile$name)) {
+    }
+    
+    ### zip folder
+    if (grepl(".*\\.zip",inFile$name)) {
         files=unzip(inFile$datapath)
         #files = list.files(pattern = ".txt")
         D = unlist(lapply(files, function(l){
           Dpar=readFiles(l)
           return(Dpar)
           }))
-      
-      }else{
-        D=readFiles(inFile$datapath)
-          }
-    
-    capture.output(M <- convert2df(D, dbsource=input$dbsource,format=input$format))
+        capture.output(M <- convert2df(D, dbsource=input$dbsource,format=input$format))
     }
     
-    #M <- convert2df(D<-readFiles(inFile$datapath), dbsource="isi",format="plaintext")
+    ### txt or bib formats  
+    if (grepl(".*\\.txt",inFile$name) | grepl(".*\\.bib",inFile$name)){
+        D=readFiles(inFile$datapath)
+        capture.output(M <- convert2df(D, dbsource=input$dbsource,format=input$format))
+    }
+      
+    ### RData format
+    if (grepl(".*\\.RData",inFile$name)) {
+      
+      load(inFile$datapath)
+    }
+    
     values$M <- M
     values$Morig=M
     values$Histfield="NA"
     values$results=list("NA")
-    #return(values$M)
+    
     MData=as.data.frame(apply(values$M,2,function(x){substring(x,1,150)}),stringsAsFactors = FALSE)
     MData$DOI<- paste0('<a href=\"http://doi.org/',MData$DI,'\" target=\"_blank\">',MData$DI,'</a>')
     nome=c("DOI",names(MData)[-length(names(MData))])
     MData=MData[nome]
-    DT::datatable(MData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
+    
+    DT::datatable(MData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),  
                   options = list(pageLength = 50, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy', 'pdf', 'print'),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(MData))-1)))),  
-                  class = 'cell-border compact stripe') %>%
-                  formatStyle(names(MData),  backgroundColor = 'black',textAlign = 'center',fontSize = '70%') 
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(MData))-1))))  
+                  ,class = 'cell-border compact stripe')  %>% 
+                  
+                  formatStyle(names(MData),  backgroundColor = 'white', textAlign = 'center',fontSize = '70%') 
     
     
     })
 
-  output$collection.xlsx <- downloadHandler(
+  output$collection.save <- downloadHandler(
     filename = function() {
-      paste("data-", Sys.Date(), ".xlsx", sep="")
+      
+      paste("data-", Sys.Date(), ".",input$save_file, sep="")
     },
     content <- function(file) {
-      rio::export(values$M, file=file)
+      switch(input$save_file,
+             xlsx={rio::export(values$M, file=file)})
+      
     },
-    contentType = "xlsx"
+    contentType = input$save_file
   )
   
   output$textLog <- renderUI({
@@ -132,7 +148,7 @@ server <- function(input, output, session) {
   })
   
   output$sliderPY <- renderUI({
-    sliderInput("sliderPY", "Publication Year", min = min(values$Morig$PY),
+    sliderInput("sliderPY", "Publication Year", min = min(values$Morig$PY),sep="",
                 max = max(values$Morig$PY), value = c(min(values$Morig$PY),max(values$Morig$PY)))
   })
   
@@ -170,10 +186,11 @@ server <- function(input, output, session) {
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(Mdisp))-1)))), 
                   class = 'cell-border compact stripe') %>%
-      formatStyle(names(Mdisp),  backgroundColor = 'black',textAlign = 'center', fontSize = '70%')
+      formatStyle(names(Mdisp),  backgroundColor = 'white',textAlign = 'center', fontSize = '70%')
   })
   
-  output$summary <- renderPrint({
+  ### Descriptive Analysis
+  output$summary <- DT::renderDT({
     
     if (values$results[[1]]=="NA"){values$results=biblioAnalysis(values$M)}
     S=summary(object=values$results,k=input$kk,verbose=FALSE)
@@ -181,33 +198,63 @@ server <- function(input, output, session) {
     
     
     switch(input$summary_type,
-           "tab1"={cat(S$MainInformation)},
-           "tab2"={print(S$AnnualProduction)
-             cat("\n\n")
-             cat("Annual Growth Rate ",round(S$AnnualGrowthRate, digits=2),"%")},
-           "tab3"={print(S$MostProdAuthors)},
-           "tab4"={print(S$MostCitedPapers)},
-           "tab5"={print(S$MostProdCountries)},
-           "tab6"={print(S$TCperCountries)},
-           "tab7"={print(S$MostRelSources)},
-           "tab8"={print(S$MostRelKeywords)},
-           "all"={cat(S$MainInformation)
-                  print(S$AnnualProduction)
-                  cat("\n\n")
-                  print(S$AnnualGrowthRate);cat("\n\n")
-                  print(S$MostProdAuthors);cat("\n\n")
-                  print(S$MostCitedPapers);cat("\n\n")
-                  print(S$MostProdCountries);cat("\n\n")
-                  print(S$TCperCountries);cat("\n\n")
-                  print(S$MostRelSources);cat("\n\n")
-                  print(S$MostRelKeywords);cat("\n\n")
+           "tab1"={
+             #TAB=data.frame(Information=gsub("[[:digit:]]", "", S$MainInformation), Data=gsub("[^0-9]", "", S$MainInformation))
+             TAB=data.frame(S$MainInformationDF)
+             #cat(S$MainInformation)
+             },
+           "tab2"={
+             
+             TAB=S$AnnualProduction
+             names(TAB)=c("Year","Articles")
+             #print(S$AnnualProduction)
+             #cat("\n\n")
+             #cat("Annual Growth Rate ",round(S$AnnualGrowthRate, digits=2),"%")
+             },
+           "tab3"={
+             TAB=S$MostProdAuthors
+             names(TAB)=c("Authors","Articles","Authors-Frac","Articles Fractionalized")
+             #print(S$MostProdAuthors)
+             },
+           "tab4"={
+             TAB=S$MostCitedPapers
+             names(TAB)=c("Paper", "Total Citations","TC per Year")
+             #print(S$MostCitedPapers)
+             },
+           "tab5"={
+             TAB=S$MostProdCountries
+             #print(S$MostProdCountries)
+             },
+           "tab6"={
+             TAB=S$TCperCountries
+             #print(S$TCperCountries)
+             },
+           "tab7"={
+             TAB=S$MostRelSources
+             #print(S$MostRelSources)
+             },
+           "tab8"={
+             TAB=S$MostRelKeywords
+             names(TAB)=c("Author Keywords (DE)", "Articles (DE)","Keywords-Plus (ID)","Articles (ID)")
+             #print(S$MostRelKeywords)
+             },
+           "tab9"={
+             TAB=as.data.frame(citations(values$M,sep=";")$Cited)
+             names(TAB)=c("Cited References", "Citations")
+             #print(S$MostRelKeywords)
            }
-           )
+          )
     
-    
-    #
+    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
+                  options = list(pageLength = 20, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
+                  class = 'cell-border compact stripe') %>%
+      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
   })
-  
+    #
+
   output$results.txt <- downloadHandler(
     
     filename = function() {
@@ -220,7 +267,6 @@ server <- function(input, output, session) {
     
     contentType = "txt"
   )
-  
   output$summaryPlots <- renderPlot({
     if (values$results[[1]]=="NA"){
       values$results=biblioAnalysis(values$M)}
@@ -362,133 +408,313 @@ server <- function(input, output, session) {
     #plot(results)
     }, height = 500, width =900)
   
+  # output$wordcloud.ui <- renderUI({
+  #   wordcloud2::wordcloud2Output("wordcloud", height =  plotHeight())
+  # })
+  # 
+  # plotCount <- reactive({
+  #   req(input$widgetsize)
+  #   as.numeric(input$widgetsize)
+  # })
+  # 
+  # plotHeight <- reactive(plotCount())
+  
   output$wordcloud <- wordcloud2::renderWordcloud2({
     
-    switch(input$summaryTerms,
-           ID={values$v=tableTag(values$M,"ID")},
-           DE={values$v=tableTag(values$M,"DE")},
-           TI={
-             if (!("TI_TM" %in% names(values$M))){
-               values$v=tableTag(values$M,"TI")
-             }},
-           AB={if (!("AB_TM" %in% names(values$M))){
-             values$v=tableTag(values$M,"AB")
-           }}
-    )
+    resW=wordlist(M=values$M, Field=input$summaryTerms, n=input$n_words, measure=input$measure)
+   
+    W=resW$W
+    values$Words=resW$Words
     
-    #v=tableTag(values$M,"ID")
-    n=min(c(input$n_words,length(values$v)))
-    values$Words=data.frame(Terms=names(values$v)[1:n], Frequency=as.numeric(values$v)[1:n])
-    
-    wordcloud2::wordcloud2(values$Words, size = input$scale, minSize = 0, gridSize =  input$padding,
+    wordcloud2::wordcloud2(W, size = input$scale, minSize = 0, gridSize =  input$padding,
                fontFamily = input$font, fontWeight = 'normal',
-               color = 'random-dark', backgroundColor = "white",
+               color = input$wcCol, backgroundColor = input$wcBGCol,
                minRotation = 0, maxRotation = input$rotate/10, shuffle = TRUE,
-               rotateRatio = 0.7, shape = 'circle', ellipticity = 0.65,
+               rotateRatio = 0.7, shape = input$wcShape, ellipticity = input$ellipticity,
                widgetsize = NULL, figPath = NULL, hoverFunction = NULL)
     
     })
   
+  output$treemap <- renderPlot({
+    
+    resW=wordlist(M=values$M, Field=input$treeTerms, n=input$treen_words, measure=input$treemeasure)
+    
+    W=resW$W
+    values$Words=resW$Words
+    
+    treemap::treemap(W, #Your data frame object
+            index=c("Terms"),  #A list of your categorical variables
+            vSize = "Frequency",  #This is your quantitative variable
+            type="index", #Type sets the organization and color scheme of your treemap
+            palette = input$treeCol,  #Select your color palette from the RColorBrewer presets or make your own.
+            title="Word TreeMap", #Customize your title
+            fontsize.title = 14, #Change the font size of the title
+            fontsize.labels = input$treeFont
+    )
+    
+    
+  })
+  
   output$wordTable <- DT::renderDT({
-    #Words=data.frame(Terms=names(values$v), Frequency=as.numeric(values$v))
-    #names(Words)=c("Terms", "Frequency")
+
     DT::datatable(values$Words, rownames = FALSE,
-                  options = list(pageLength = 50, dom = 'tip',
+                  options = list(pageLength = 10, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$Words))-1)))), 
                   class = 'cell-border compact stripe') %>%
-      formatStyle(names(values$Words),  backgroundColor = 'black',textAlign = 'center')
+      formatStyle(names(values$Words),  backgroundColor = 'white',textAlign = 'center')
   })
-    
   
+  output$treeTable <- DT::renderDT({
+    
+    DT::datatable(values$Words, rownames = FALSE,
+                  options = list(pageLength = 10, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$Words))-1)))), 
+                  class = 'cell-border compact stripe') %>%
+      formatStyle(names(values$Words),  backgroundColor = 'white',textAlign = 'center')
+  },height = 600, width = 900)
+  
+  output$kwGrowthPlot <- renderPlot({
+    
+    if (input$cumTerms=="Cum"){
+      cdf=TRUE
+      laby="Cumulate occurrences (loess smoothing)"
+    }else{
+      cdf=FALSE
+      laby="Annual occurrences (loess smoothing)"}
+    if (input$se=="Yes"){se=TRUE}else{se=FALSE}
+    
+    switch(input$growthTerms,
+           ID={
+             KW=KeywordGrowth(values$M, Tag = "ID", sep = ";", top = input$topkw[2], cdf = cdf)
+             
+             },
+           DE={
+             KW=KeywordGrowth(values$M, Tag = "DE", sep = ";", top = input$topkw[2], cdf = cdf)
+             },
+           TI={
+             if (!("TI_TM" %in% names(values$M))){
+               values$M=termExtraction(values$M,Field = "TI", verbose=FALSE)
+             }
+             KW=KeywordGrowth(values$M, Tag = "TI_TM", sep = ";", top = input$topkw[2], cdf = cdf)
+             },
+           AB={
+             if (!("AB_TM" %in% names(values$M))){
+              values$M=termExtraction(values$M,Field = "AB", verbose=FALSE)
+             }
+             KW=KeywordGrowth(values$M, Tag = "AB_TM", sep = ";", top = input$topkw[2], cdf = cdf)
+             }
+    )
+    
+    values$KW=KW[,c(1,seq(input$topkw[1],input$topkw[2])+1)]
+    
+    term=names(values$KW)[-1]
+    term=rep(term,each=dim(values$KW)[1])
+    n=dim(values$KW)[1]*(dim(values$KW)[2]-1)
+    freq=matrix(as.matrix(values$KW[,-1]),n,1)
+    values$DF=data.frame(Year=rep(values$KW$Year,(dim(values$KW)[2]-1)),Term=term, Freq=freq)
+    
+    g=ggplot(values$DF)+
+      geom_smooth(aes(x=values$DF$Year,y=values$DF$Freq, group=values$DF$Term, color=values$DF$Term),se = se,method = "loess",formula ='y ~ x')+
+      labs(x = 'Year'
+           , y = laby
+           , title = "Word Growth") +
+      ylim(0, NA) +
+      scale_x_continuous(breaks= (values$KW$Year[seq(1,length(values$KW$Year),by=ceiling(length(values$KW$Year)/20))])) +
+      geom_hline(aes(yintercept=0, alpha=0.1))+
+      theme(text = element_text(color = "#444444"), legend.position="none"
+            ,plot.caption = element_text(size = 9, hjust = 0.5, color = "black", face = "bold")
+            ,panel.background = element_rect(fill = '#EFEFEF')
+            ,panel.grid.minor = element_line(color = '#FFFFFF')
+            ,panel.grid.major = element_line(color = '#FFFFFF')
+            ,plot.title = element_text(size = 24)
+            ,axis.title = element_text(size = 14, color = '#555555')
+            ,axis.title.y = element_text(vjust = 1, angle = 90)
+            ,axis.title.x = element_text(hjust = 0.95, angle = 0)
+            ,axis.text.x = element_text(size=10)
+      )
+        
+    DFsmooth=(ggplot_build(g)$data[[1]])
+    DFsmooth$group=factor(DFsmooth$group, labels=levels(values$DF$Term))
+    
+    maximum=sort(unique(DFsmooth$x),decreasing=TRUE)[2]
+    DF2=subset(DFsmooth, x == maximum)
+    g=g+
+      ggrepel::geom_text_repel(data = DF2, aes(label = DF2$group, colour = DF2$group, x =DF2$x, y = DF2$y), hjust = -.1)
+    suppressWarnings(plot(g))
+    
+  },height = 600, width = 900)
+  
+  output$kwGrowthtable <- DT::renderDT({
+    
+    kwData=values$KW
+    
+    DT::datatable(kwData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(kwData))-1))))) %>%
+      formatStyle(names(kwData),  backgroundColor = 'white') 
+    #return(Data)
+    
+  })
+  
+  output$soGrowthPlot <- renderPlot({
+    
+    if (input$SOse=="Yes"){se=TRUE}else{se=FALSE}
+    
+    if (input$cumSO=="Cum"){
+      cdf=TRUE
+      laby="Cumulate occurrences (loess smoothing)"
+    }else{
+      cdf=FALSE
+      laby="Annual occurrences (loess smoothing)"} 
+  
+    values$PYSO=sourceGrowth(values$M,input$topSO, cdf=cdf)
+    
+    term=names(values$PYSO)[-1]
+    term=rep(term,each=dim(values$PYSO)[1])
+    n=dim(values$PYSO)[1]*(dim(values$PYSO)[2]-1)
+    freq=matrix(as.matrix(values$PYSO[,-1]),n,1)
+    values$SODF=data.frame(Year=rep(values$PYSO$Year,(dim(values$PYSO)[2]-1)),Source=term, Freq=freq)
+    
+    g=ggplot(values$SODF)+
+      geom_smooth(aes(x=values$SODF$Year,y=values$SODF$Freq, group=values$SODF$Source, color=values$SODF$Source),se=se, method = "loess", formula="y ~ x")+
+      labs(x = 'Year'
+           , y = laby
+           , title = "Source Growth") +
+      ylim(0, NA) +
+      scale_x_continuous(breaks= (values$PYSO$Year[seq(1,length(values$PYSO$Year),by=ceiling(length(values$PYSO$Year)/20))])) +
+      geom_hline(aes(yintercept=0, alpha=0.1))+
+      theme(text = element_text(color = "#444444"), legend.position="none"
+            ,plot.caption = element_text(size = 9, hjust = 0.5, color = "black", face = "bold")
+            ,panel.background = element_rect(fill = '#EFEFEF')
+            ,panel.grid.minor = element_line(color = '#FFFFFF')
+            ,panel.grid.major = element_line(color = '#FFFFFF')
+            ,plot.title = element_text(size = 24)
+            ,axis.title = element_text(size = 14, color = '#555555')
+            ,axis.title.y = element_text(vjust = 1, angle = 90)
+            ,axis.title.x = element_text(hjust = 0.95, angle = 0)
+            ,axis.text.x = element_text(size=10)
+      )
+    
+    DFsmooth=(ggplot_build(g)$data[[1]])
+    DFsmooth$group=factor(DFsmooth$group, labels=levels(values$SODF$Source))
+    
+    maximum=sort(unique(DFsmooth$x),decreasing=TRUE)[2]
+    DF2=subset(DFsmooth, x == maximum)
+    g=g+
+      ggrepel::geom_text_repel(data = DF2, aes(label = DF2$group, colour = DF2$group, x =DF2$x, y = DF2$y), hjust = -.1)
+    suppressWarnings(plot(g))
+    
+    
+    # maximum=sort(unique(values$SODF$Year),decreasing=TRUE)[2]
+    # DF2=subset(values$SODF, Year == maximum)
+    # g=g+
+    #   ggrepel::geom_text_repel(data = DF2, aes(label = DF2$Source, colour = DF2$Source, x =DF2$Year, y = DF2$Freq), hjust = -.1)
+    # 
+    # plot(g)
+    
+  },height = 600, width = 900)
+  
+  output$soGrowthtable <- DT::renderDT({
+    
+    soData=values$PYSO
+    
+    DT::datatable(soData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(soData))-1))))) %>%
+      formatStyle(names(soData),  backgroundColor = 'white') 
+    #return(Data)
+    
+  })
+  
+  output$rpysPlot <- renderPlot({
+    values$res <- rpys(values$M, sep=input$rpysSep, timespan=input$sliderYears ,graph=FALSE)
+    #values$res <- rpys(values$M, sep=input$rpysSep, timespan=input$sliderYears ,graph=FALSE)
+    plot(values$res$spectroscopy)
+    
+  },height = 600, width = 900)
+  
+  output$rpysTable <- DT::renderDT({
+    
+    rpysData=values$res$rpysTable
+    
+    DT::datatable(rpysData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(rpysData))-1))))) %>%
+      formatStyle(names(rpysData),  backgroundColor = 'white') 
+    #return(Data)
+    
+  })
+  
+  output$crTable <- DT::renderDT({
+    
+    crData=values$res$CR
+    crData=crData[order(-as.numeric(crData$Year),-crData$Freq),]
+    names(crData)=c("Year", "Reference", "Local Citations")
+    DT::datatable(crData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(crData))-1))))) %>%
+      formatStyle(names(crData),  backgroundColor = 'white') 
+    #return(Data)
+    
+  })
+  
+  ### Conceptual Structure
   output$cocPlot <- renderPlot({
     
   ## Keyword co-occurrences network
-    
-    n = input$Nodes
-    label.n = input$Labels
-    if ((input$field %in% names(values$M))){
-    
-    if ((dim(values$NetWords)[1])==1 | !(input$field==values$field)){
-      
-      values$field=input$field
-      
-      switch(input$field,
-             ID={
-               values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "keywords", sep = ";")
-               values$Title= "Keywords Plus Network"
-               },
-             DE={
-               values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "author_keywords", sep = ";")
-               values$Title= "Authors' Keywords network"
-               },
-             TI={
-               if(!("TI_TM" %in% names(values$M))){values$M=termExtraction(values$M,Field="TI",verbose=FALSE)}
-               values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "titles", sep = ";")
-               values$Title= "Title Words network"
-               },
-             AB={
-               if(!("AB_TM" %in% names(values$M))){values$M=termExtraction(values$M,Field="AB",verbose=FALSE)}
-               values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "abstracts", sep = ";")
-               values$Title= "Abstract Words network"
-               })
-      
-    }
-    
-    if (n>dim(values$NetWords)[1]){n=dim(values$NetWords)[1]}
-    if (label.n>n){label.n=n}
-    if (input$normalize=="none"){normalize=NULL}else{normalize=input$normalize}
-    if (input$label.cex=="Yes"){label.cex=TRUE}else{label.cex=FALSE}
-    if (input$size.cex=="Yes"){size.cex=TRUE}else{size.cex=FALSE}
-    if (input$coc.curved=="Yes"){curved=TRUE}else{curved=FALSE}
-    
-    values$cocnet=networkPlot(values$NetWords, normalize=normalize,n = n, Title = values$Title, type = input$layout, 
-                    size.cex=size.cex, size=input$size , remove.multiple=F, edgesize = input$edgesize, labelsize=input$labelsize,label.cex=label.cex,
-                    label.n=label.n,edges.min=input$edges.min,label.color = F, curved=curved)
-    }else{
-      emptyPlot("Selected field is not included in your data collection")
-    }
-    
+    input$applyCoc
+   
+    values <- isolate(cocNetwork(input,values))
     
   }, height = 750, width = 900)
+  
+  output$network.coc <- downloadHandler(
+    filename = "Co_occurrence_network.net",
+    content <- function(file) {
+      igraph::write.graph(values$cocnet$graph_pajek,file=file, format="pajek")
+      #rio::export(values$M, file=file)
+    },
+    contentType = "net"
+  )
   
   output$cocTable <- DT::renderDT({
     
     cocData=values$cocnet$cluster_res
     names(cocData)=c("Term", "Cluster", "Btw Centrality")
-    DT::datatable(cocData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
+    DT::datatable(cocData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"), filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy','excel', 'pdf', 'print'),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(cocData))-1))))) %>%
-      formatStyle(names(cocData),  backgroundColor = 'gray') 
+      formatStyle(names(cocData),  backgroundColor = 'white') 
     #return(Data)
     
   })
   
   output$CSPlot1 <- renderPlot({
-    if ((input$CSfield %in% names(values$M))){
-     
-      tab=tableTag(values$M,input$CSfield)
-      if (length(tab>=2)){
-        
-        minDegree=as.numeric(tab[input$CSn])
-        values$CS <- conceptualStructure(values$M, method=input$method , field=input$CSfield, minDegree=minDegree, k.max = 8, stemming=F, labelsize=input$CSlabelsize,documents=input$CSdoc,graph=FALSE)
-        plot(values$CS$graph_terms)
-      
-      }else{emptyPlot("Selected field is not included in your data collection")
-        values$CS=list("NA")}
     
-      }else{
-        emptyPlot("Selected field is not included in your data collection")
-        values$CS=list("NA")
-      
-    }
-  
+    input$applyCA
+    
+    values <- isolate(CAmap(input,values))
+    
+
   }, height = 650, width = 800)
   
   output$CSPlot2 <- renderPlot({
     
-    if (values$CS[[1]]!="NA"){
+    if (values$CS[[1]][1]!="NA"){
       plot(values$CS$graph_documents_Contrib)
     }else{
       emptyPlot("Selected field is not included in your data collection")
@@ -498,7 +724,7 @@ server <- function(input, output, session) {
   
   output$CSPlot3 <- renderPlot({
     
-    if (values$CS[[1]]!="NA"){
+    if (values$CS[[1]][1]!="NA"){
       plot(values$CS$graph_documents_TC)
     }else{
       emptyPlot("Selected field is not included in your data collection")
@@ -509,26 +735,277 @@ server <- function(input, output, session) {
   
   output$TMPlot <- renderPlot({
     
-    NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences",network = "keywords", sep = ";")
-    S <- normalizeSimilarity(NetMatrix, type = "association")
-    capture.output(net1 <- networkPlot(S, n=500, Title = "Keyword co-occurrences",type="fruchterman",
-                        labelsize = 2, halo = F, cluster = "walktrap",remove.isolates=FALSE,
-                        remove.multiple=FALSE, noloops=TRUE, weighted=TRUE,label.cex=T,edgesize=5, size=1,edges.min = 2))
-    Map=thematicMap(net1, NetMatrix, S = S, minfreq=input$TMn)
-    plot(Map$map)
+    input$applyTM
     
+    values <- isolate(TMmap(input,values))
+    
+
   }, height = 650, width = 800)
+  
+  output$sliders <- renderUI({
+    numSlices <- as.integer(input$numSlices)
+    lapply(1:numSlices, function(i) {
+      # sliderInput(inputId = paste0("Slice", i), label = paste("Slice", i),
+      #             min=1990,max=2018,value=1990)
+      numericInput(inputId = paste0("Slice", i), label = paste("Slice", i),value=median(values$M$PY),min=min(values$M$PY)+1,max=max(values$M$PY)-1, step=1)
+    })
+  })
+  
+  output$TEPlot <- networkD3::renderSankeyNetwork({
+    
+    input$applyTE
+    
+    values$yearSlices=isolate(as.numeric())
+    isolate(for (i in 1:as.integer(input$numSlices)){
+      if (length(input[[paste0("Slice", i)]])>0){values$yearSlices=c(values$yearSlices,input[[paste0("Slice", i)]])}
+    })
+    
+    if (length(values$yearSlices)>0){
+    values$nexus <- isolate(thematicEvolution(values$M,values$yearSlices,n=input$nTE,minFreq=input$fTE))
+    isolate(plotThematicEvolution(values$nexus$Nodes,values$nexus$Edges))
+    }
+      
+    
+  })
   
   output$cocitPlot <- renderPlot({
     
     ## Co-citation network
     
+    input$applyCocit
+    
+    values <- isolate(intellectualStructure(input,values))
+    
+    
+    
+  }, height = 750, width = 900)
+  
+  output$network.cocit <- downloadHandler(
+    filename = "Co_citation_network.net",
+    content <- function(file) {
+      igraph::write.graph(values$cocitnet$graph_pajek,file=file, format="pajek")
+      #rio::export(values$M, file=file)
+    },
+    contentType = "net"
+  )
+  
+  output$cocitTable <- DT::renderDT({
+    
+    cocitData=values$cocitnet$cluster_res
+    names(cocitData)=c("Node", "Cluster", "Btw Centrality")
+    DT::datatable(cocitData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(cocitData))-1))))) %>%
+      formatStyle(names(cocitData),  backgroundColor = 'white') 
+    #return(Data)
+    
+  })
+  
+  output$histPlot <- renderPlot({
+    
+    ## Historiograph
+    input$applyHist
+    
+    values <- isolate(historiograph(input,values))
+    
+
+    }, height = 500, width = 900)
+  
+  output$histTable <- DT::renderDT({
+    
+    if (values$Histfield=="NA"){
+      values$histResults <- histNetwork(values$M, min.citations=quantile(values$M$TC,0.75), sep = ";")
+      values$Histfield="done"
+    }
+    LCS=values$histResults$LCS
+    s=sort(LCS,decreasing = TRUE)[input$histNodes]
+    ind=which(LCS>=s)
+    Data=values$histResults$histData
+    Data=Data[ind,]
+    Data$DOI<- paste0('<a href=\"http://doi.org/',Data$DOI,'\" target=\"_blank\">',Data$DOI,'</a>')
+    DT::datatable(Data, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(Data))-1))))) %>%
+      formatStyle(names(Data),  backgroundColor = 'white') %>%
+      formatStyle(
+        'GCS',
+        background = styleColorBar(Data$GCS, 'steelblue'),
+        backgroundSize = '100% 90%',
+        backgroundRepeat = 'no-repeat',
+        backgroundPosition = 'center'
+      ) %>%
+      formatStyle(
+        'LCS',
+        background = styleColorBar(Data$LCS, 'steelblue'),
+        backgroundSize = '100% 90%',
+        backgroundRepeat = 'no-repeat',
+        backgroundPosition = 'center'
+      )
+    #return(Data)
+    
+  })
+  
+  output$colPlot <- renderPlot({
+    
+    ## Collaboration network
+    input$applyCol
+    
+    
+    values <- isolate(socialStructure(input,values))
+    
+    
+  }, height = 750, width = 900)
+  
+  output$network.col <- downloadHandler(
+    filename = "Collaboration_network.net",
+    content <- function(file) {
+      igraph::write.graph(values$colnet$graph_pajek,file=file, format="pajek")
+      #rio::export(values$M, file=file)
+    },
+    contentType = "net"
+  )
+  
+  output$colTable <- DT::renderDT({
+    
+    colData=values$colnet$cluster_res
+    names(colData)=c("Node", "Cluster", "Btw Centrality")
+    DT::datatable(colData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"), filter = 'top',
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(colData))-1))))) %>%
+      formatStyle(names(colData),  backgroundColor = 'white') 
+    #return(Data)
+    
+  })
+  
+
+  # common functions
+  
+  emptyPlot<-function(errortext){
+    g=ggplot()+
+      theme_void() + theme(legend.position="none")+
+      annotate("text", x = 4, y = 25, label = errortext)
+    plot(g)
+  }
+  
+  wordlist <- function(M, Field, n, measure){
+    switch(Field,
+           ID={v=tableTag(values$M,"ID")},
+           DE={v=tableTag(values$M,"DE")},
+           TI={
+             if (!("TI_TM" %in% names(M))){
+               v=tableTag(M,"TI")
+             }},
+           AB={if (!("AB_TM" %in% names(M))){
+             v=tableTag(M,"AB")
+           }}
+    )
+    
+    #v=tableTag(values$M,"ID")
+    n=min(c(n,length(v)))
+    Words=data.frame(Terms=names(v)[1:n], Frequency=(as.numeric(v)[1:n]))
+    W=Words
+    switch(measure,
+           sqrt={W$Frequency=sqrt(W$Frequency)},
+           log={W$Frequency=log(W$Frequency+1)},
+           log10={W$Frequency=log10(W$Frequency+1)}
+    )
+    
+    results=list(v=v,W=W, Words=Words)
+    return(results)
+  }
+  
+  cocNetwork <- function(input,values){
+    
+    n = input$Nodes
+    label.n = input$Labels
+    if ((input$field %in% names(values$M))){
+      
+      if ((dim(values$NetWords)[1])==1 | !(input$field==values$field)){
+        
+        values$field=input$field
+        
+        switch(input$field,
+               ID={
+                 values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "keywords", sep = ";")
+                 values$Title= "Keywords Plus Network"
+               },
+               DE={
+                 values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "author_keywords", sep = ";")
+                 values$Title= "Authors' Keywords network"
+               },
+               TI={
+                 if(!("TI_TM" %in% names(values$M))){values$M=termExtraction(values$M,Field="TI",verbose=FALSE)}
+                 values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "titles", sep = ";")
+                 values$Title= "Title Words network"
+               },
+               AB={
+                 if(!("AB_TM" %in% names(values$M))){values$M=termExtraction(values$M,Field="AB",verbose=FALSE)}
+                 values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "abstracts", sep = ";")
+                 values$Title= "Abstract Words network"
+               })
+        
+      }
+      
+      if (n>dim(values$NetWords)[1]){n=dim(values$NetWords)[1]}
+      if (label.n>n){label.n=n}
+      if (input$normalize=="none"){normalize=NULL}else{normalize=input$normalize}
+      if (input$label.cex=="Yes"){label.cex=TRUE}else{label.cex=FALSE}
+      if (input$size.cex=="Yes"){size.cex=TRUE}else{size.cex=FALSE}
+      if (input$coc.curved=="Yes"){curved=TRUE}else{curved=FALSE}
+      
+      #par(bg="grey92", mar=c(0,0,0,0))
+      values$cocnet=networkPlot(values$NetWords, normalize=normalize,n = n, Title = values$Title, type = input$layout, 
+                                size.cex=size.cex, size=input$size , remove.multiple=F, edgesize = input$edgesize, labelsize=input$labelsize,label.cex=label.cex,
+                                label.n=label.n,edges.min=input$edges.min,label.color = F, curved=curved)
+    }else{
+      emptyPlot("Selected field is not included in your data collection")
+    }
+  }
+  
+  CAmap <- function(input, values){
+    if ((input$CSfield %in% names(values$M))){
+      
+      tab=tableTag(values$M,input$CSfield)
+      if (length(tab>=2)){
+        
+        minDegree=as.numeric(tab[input$CSn])
+        values$CS <- conceptualStructure(values$M, method=input$method , field=input$CSfield, minDegree=minDegree, k.max = 8, stemming=F, labelsize=input$CSlabelsize,documents=input$CSdoc,graph=FALSE)
+        plot(values$CS$graph_terms)
+        
+      }else{emptyPlot("Selected field is not included in your data collection")
+        values$CS=list("NA")}
+      
+    }else{
+      emptyPlot("Selected field is not included in your data collection")
+      values$CS=list("NA")
+      
+    }
+  }
+  
+  TMmap <- function(input,values){
+    NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences",network = "keywords", sep = ";")
+    S <- normalizeSimilarity(NetMatrix, type = "association")
+    capture.output(net1 <- networkPlot(S, n=500, Title = "Keyword co-occurrences",type="fruchterman",
+                                       labelsize = 2, halo = F, cluster = "walktrap",remove.isolates=FALSE,
+                                       remove.multiple=FALSE, noloops=TRUE, weighted=TRUE,label.cex=T,edgesize=5, size=1,edges.min = 2))
+    Map=thematicMap(net1, NetMatrix, S = S, minfreq=input$TMn)
+    plot(Map$map)
+  }
+  
+  intellectualStructure <- function(input,values){
     n = input$citNodes
     label.n = input$citLabels
     
-    if ((dim(values$NetRefs)[1])==1 | !(input$citField==values$citField)){
-     
+    if ((dim(values$NetRefs)[1])==1 | !(input$citField==values$citField) | !(input$citSep==values$citSep)){
+      
       values$citField=input$citField
+      values$citSep=input$citSep
       
       switch(input$citField,
              CR={
@@ -556,30 +1033,12 @@ server <- function(input, output, session) {
     if (input$cocit.curved=="Yes"){curved=TRUE}else{curved=FALSE}
     
     values$cocitnet=networkPlot(values$NetRefs, normalize=NULL, n = n, Title = values$Title, type = input$citlayout, 
-                    size.cex=size.cex, size=input$citsize , remove.multiple=F, edgesize = input$citedgesize, 
-                    labelsize=input$citlabelsize,label.cex=label.cex, curved=curved,
-                    label.n=label.n,edges.min=input$citedges.min,label.color = F)
-    
-    
-  }, height = 750, width = 900)
+                                size.cex=size.cex, size=input$citsize , remove.multiple=F, edgesize = input$citedgesize, 
+                                labelsize=input$citlabelsize,label.cex=label.cex, curved=curved,
+                                label.n=label.n,edges.min=input$citedges.min,label.color = F)
+  }
   
-  output$cocitTable <- DT::renderDT({
-    
-    cocitData=values$cocitnet$cluster_res
-    names(cocitData)=c("Node", "Cluster", "Btw Centrality")
-    DT::datatable(cocitData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(cocitData))-1))))) %>%
-      formatStyle(names(cocitData),  backgroundColor = 'gray') 
-    #return(Data)
-    
-  })
-  
-  output$histPlot <- renderPlot({
-    
-    ## Historiograph
+  historiograph <- function(input,values){
     
     if (values$Histfield=="NA"){
       values$histResults <- histNetwork(values$M, min.citations=quantile(values$M$TC,0.75), sep = ";")
@@ -588,49 +1047,9 @@ server <- function(input, output, session) {
     }
     
     values$histlog<- capture.output(values$histPlot <- histPlot(values$histResults, n=input$histNodes, size.cex=TRUE , size =input$histsize, labelsize = input$histlabelsize, arrowsize = 0.5))
-    
-    }, height = 500, width = 900)
+  }
   
-  output$histTable <- DT::renderDT({
-    
-    if (values$Histfield=="NA"){
-      values$histResults <- histNetwork(values$M, min.citations=quantile(values$M$TC,0.75), sep = ";")
-      values$Histfield="done"
-    }
-    LCS=values$histResults$LCS
-    s=sort(LCS,decreasing = TRUE)[input$histNodes]
-    ind=which(LCS>=s)
-    Data=values$histResults$histData
-    Data=Data[ind,]
-    Data$DOI<- paste0('<a href=\"http://doi.org/',Data$DOI,'\" target=\"_blank\">',Data$DOI,'</a>')
-    DT::datatable(Data, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'pdf', 'print'),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(Data))-1))))) %>%
-      formatStyle(names(Data),  backgroundColor = 'gray') %>%
-      formatStyle(
-        'GCS',
-        background = styleColorBar(Data$GCS, 'steelblue'),
-        backgroundSize = '100% 90%',
-        backgroundRepeat = 'no-repeat',
-        backgroundPosition = 'center'
-      ) %>%
-      formatStyle(
-        'LCS',
-        background = styleColorBar(Data$LCS, 'steelblue'),
-        backgroundSize = '100% 90%',
-        backgroundRepeat = 'no-repeat',
-        backgroundPosition = 'center'
-      )
-    #return(Data)
-    
-  })
-  
-  output$colPlot <- renderPlot({
-    
-    ## Collaboration network
-    
+  socialStructure<-function(input,values){
     n = input$colNodes
     label.n = input$colLabels
     
@@ -655,7 +1074,7 @@ server <- function(input, output, session) {
                if(!("AU_CO" %in% names(values$M))){values$M=metaTagExtraction(values$M,Field="AU_CO", sep=";")}
                values$ColNetRefs <- biblioNetwork(values$M, analysis = "collaboration", network = "countries", sep = ";")
                values$Title= "Country Collaboration network"
-               values$cluster="none"
+               #values$cluster="none"
              })
       
     }
@@ -668,34 +1087,12 @@ server <- function(input, output, session) {
     if (input$soc.curved=="Yes"){curved=TRUE}else{curved=FALSE}
     
     values$colnet=networkPlot(values$ColNetRefs, normalize=normalize, n = n, Title = values$Title, type = input$collayout, 
-                    size.cex=size.cex, size=input$colsize , remove.multiple=F, edgesize = input$coledgesize, 
-                    labelsize=input$collabelsize,label.cex=label.cex, curved=curved,
-                    label.n=label.n,edges.min=input$coledges.min,label.color = F, cluster=values$cluster)
+                              size.cex=size.cex, size=input$colsize , remove.multiple=F, edgesize = input$coledgesize, 
+                              labelsize=input$collabelsize,label.cex=label.cex, curved=curved,
+                              label.n=label.n,edges.min=input$coledges.min,label.color = F)
     
+    return(values)
     
-  }, height = 750, width = 900)
-  
-  output$colTable <- DT::renderDT({
-    
-    colData=values$colnet$cluster_res
-    names(colData)=c("Node", "Cluster", "Btw Centrality")
-    DT::datatable(colData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(colData))-1))))) %>%
-      formatStyle(names(colData),  backgroundColor = 'gray') 
-    #return(Data)
-    
-  })
-  
-# common functions
-  
-  emptyPlot<-function(errortext){
-    g=ggplot()+
-      theme_void() + theme(legend.position="none")+
-      annotate("text", x = 4, y = 25, label = errortext)
-    plot(g)
   }
   
 } ## End of Server

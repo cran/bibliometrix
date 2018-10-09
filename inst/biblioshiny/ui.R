@@ -7,19 +7,26 @@ if (!(require(ggplot2))){install.packages("ggplot2"); require(ggplot2, quietly=T
 if (!(require(shinycssloaders))){install.packages("shinycssloaders")} 
 if (!(require(shinythemes))){install.packages("shinythemes")} 
 if (!(require(wordcloud2))){install.packages("wordcloud2")} 
+if (!require(colourpicker)){install.packages("colourpicker")}
+if (!require(treemap)){install.packages("treemap")}
+#if (!require(networkD3)){install.packages("networkD3")}
 
 # Main NavBar ----
 options(spinner.size=1, spinner.type=5)
 
 ui <-  navbarPage("biblioshiny: The shiny app for bibliometrix R-package",
-                  theme=shinythemes::shinytheme("slate"),
+                  theme=shinythemes::shinytheme("flatly"),
+                  
+                  
                   
 ### WELCOME PAGE ----
                   tabPanel("Welcome",
                            fluidRow(
-                             
                              column(9,
                                     wellPanel(
+                                      
+                                      #shinythemes::themeSelector(),
+                                      
                                h1("biblioshiny: The shiny app for bibliometrix",align = "center"),
                                br(),
                                h4(em(strong("bibliometrix: An R-tool for comprehensive science mapping analysis")),align = "center"),
@@ -89,11 +96,12 @@ tabPanel(
                   "text/comma-separated-values,text/plain",
                   ".txt",
                   ".bib",
+                  ".RData",
                   ".xlsx",
                   ".xls",
                   ".zip")
       ),
-      p("Here accept single .txt/.bib/.xslx, or multiple .txt/.bib files compressed in a single .zip archive."),
+      p("Here accept single .txt/.bib/.xslx/.RData files, or multiple .txt/.bib files compressed in a single .zip archive."),
       tags$hr(),
       
       uiOutput("textLog"),
@@ -101,9 +109,9 @@ tabPanel(
       
       
       ### download xlsx
-      selectInput('save_file', 'Save as:', choices = c('No, thanks!' = 'no_thanks', 'xlsx' = 'xlsx')),
+      selectInput('save_file', 'Save as:', choices = c('No, thanks!' = 'no_thanks', 'Excel' = 'xlsx')),
       conditionalPanel(condition = "input.save_file == 'xlsx'",
-              downloadButton("collection.xlsx", "Save"))
+              downloadButton("collection.save", "Save"))
     ),
     mainPanel(
       ## color of datatable
@@ -112,7 +120,7 @@ tabPanel(
                                   }
                                   "))),
       tags$style(HTML(".dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter, .dataTables_wrapper .dataTables_info, .dataTables_wrapper .dataTables_processing,.dataTables_wrapper .dataTables_paginate .paginate_button, .dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
-                  color: #ffffff !important;
+                  color: #000000 !important;
                   }")),
       #shinycssloaders::withSpinner(tableOutput("contents"))
       shinycssloaders::withSpinner(DT::DTOutput("contents"))
@@ -140,7 +148,9 @@ tabPanel(
 
 ### Descriptive Analysis PAGE ----
 navbarMenu("Descriptive Analysis",
-           
+           "  ",
+           "  ",
+           "Bibliographic Analysis",
            tabPanel("Tables",
                     sidebarLayout(
                       
@@ -151,23 +161,31 @@ navbarMenu("Descriptive Analysis",
                                                 "Annual Scientific Production"="tab2",
                                                 "Most Productive Authors"="tab3",
                                                 "Most Cited Papers"="tab4",
+                                                "Most Cited References"="tab9",
                                                 "Most Productive Countries"="tab5",
                                                 "Most Cited Countries"="tab6",
                                                 "Most Relevant Sources"="tab7",
-                                                "Most Relevant Keywords"="tab8",
-                                                "All results"="all"),
+                                                "Most Relevant Keywords"="tab8"),
                                     selected = "tab1"),
                         
-                        conditionalPanel(condition = "input.summary_type != 'tab1'",
+                        conditionalPanel(condition = "(input.summary_type != 'tab1') & (input.summary_type != 'tab2') & (input.summary_type != 'tab9')",
                                     numericInput("kk", 
                                       label=("Number of results"), 
                                       value = 20)),
+                        conditionalPanel(condition = "input.summary_type == 'tab9'",
+                                         selectInput(inputId = "sep", 
+                                                     label = "Field separator character", 
+                                                     choices = c(";" = ";", 
+                                                                 ".  " = ".  ",
+                                                                 "," = ","),
+                                                     selected = ";")),
                         selectInput('save_summary', 'Save as:', choices = c('No, thanks!' = 'no_thanks', 'txt file' = 'txt')),
                         conditionalPanel(condition = "input.save_summary == 'txt'",
                                          downloadButton("results.txt", "Save"))
                       ),
                       mainPanel(
-                        shinycssloaders::withSpinner(verbatimTextOutput("summary"))
+                        shinycssloaders::withSpinner(DT::DTOutput(outputId = "summary"))
+                        #shinycssloaders::withSpinner(verbatimTextOutput("summary"))
                       )
                     )
            ),
@@ -205,7 +223,10 @@ navbarMenu("Descriptive Analysis",
                       
                     )
            ),
-           tabPanel("Word Cloud",
+           "  ",
+           "  ",
+           "Content Analysis",
+           tabPanel("WordCloud",
            
            sidebarLayout(
              # Sidebar with a slider and selection inputs
@@ -217,15 +238,35 @@ navbarMenu("Descriptive Analysis",
                                        "Abstracts" = "AB"),
                            selected = "ID"),
                hr(),
-               sliderInput("n_words", label = "Number of words:", min = 10, max = 200, step = 5, value = 50),
-               sliderInput("scale", label = "Font size:", min=1,max=10,step=1,value=1),
-               #selectInput("spiral", label = "Spiral:", choices = c("archimedean", "rectangular")),
-               selectInput("font", label = "Font type:",
+               sliderInput("n_words", label = "Number of words", min = 10, max = 200, step = 5, value = 50),
+               selectInput("measure", "Word occurrence measure",
+                           choices = c("Frequency" = "freq",
+                                       "Square root" = "sqrt",
+                                       "Log" = "log",
+                                       "Log10" = "log10"),
+                           selected = "freq"),
+               selectInput("wcShape", "Shape",
+                           choices = c("Circle" = "circle",
+                                       "Cardiod" = "cardioid",
+                                       "Diamond" = "diamond",
+                                       "Pentagon" = "pentagon",
+                                       "Star" = "star",
+                                       "Triangle-forward" = "triangle-forward"
+                                       ,"Triangle" = "triangle"),
+                           selected = "circle"),
+               selectInput("font", label = "Font type",
                            choices = c("Impact", "Comic Sans MS (No plz!)" = "Comic Sans MS",
                                        "Arial", "Arial Black", "Tahoma", "Verdana", "Courier New",
                                        "Georgia", "Times New Roman", "Andale Mono")),
-               sliderInput("padding", label = "Padding:", min = 0, max = 5, value = 1, step = 1),
-               sliderInput("rotate", label = "Rotate:", min = 0, max = 20, value = 0, step = 1)
+               selectInput("wcCol", "Text colors",
+                           choices = c("Random Dark" = "random-dark",
+                                       "Random Light" = "random-light"),
+                                       selected = "random-dark"),
+               colourpicker::colourInput("wcBGCol", label= "Backgroud color",value="white", showColour = "background", returnName=TRUE),
+               sliderInput("scale", label = "Font size", min=0.2,max=5,step=0.1,value=1),
+               sliderInput("ellipticity", label = "Ellipticity", min=0,max=1,step=0.05,value=0.65),
+               sliderInput("padding", label = "Padding", min = 0, max = 5, value = 1, step = 1),
+               sliderInput("rotate", label = "Rotate", min = 0, max = 20, value = 0, step = 1)
              ),
              
              # Show Word Cloud
@@ -239,28 +280,183 @@ navbarMenu("Descriptive Analysis",
                            ))
                
                     )
-           ))
+           )),
+           tabPanel("TreeMap",
+                    
+                    sidebarLayout(
+                      # Sidebar with a slider and selection inputs
+                      sidebarPanel(width=3,
+                                   selectInput("treeTerms", "Field",
+                                               choices = c("Keywords Plus" = "ID",
+                                                           "Author's keywords" = "DE",
+                                                           "Titles" = "TI",
+                                                           "Abstracts" = "AB"),
+                                               selected = "ID"),
+                                   hr(),
+                                   sliderInput("treen_words", label = "Number of words", min = 10, max = 200, step = 5, value = 50),
+                                   selectInput("treemeasure", "Word occurrence measure",
+                                               choices = c("Frequency" = "freq",
+                                                           "Square root" = "sqrt",
+                                                           "Log" = "log",
+                                                           "Log10" = "log10"),
+                                               selected = "freq"),
+                                  selectInput("treeCol", "Text colors",
+                                               choices = c("Accent" = "Accent",
+                                                           "Dark" = "Dark2",
+                                                           "Paired"= "Paired",
+                                                           "Pastel1"="Pastel1",
+                                                           "Pastel2"="Pastel2",
+                                                           "Set1"="Set1",
+                                                           "Set2"="Set2",
+                                                           "Set3"="Set3"),
+                                               selected = "Pastel2"),
+                                   sliderInput("treeFont", label = "Font size", min=6,max=20,step=1,value=10)
+                      ),
+                      
+                      # Show Word Cloud
+                      mainPanel(
+                        tabsetPanel(type = "tabs",
+                                    tabPanel("Plot",
+                                             shinycssloaders::withSpinner(plotOutput("treemap"))
+                                    ),
+                                    tabPanel("Table",
+                                             shinycssloaders::withSpinner(DT::DTOutput("treeTable"))
+                                    ))
+                        
+                      )
+                    )),
+           "  ",
+           "  ",
+           "Temporal Analysis",
+           tabPanel("Word Dynamics",
+                    
+                    sidebarLayout(
+                      # Sidebar with a slider and selection inputs
+                      sidebarPanel(width=3,
+                                   selectInput("growthTerms", "Field",
+                                               choices = c("Keywords Plus" = "ID",
+                                                           "Author's keywords" = "DE",
+                                                           "Titles" = "TI",
+                                                           "Abstracts" = "AB"),
+                                               selected = "ID"),
+                                   selectInput("cumTerms", "Occurrences",
+                                               choices = c("Cumulate" = "Cum",
+                                                           "Per year" = "noCum"),
+                                               selected = "noCum"),
+                                   selectInput("se", "Confidence Interval",
+                                               choices = c("Yes" = "Yes",
+                                                           "No" = "No"),
+                                               selected = "No"),
+                                   hr(),
+                                   sliderInput("topkw", label = "Number of words", min = 1, max = 100, step = 1, value = c(1,10))
+                                   
+                                   #uiOutput("sliderKwYears")
+                      ),
+                      
+                      # 
+                      mainPanel(
+                        tabsetPanel(type = "tabs",
+                                    tabPanel("Plot",
+                                             shinycssloaders::withSpinner(plotOutput(outputId = "kwGrowthPlot"))
+                                    ),
+                                    tabPanel("Table",
+                                             shinycssloaders::withSpinner(DT::DTOutput(outputId = "kwGrowthtable"))
+                                    ))
+                        
+                      )
+                    )),
+           
+           tabPanel("Source Dynamics",
+                    
+                    sidebarLayout(
+                      # Sidebar with a slider and selection inputs
+                      sidebarPanel(width=3,
+                                   selectInput("cumSO", "Occurrences",
+                                               choices = c("Cumulate" = "Cum",
+                                                           "Per year" = "noCum"),
+                                               selected = "noCum"),
+                                   selectInput("SOse", "Confidence Interval",
+                                               choices = c("Yes" = "Yes",
+                                                           "No" = "No"),
+                                               selected = "No"),
+                                   hr(),
+                                   sliderInput("topSO", label = "Number of Sources", min = 1, max = 50, step = 1, value = 5)
+                                   
+                                   #uiOutput("sliderKwYears")
+                      ),
+                      
+                      # 
+                      mainPanel(
+                        tabsetPanel(type = "tabs",
+                                    tabPanel("Plot",
+                                             shinycssloaders::withSpinner(plotOutput(outputId = "soGrowthPlot"))
+                                    ),
+                                    tabPanel("Table",
+                                             shinycssloaders::withSpinner(DT::DTOutput(outputId = "soGrowthtable"))
+                                    ))
+                        
+                      )
+                    )),
+           
+           tabPanel("Reference Spectroscopy",
+                    sidebarLayout(
+                      
+                      sidebarPanel(width=3,
+                                   sliderInput("sliderYears",
+                                               label = "Timespan",
+                                               min = 1700,
+                                               max = as.numeric(substr(Sys.Date(),1,4)),
+                                               step = 10, sep="",
+                                               value = c(1700, as.numeric(substr(Sys.Date(),1,4)))
+                                   ),
+                                   
+                                   selectInput(inputId = "rpysSep", 
+                                               label = "Field separator character", 
+                                               choices = c(";" = ";", 
+                                                           ".  " = ".  ",
+                                                           "," = ","),
+                                               selected = ";")
+                                   
+                      ),
+                      mainPanel(
+                        tabsetPanel(type = "tabs",
+                                    tabPanel("Graph", 
+                                             withSpinner(plotOutput(outputId = "rpysPlot"))),
+                                    tabPanel("RPY Table", 
+                                             shinycssloaders::withSpinner(DT::DTOutput(
+                                               outputId = "rpysTable"))),
+                                    tabPanel("Cited References Table", 
+                                             shinycssloaders::withSpinner(DT::DTOutput(
+                                               outputId = "crTable")))
+                        )
+                      )))
       ),
 
 ### CONCEPTUAL STRUCTURE ----
 navbarMenu("Conceptual Structure",
            
            #### Co-occurrence Network ----
+           "  ",
+           "  ",
+           "Co-Word Analysis",
            tabPanel("Co-occurrence Network",
                     
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
+                         
+                                   actionButton("applyCoc", "Apply!"),
+                                   downloadButton("network.coc", "Save the Network"),
                         
-                        helpText("Parameters: "),
+                                  helpText("Parameters: "),
                         
-                        selectInput("field", 
-                                    label = "Field",
-                                    choices = c("Keywords Plus" = "ID", 
+                                  selectInput("field", 
+                                      label = "Field",
+                                      choices = c("Keywords Plus" = "ID", 
                                                 "Author's Keywords" = "DE",
                                                 "Titles" = "TI",
                                                 "Abstracts" = "AB"),
-                                    selected = "ID"),
+                                      selected = "ID"),
                         
                         selectInput("layout", 
                                     label = "Layout",
@@ -293,7 +489,7 @@ navbarMenu("Conceptual Structure",
                                     label = "Number of labels",
                                     min = 5,
                                     max = 100,
-                                    value = 30),
+                                    value = 100),
                         
                         selectInput(inputId ="label.cex",
                                     label = "Label cex",
@@ -304,8 +500,9 @@ navbarMenu("Conceptual Structure",
                         sliderInput(inputId = "labelsize",
                                     label = "Label size",
                                     min = 0.0,
-                                    max = 20,
-                                    value = 5),
+                                    max = 10,
+                                    value = 5,
+                                    step = 0.25),
                         
                         selectInput(inputId ="size.cex",
                                     label = "Size cex",
@@ -323,11 +520,11 @@ navbarMenu("Conceptual Structure",
                           label = "Edge size",
                           min = 0.1,
                           max = 20,
-                          value = 1), 
+                          value = 5), 
                         
                         numericInput("edges.min", 
                                      label=("Min edges"),
-                                     value = 1,
+                                     value = 2,
                                      step = 1),
                         
                         selectInput(inputId ="coc.curved",
@@ -336,6 +533,7 @@ navbarMenu("Conceptual Structure",
                                                 "No"),
                                     selected = "No")
                         
+                      
                       ),
                     
                     mainPanel(
@@ -357,6 +555,8 @@ navbarMenu("Conceptual Structure",
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
+                                   actionButton("applyCA", "Apply!"),
+                                   
                         
                         helpText("Parameters: "),
                         
@@ -405,10 +605,14 @@ navbarMenu("Conceptual Structure",
            ), ## End of tabPanel ("Correspondence Analysis")
            
            ### Thematic Map ----
+           "  ",
+           "  ",
+           "Thematic Analysis",
            tabPanel("Thematic Map",
                     sidebarLayout(
                       sidebarPanel(width=3,
                         
+                                   actionButton("applyTM", "Apply!"),
                         helpText("Parameters: "),
                         
                         numericInput("TMn", 
@@ -418,6 +622,27 @@ navbarMenu("Conceptual Structure",
                     mainPanel("Thematic Map",
                               shinycssloaders::withSpinner(plotOutput(outputId = "TMPlot"))
                               )
+                    )
+                    
+           ), ## End of tabPanel ("Thematic Map")
+           
+           ### Thematic Evolution ----
+           tabPanel("Thematic Evolution",
+                    sidebarLayout(
+                      sidebarPanel(width=3,
+                                   
+                                   helpText("Parameters: "),
+                                   sliderInput("nTE", label="Number of Words",value=250,min=50,max=500,step=10),
+                                   sliderInput("fTE", label="Min Cluster Frequency",value=5,min=1,max=100,step=1),
+                                   numericInput("numSlices", label="Number of Cutting Points",min=1,max=4,value=1),
+                                   "Please, write the cutting points (in year) for your collection",
+                                   uiOutput("sliders"),
+                                   actionButton("applyTE", "Apply!")
+                                   
+                      ),
+                      mainPanel("Thematic Evolution",
+                                shinycssloaders::withSpinner(networkD3::sankeyNetworkOutput(outputId = "TEPlot",height = "600px"))
+                                )
                     )
                     
            ) ## End of tabPanel ("Thematic Map")
@@ -431,6 +656,11 @@ navbarMenu("Intellectual Structure",
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
+                                   actionButton("applyCocit", "Apply!"),
+                                   #selectInput('save_colnet', 'Save network as:', choices = c('No, thanks!' = 'no_thanks', 'Pajek format' = 'pajek')),
+                                   #conditionalPanel(condition = "input.save_colnet == 'pajek'",
+                                   downloadButton("network.cocit", "Save the Network"),
+                                   
                         
                         helpText("Parameters: "),
                         
@@ -443,10 +673,10 @@ navbarMenu("Intellectual Structure",
                         
                         selectInput(inputId = "citSep", 
                                   label = "Field separator character", 
-                                  choices = c(";" = ";", 
-                                              ".  " = ".  ",
-                                              "," = ","),
-                                  selected = ";"),
+                                  choices = c('";" (Semicolon)' = ";", 
+                                              '".   " (Dot and 3 or more spaces)' = ".   ",
+                                              '"," (Comma)' = ","),
+                                  selected = "';'"),
                         
                         selectInput("citlayout", 
                                     label = "Layout",
@@ -469,7 +699,7 @@ navbarMenu("Intellectual Structure",
                                     label = "Number of labels",
                                     min = 5,
                                     max = 100,
-                                    value = 20),
+                                    value = 100),
                         
                         selectInput(inputId ="citlabel.cex",
                                     label = "Label cex",
@@ -480,8 +710,9 @@ navbarMenu("Intellectual Structure",
                         sliderInput(inputId = "citlabelsize",
                                     label = "Label size",
                                     min = 0.0,
-                                    max = 20,
-                                    value = 5),
+                                    max = 10,
+                                    value = 5,
+                                    step = 0.25),
                         
                         selectInput(inputId ="citsize.cex",
                                     label = "Size cex",
@@ -498,12 +729,12 @@ navbarMenu("Intellectual Structure",
                           label = "Edge size",
                           min = 0.1,
                           max = 20,
-                          value = 1), 
+                          value = 5), 
                         
                         numericInput("citedges.min", 
                                      label=("Min edges"),
                                      value = 1,
-                                     step = 1),
+                                     step = 2),
                         selectInput(inputId ="cocit.curved",
                                     label = "Curved edges",
                                     choices = c("Yes",
@@ -514,9 +745,11 @@ navbarMenu("Intellectual Structure",
                         tabsetPanel(type = "tabs",
                                     tabPanel("Graph", 
                                              shinycssloaders::withSpinner(plotOutput(outputId = "cocitPlot"))),
+                                             
                                     tabPanel("Table", 
                                              shinycssloaders::withSpinner(DT::DTOutput(
-                                               outputId = "cocitTable")))
+                                                outputId = "cocitTable")))
+                                            
                         )
                         #shinycssloaders::withSpinner(plotOutput(outputId = "cocitPlot"))
                       )
@@ -529,6 +762,10 @@ navbarMenu("Intellectual Structure",
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
+                                   actionButton("applyHist", "Apply!"),
+                                   #selectInput('save_colnet', 'Save network as:', choices = c('No, thanks!' = 'no_thanks', 'Pajek format' = 'pajek')),
+                                   #conditionalPanel(condition = "input.save_colnet == 'pajek'",
+                                   
                                    
                                    helpText("Parameters: "),
                                    
@@ -574,7 +811,9 @@ navbarMenu("Social Structure",
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
-                                   
+                                   actionButton("applyCol", "Apply!"),
+                                   downloadButton("network.col", "Save the Network"),
+                                                
                                    helpText("Parameters: "),
                                    
                                    selectInput("colField", 
@@ -615,7 +854,7 @@ navbarMenu("Social Structure",
                                                label = "Number of labels",
                                                min = 5,
                                                max = 100,
-                                               value = 20),
+                                               value = 100),
                                    
                                    selectInput(inputId ="collabel.cex",
                                                label = "Label cex",
@@ -626,8 +865,9 @@ navbarMenu("Social Structure",
                                    sliderInput(inputId = "collabelsize",
                                                label = "Label size",
                                                min = 0.0,
-                                               max = 20,
-                                               value = 5),
+                                               max = 10,
+                                               value = 5,
+                                               step = 0.25),
                                    
                                    selectInput(inputId ="colsize.cex",
                                                label = "Size cex",
@@ -644,11 +884,11 @@ navbarMenu("Social Structure",
                                                label = "Edge size",
                                                min = 0.1,
                                                max = 20,
-                                               value = 1), 
+                                               value = 5), 
                                    
                                    numericInput("coledges.min", 
                                                 label=("Min edges"),
-                                                value = 1,
+                                                value = 2,
                                                 step = 1),
                                    selectInput(inputId ="soc.curved",
                                                label = "Curved edges",

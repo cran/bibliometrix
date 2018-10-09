@@ -52,29 +52,51 @@ summary.bibliometrix<-function(object, ...){
   
   #Main Information about data
   MainInfo=("\n\nMain Information about data\n\n")
-  MainInfo[2]=paste("Documents                            ",object$Articles,"\n")
-  MainInfo[3]=paste("Sources (Journals, Books, etc.)      ",length(object$Sources),"\n")
-  MainInfo[4]=paste("Keywords Plus (ID)                   ",length(object$ID),"\n")
-  MainInfo[5]=paste("Author's Keywords (DE)               ",length(object$DE),"\n")
-  MainInfo[6]=paste("Period                               ",min(object$Years,na.rm=T),"-",max(object$Years,na.rm=T),"\n")
+  MainInfo[length(MainInfo)+1]=paste("Documents                            ",object$Articles,"\n")
+  MainInfo[length(MainInfo)+1]=paste("Sources (Journals, Books, etc.)      ",length(object$Sources),"\n")
+  MainInfo[length(MainInfo)+1]=paste("Keywords Plus (ID)                   ",length(object$ID),"\n")
+  MainInfo[length(MainInfo)+1]=paste("Author's Keywords (DE)               ",length(object$DE),"\n")
+  MainInfo[length(MainInfo)+1]=paste("Period                               ",min(object$Years,na.rm=T),"-",max(object$Years,na.rm=T),"\n")
   TCm=format(mean(as.numeric(object$TotalCitation), na.rm=TRUE),digits=4)
-  MainInfo[7]=paste("Average citations per documents      ",TCm,"\n\n")
-  MainInfo[8]=paste("Authors                              ",object$nAuthors,"\n")
-  MainInfo[9]=paste("Author Appearances                   ",object$Appearances,"\n")
-  MainInfo[10]=paste("Authors of single authored documents ",object$nAuthors-object$AuMultiAuthoredArt,"\n")
-  MainInfo[11]=paste("Authors of multi authored documents  ",object$AuMultiAuthoredArt,"\n\n")
-  MainInfo[12]=paste("Documents per Author                 ",format(object$Articles/object$nAuthors,digits=3),"\n")
-  MainInfo[13]=paste("Authors per Document                 ",format(object$nAuthors/object$Articles,digits=3),"\n")
-  MainInfo[14]=paste("Co-Authors per Documents             ",format(mean(object$nAUperPaper),digits=3),"\n")
+  MainInfo[length(MainInfo)+1]=paste("Average citations per documents      ",TCm,"\n\n")
+  MainInfo[length(MainInfo)+1]=paste("Authors                              ",object$nAuthors,"\n")
+  MainInfo[length(MainInfo)+1]=paste("Author Appearances                   ",object$Appearances,"\n")
+  MainInfo[length(MainInfo)+1]=paste("Authors of single-authored documents ",object$nAuthors-object$AuMultiAuthoredArt,"\n")
+  MainInfo[length(MainInfo)+1]=paste("Authors of multi-authored documents  ",object$AuMultiAuthoredArt,"\n")
+  MainInfo[length(MainInfo)+1]=paste("Single-authored documents            ",format(sum(object$nAUperPaper==1),digits=0),"\n\n")
+  MainInfo[length(MainInfo)+1]=paste("Documents per Author                 ",format(object$Articles/object$nAuthors,digits=3),"\n")
+  MainInfo[length(MainInfo)+1]=paste("Authors per Document                 ",format(object$nAuthors/object$Articles,digits=3),"\n")
+  MainInfo[length(MainInfo)+1]=paste("Co-Authors per Documents             ",format(mean(object$nAUperPaper),digits=3),"\n")
   CollIndex=format(object$AuMultiAuthoredArt/sum(object$nAUperPaper>1),digits=3)  # Collaboration Index
-  MainInfo[15]=paste("Collaboration Index                  ",CollIndex,"\n")
-  MainInfo[16]=paste("\n")
+  MainInfo[length(MainInfo)+1]=paste("Collaboration Index                  ",CollIndex,"\n")
+  MainInfo[length(MainInfo)+1]=paste("\n")
+  
+  ## DF table for biblioshiny
+  Description=c("Documents","Sources (Journals, Books, etc.)",
+                "Keywords Plus (ID)","Author's Keywords (DE)","Period","Average citations per documents",
+                "Authors","Author Appearances","Authors of single-authored documents",
+                "Authors of multi-authored documents", "Single-authored documents","Documents per Author",
+                "Authors per Document", "Co-Authors per Documents","Collaboration Index")
+  Results=c(object$Articles,length(object$Sources),length(object$ID), length(object$DE),
+            paste(min(object$Years,na.rm=T),"-",max(object$Years,na.rm=T)),TCm,object$nAuthors,
+            object$Appearances, object$nAuthors-object$AuMultiAuthoredArt, object$AuMultiAuthoredArt,
+            format(sum(object$nAUperPaper==1),digits=0), format(object$Articles/object$nAuthors,digits=3),
+            format(object$nAuthors/object$Articles,digits=3),format(mean(object$nAUperPaper),digits=3), CollIndex)
+  
+  MainInfoDF=data.frame("Description"=Description,"Results"=Results, stringsAsFactors = FALSE)
+  ## End DF table
+  
+  
   if (!is.na(object$Documents[1])){
-  MainInfo[17]=paste("Document types                    ","\n")
-  for (i in 1:length(object$Documents)){
-  MainInfo[length(MainInfo)+1]=paste(names(object$Documents)[i], "                                   ",as.numeric(object$Documents)[i],"\n")  
-  }
-  MainInfo[length(MainInfo)+1]=paste("\n")}
+    MainInfo[length(MainInfo)+1]=paste("Document types                    ","\n")
+    MainInfoDF[dim(MainInfoDF)[1]+1,1:2]=c("","")
+    MainInfoDF[dim(MainInfoDF)[1]+1,1:2]=c("Document types","")
+    for (i in 1:length(object$Documents)){
+      MainInfo[length(MainInfo)+1]=paste(names(object$Documents)[i],as.numeric(object$Documents)[i],"\n")  
+      MainInfoDF[dim(MainInfoDF)[1]+1,1:2]=c(trim(names(object$Documents)[i]),as.numeric(object$Documents)[i])
+    }
+    MainInfo[length(MainInfo)+1]=paste("\n")}
+  
   if (isTRUE(verbose)){cat(MainInfo)}
 
   if (pause==TRUE & isTRUE(verbose)){
@@ -198,7 +220,7 @@ summary.bibliometrix<-function(object, ...){
   if (isTRUE(verbose)){print(AAA,row.names=TRUE);cat("\n")}
   }
 
-  summaryresults=list(MainInformation=MainInfo,AnnualProduction=Y,AnnualGrowthRate=GR,MostProdAuthors=A,MostCitedPapers=MostCitedPapers,MostProdCountries=Co,TCperCountries=AC,MostRelSources=AA,MostRelKeywords=AAA)
+  summaryresults=list(MainInformation=MainInfo,MainInformationDF=MainInfoDF, AnnualProduction=Y,AnnualGrowthRate=GR,MostProdAuthors=A,MostCitedPapers=MostCitedPapers,MostProdCountries=Co,TCperCountries=AC,MostRelSources=AA,MostRelKeywords=AAA)
 
   invisible(summaryresults)
   }

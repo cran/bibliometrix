@@ -61,6 +61,14 @@
 #' @import shiny
 #' @import shinycssloaders
 #' @import shinythemes
+#' @importFrom dplyr %>%
+#' @importFrom dplyr group_by
+#' @importFrom dplyr summarise
+#' @importFrom grDevices dev.off
+#' @importFrom grDevices pdf
+#' @importFrom networkD3 sankeyNetwork
+#' @importFrom networkD3 sankeyNetworkOutput
+#' @importFrom networkD3 renderSankeyNetwork
 #' @importFrom DT DTOutput
 #' @importFrom DT renderDT
 #' @importFrom DT datatable
