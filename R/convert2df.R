@@ -61,9 +61,12 @@
 #' @import shiny
 #' @import shinycssloaders
 #' @import shinythemes
+#' @importFrom grDevices adjustcolor
 #' @importFrom dplyr %>%
 #' @importFrom dplyr group_by
 #' @importFrom dplyr summarise
+#' @importFrom dplyr anti_join
+#' @importFrom dplyr left_join
 #' @importFrom grDevices dev.off
 #' @importFrom grDevices pdf
 #' @importFrom networkD3 sankeyNetwork

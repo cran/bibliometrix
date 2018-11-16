@@ -7,6 +7,7 @@
 #'  
 #' 
 #' @param M is a bibliographic data frame obtained by the converting function \code{\link{convert2df}}.
+#' @param field is a character object. It indicates the content field to use. Field can be one of c=("ID","DE","TI","AB"). Default value is \code{field="ID"}.
 #' @param years is a numeric vector of two or more unique cut points.
 #' @param n is numerical. It indicates the number of words to use in the network analysis
 #' @param minFreq is numerical. It indicates the min frequency of words included in to a cluster.
@@ -21,7 +22,7 @@
 #' data(scientometrics)
 #' years=c(2000)
 #' 
-#' nexus <- thematicEvolution(scientometrics,years,n=100,minFreq=2)
+#' nexus <- thematicEvolution(scientometrics,field="ID", years=years, n=100,minFreq=2)
 #' 
 #' @seealso \code{\link{thematicMap}} function to create a thematic map based on co-word network analysis and clustering.
 #' @seealso \code{\link{cocMatrix}} to compute a bibliographic bipartite network.
@@ -29,7 +30,7 @@
 #'
 #' @export
 
-thematicEvolution <- function(M,years,n=250,minFreq=2){
+thematicEvolution <- function(M, field="ID", years,n=250,minFreq=2){
   
   #net=list()
   #arguments <- list(...)
@@ -44,8 +45,27 @@ thematicEvolution <- function(M,years,n=250,minFreq=2){
   for (k in 1:K){
     
     Mk=list_df[[k]]
-    NetMatrixk <- biblioNetwork(Mk, analysis = "co-occurrences", 
-                                network = "keywords", sep = ";")
+    
+    switch(field,
+           ID={
+             NetMatrixk <- biblioNetwork(Mk, analysis = "co-occurrences", network = "keywords", sep = ";")
+             
+           },
+           DE={
+             NetMatrixk <- biblioNetwork(Mk, analysis = "co-occurrences", network = "author_keywords", sep = ";")
+             
+           },
+           TI={
+             if(!("TI_TM" %in% names(Mk))){Mk=termExtraction(Mk,Field="TI",verbose=FALSE)}
+             NetMatrixk <- biblioNetwork(Mk, analysis = "co-occurrences", network = "titles", sep = ";")
+             
+           },
+           AB={
+             if(!("AB_TM" %in% names(Mk))){Mk=termExtraction(Mk,Field="AB",verbose=FALSE)}
+             NetMatrixk <- biblioNetwork(Mk, analysis = "co-occurrences", network = "abstracts", sep = ";")
+             
+           })
+    
     Sk <- normalizeSimilarity(NetMatrixk, type = "association")
     #N = dim(NetMatrixk)[1]
     if (n>dim(NetMatrixk)[1]){n = dim(NetMatrixk)[1]}
@@ -71,6 +91,12 @@ thematicEvolution <- function(M,years,n=250,minFreq=2){
   for (k in 2:K){
     res1=res[[(k-1)]]
     res2=res[[(k)]]
+    
+    ### check for empty cluster list
+    if (res1$nclust==0 | res2$nclust==0){
+      cat(paste("\nNo topics in the period ",k-1," with this set of input parameters\n\n"))
+      return(list(check=FALSE))
+    }
     
     ####
      res1$words$Cluster=paste(res1$clusters$name[res1$words$Cluster],"--",LETTERS[k-1],sep="")
@@ -140,7 +166,7 @@ thematicEvolution <- function(M,years,n=250,minFreq=2){
   edges$from=as.numeric(edges$from)
   edges$to=as.numeric(edges$to)
   
-  results=list(Nodes=nodes,Edges=edges,Data=INC)
+  results=list(Nodes=nodes,Edges=edges,Data=INC,check=TRUE)
   
   return(results)
   

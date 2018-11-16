@@ -21,10 +21,9 @@ server <- function(input, output, session) {
   values$histlog="working..."
   values$kk=0
   values$M=data.frame(PY=0)
-  
+  values$histsearch="NA"
+  values$citShortlabel="NA"
 
-  
-  
   
   
   
@@ -192,7 +191,9 @@ server <- function(input, output, session) {
   ### Descriptive Analysis
   output$summary <- DT::renderDT({
     
-    if (values$results[[1]]=="NA"){values$results=biblioAnalysis(values$M)}
+    ### aggiungere il pulsante apply
+    #if (values$results[[1]]=="NA"){values$results=biblioAnalysis(values$M)}
+    values$results=biblioAnalysis(values$M)
     S=summary(object=values$results,k=input$kk,verbose=FALSE)
     
     
@@ -242,6 +243,9 @@ server <- function(input, output, session) {
              TAB=as.data.frame(citations(values$M,sep=";")$Cited)
              names(TAB)=c("Cited References", "Citations")
              #print(S$MostRelKeywords)
+           },
+           "tab10"={
+             TAB<-mapworld(values$M)$tab
            }
           )
     
@@ -276,6 +280,7 @@ server <- function(input, output, session) {
              xx=as.data.frame(values$results$Authors[1:k])
              g=ggplot2::ggplot(data=xx, aes(x=xx$AU, y=xx$Freq)) +
                geom_bar(stat="identity", fill="steelblue")+
+               scale_x_discrete(limits = rev(levels(xx$AU)))+
                labs(title="Most productive Authors", x = "Authors")+
                labs(y = "N. of Documents")+
                theme_minimal() +
@@ -296,12 +301,15 @@ server <- function(input, output, session) {
                                   scale_x_discrete(limits = rev(levels(xx$Country)))+
                                   scale_fill_discrete(name="Collaboration",
                                                       breaks=c("SCP","MCP"))+
-                                  labs(title = "Most Productive Countries", x = "Countries", y = "N. of Documents", 
+                                  labs(title = "Corresponding Author's Country", x = "Countries", y = "N. of Documents", 
                                        caption = "SCP: Single Country Publications, MCP: Multiple Country Publications")+
                                   theme_minimal() +
                                   theme(plot.caption = element_text(size = 9, hjust = 0.5,
                                                                     color = "blue", face = "italic"))+
                                   coord_flip())
+           },
+           mapworld={
+             g<-mapworld(values$M)$g
            },
            production={
              Tab=table(values$results$Years)
@@ -353,7 +361,7 @@ server <- function(input, output, session) {
              g=ggplot2::ggplot(Table2, aes(x = Table2$Year, y = Table2$MeanTCperYear)) +
                geom_line() +
                geom_area(fill = '#002F80', alpha = .5) +
-               labs(x = 'Year'
+               labs(x = 'Publication Year'
                     , y = 'Citations'
                     , title = "Average Article Citations per Year")+
                scale_x_continuous(breaks= (Table2$Year[seq(1,length(Table2$Year),by=2)])) +
@@ -389,7 +397,7 @@ server <- function(input, output, session) {
              g=ggplot2::ggplot(Table2, aes(x = Table2$Year, y = Table2$MeanTCperArt)) +
                geom_line() +
                geom_area(fill = '#002F80', alpha = .5) +
-               labs(x = 'Year'
+               labs(x = 'Publication Year'
                     , y = 'Citations'
                     , title = "Average Total Citations per Year")+
                scale_x_continuous(breaks= (Table2$Year[seq(1,length(Table2$Year),by=2)])) +
@@ -408,16 +416,60 @@ server <- function(input, output, session) {
     #plot(results)
     }, height = 500, width =900)
   
-  # output$wordcloud.ui <- renderUI({
-  #   wordcloud2::wordcloud2Output("wordcloud", height =  plotHeight())
-  # })
-  # 
-  # plotCount <- reactive({
-  #   req(input$widgetsize)
-  #   as.numeric(input$widgetsize)
-  # })
-  # 
-  # plotHeight <- reactive(plotCount())
+  output$bradfordPlot <- renderPlot({
+    
+    values$bradford=bradford(values$M)
+    values$bradford$graph
+    
+  },height = 600)
+  
+  output$bradfordTable <- DT::renderDT({
+    
+    DT::datatable(values$bradford$table, rownames = FALSE,
+                  options = list(pageLength = 20, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$bradford$table))-1)))), 
+                  class = 'cell-border compact stripe') %>%
+      formatStyle(names(values$bradford$table),  backgroundColor = 'white',textAlign = 'center')
+  })
+  
+  output$lotkaPlot <- renderPlot({
+    
+      values$lotka=lotka(biblioAnalysis(values$M))
+      AuProd=values$lotka$AuthorProd
+      AuProd$Theoretical=10^(log10(values$lotka$C)-2*log10(AuProd[,1]))
+      
+      g=ggplot2::ggplot(AuProd, aes(x = AuProd$N.Articles, y = AuProd$Freq*100)) +
+        geom_line() +
+        geom_area(fill = '#002F80', alpha = .5) +
+        labs(x = 'N. Articles'
+             , y = '% of total scientific production'
+             , title = "Author Scientific Productivity") +
+        #scale_x_continuous(breaks= (Y$Year[seq(1,length(Y$Year),by=2)])) +
+        theme(text = element_text(color = "#444444")
+              ,panel.background = element_rect(fill = '#EFEFEF')
+              ,panel.grid.minor = element_line(color = '#FFFFFF')
+              ,panel.grid.major = element_line(color = '#FFFFFF')
+              ,plot.title = element_text(size = 24)
+              ,axis.title = element_text(size = 14, color = '#555555')
+              ,axis.title.y = element_text(vjust = 1, angle = 90)
+              ,axis.title.x = element_text(hjust = 0)
+        )
+      plot(g)
+      
+  },height = 600)
+  
+  output$lotkaTable <- DT::renderDT({
+    
+    DT::datatable(values$lotka$AuthorProd, rownames = FALSE,
+                  options = list(pageLength = 20, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$lotka$AuthorProd))-1)))), 
+                  class = 'cell-border compact stripe') %>%
+      formatStyle(names(values$lotka$AuthorProd),  backgroundColor = 'white',textAlign = 'center')
+  })
   
   output$wordcloud <- wordcloud2::renderWordcloud2({
     
@@ -522,7 +574,7 @@ server <- function(input, output, session) {
       labs(x = 'Year'
            , y = laby
            , title = "Word Growth") +
-      ylim(0, NA) +
+      #ylim(0, NA) +
       scale_x_continuous(breaks= (values$KW$Year[seq(1,length(values$KW$Year),by=ceiling(length(values$KW$Year)/20))])) +
       geom_hline(aes(yintercept=0, alpha=0.1))+
       theme(text = element_text(color = "#444444"), legend.position="none"
@@ -586,7 +638,7 @@ server <- function(input, output, session) {
       labs(x = 'Year'
            , y = laby
            , title = "Source Growth") +
-      ylim(0, NA) +
+      #ylim(0, NA) +
       scale_x_continuous(breaks= (values$PYSO$Year[seq(1,length(values$PYSO$Year),by=ceiling(length(values$PYSO$Year)/20))])) +
       geom_hline(aes(yintercept=0, alpha=0.1))+
       theme(text = element_text(color = "#444444"), legend.position="none"
@@ -684,7 +736,7 @@ server <- function(input, output, session) {
     filename = "Co_occurrence_network.net",
     content <- function(file) {
       igraph::write.graph(values$cocnet$graph_pajek,file=file, format="pajek")
-      #rio::export(values$M, file=file)
+      
     },
     contentType = "net"
   )
@@ -714,20 +766,29 @@ server <- function(input, output, session) {
   
   output$CSPlot2 <- renderPlot({
     
-    if (values$CS[[1]][1]!="NA"){
-      plot(values$CS$graph_documents_Contrib)
+    if (input$method!="MDS"){
+    
+      if (values$CS[[1]][1]!="NA"){
+        plot(values$CS$graph_documents_Contrib)
+      }else{
+        emptyPlot("Selected field is not included in your data collection")
+      }
     }else{
-      emptyPlot("Selected field is not included in your data collection")
+      emptyPlot("This plot is available only for CA or MCA analyses")
     }
     
   }, height = 650, width = 800)
   
   output$CSPlot3 <- renderPlot({
     
-    if (values$CS[[1]][1]!="NA"){
-      plot(values$CS$graph_documents_TC)
+    if (input$method!="MDS"){
+      if (values$CS[[1]][1]!="NA"){
+        plot(values$CS$graph_documents_TC)
+      }else{
+        emptyPlot("Selected field is not included in your data collection")
+      }
     }else{
-      emptyPlot("Selected field is not included in your data collection")
+      emptyPlot("This plot is available only for CA or MCA analyses")
     }
     
     
@@ -739,8 +800,29 @@ server <- function(input, output, session) {
     
     values <- isolate(TMmap(input,values))
     
+    validate(
+      need(values$TM$nclust > 0, "\n\nNo topics in one or more periods. Please select a different set of parameters.")
+    )
+    
+    plot(values$TM$map)
 
   }, height = 650, width = 800)
+  
+  output$TMTable <- DT::renderDT({
+    
+    tmData=values$TM$words[,-4]
+    
+    
+    
+    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
+      formatStyle(names(tmData),  backgroundColor = 'white') 
+    #return(Data)
+    
+  })
   
   output$sliders <- renderUI({
     numSlices <- as.integer(input$numSlices)
@@ -761,10 +843,30 @@ server <- function(input, output, session) {
     })
     
     if (length(values$yearSlices)>0){
-    values$nexus <- isolate(thematicEvolution(values$M,values$yearSlices,n=input$nTE,minFreq=input$fTE))
+    values$nexus <- isolate(thematicEvolution(values$M, field=input$TEfield, values$yearSlices,n=input$nTE,minFreq=input$fTE))
+    
+    validate(
+      need(values$nexus$check != FALSE, "\n\nNo topics in one or more periods. Please select a different set of parameters.")
+    )
+    
     isolate(plotThematicEvolution(values$nexus$Nodes,values$nexus$Edges))
     }
       
+    
+  })
+  
+  output$TETable <- DT::renderDT({
+    
+    TEData=values$nexus$Data
+    TEData=TEData[TEData$Inc_index>0,]
+    names(TEData)=c("From", "To", "Inclusion Index", "Words", "Occurrences", "Total", "Weighted Inclusion Index")
+    DT::datatable(TEData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TEData))-1))))) %>%
+      formatStyle(names(TEData),  backgroundColor = 'white') 
+    #return(Data)
     
   })
   
@@ -853,12 +955,16 @@ server <- function(input, output, session) {
     
     ## Collaboration network
     input$applyCol
+
+    isolate(
+      if (input$colField=="COL_CO" & input$collayout=="worldmap"){
+        values$colmap=countrycollaboration(values$M,label=FALSE,edgesize=input$coledgesize/2,min.edges=input$coledges.min)
+        plot(values$colmap$g)
+
+      }else{values <- socialStructure(input,values)}
+    )
     
-    
-    values <- isolate(socialStructure(input,values))
-    
-    
-  }, height = 750, width = 900)
+  }, height = 750)#, width = 750
   
   output$network.col <- downloadHandler(
     filename = "Collaboration_network.net",
@@ -871,8 +977,14 @@ server <- function(input, output, session) {
   
   output$colTable <- DT::renderDT({
     
-    colData=values$colnet$cluster_res
-    names(colData)=c("Node", "Cluster", "Btw Centrality")
+    if (input$collayout!="worldmap"){
+      colData=values$colnet$cluster_res
+      names(colData)=c("Node", "Cluster", "Btw Centrality")
+    }else{
+      colData=values$colmap$tab
+      colData=colData[,c(1,2,9)]
+      names(colData)=c("From","To","Frequency")
+      }
     DT::datatable(colData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"), filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy','excel', 'pdf', 'print'),
@@ -905,7 +1017,7 @@ server <- function(input, output, session) {
              v=tableTag(M,"AB")
            }}
     )
-    
+    names(v)=tolower(names(v))
     #v=tableTag(values$M,"ID")
     n=min(c(n,length(v)))
     Words=data.frame(Terms=names(v)[1:n], Frequency=(as.numeric(v)[1:n]))
@@ -962,10 +1074,60 @@ server <- function(input, output, session) {
       #par(bg="grey92", mar=c(0,0,0,0))
       values$cocnet=networkPlot(values$NetWords, normalize=normalize,n = n, Title = values$Title, type = input$layout, 
                                 size.cex=size.cex, size=input$size , remove.multiple=F, edgesize = input$edgesize, labelsize=input$labelsize,label.cex=label.cex,
-                                label.n=label.n,edges.min=input$edges.min,label.color = F, curved=curved)
+                                label.n=label.n,edges.min=input$edges.min,label.color = F, curved=curved,alpha=input$cocAlpha)
     }else{
       emptyPlot("Selected field is not included in your data collection")
     }
+  }
+  
+  mapworld <- function(M){
+    M=metaTagExtraction(M,"AU_CO")
+    CO=as.data.frame(tableTag(M,"AU_CO"),stringsAsFactors = FALSE)
+    CO$Tab=gsub("UNITED KINGDOM","UK",CO$Tab)
+    CO$Tab=gsub("KOREA","SOUTH KOREA",CO$Tab)
+    
+    map.world <- map_data("world")
+    map.world$region=toupper(map.world$region)
+    
+    dplyr::anti_join(CO, map.world, by = c('Tab' = 'region'))
+    
+    country.prod <- dplyr::left_join( map.world, CO, by = c('region' = 'Tab')) 
+    
+    tab=data.frame(country.prod %>%
+      dplyr::group_by(region) %>%
+      dplyr::summarise(Freq=mean(Freq)))
+    
+    tab=tab[!is.na(tab$Freq),]
+    
+    tab=tab[order(-tab$Freq),]
+    
+    breaks=as.numeric(round(quantile(CO$Freq,c(0.2,0.4,0.6,0.8,1))))
+    names(breaks)=breaks
+    breaks=log(breaks)
+   
+    g=ggplot(country.prod, aes( x = long, y = lat, group = group )) +
+      geom_polygon(aes(fill = log(Freq))) +
+      scale_fill_continuous(low='dodgerblue', high='dodgerblue4',breaks=breaks)+
+      guides(fill = guide_legend(reverse = T)) +
+      #geom_text(data=centroids, aes(label = centroids$Tab, x = centroids$long, y = centroids$lat, group=centroids$Tab)) +
+      labs(fill = 'N.Documents'
+           ,title = 'Country Scientific Production'
+           ,x = NULL
+           ,y = NULL) +
+      theme(text = element_text(color = '#333333')
+            ,plot.title = element_text(size = 28)
+            ,plot.subtitle = element_text(size = 14)
+            ,axis.ticks = element_blank()
+            ,axis.text = element_blank()
+            ,panel.grid = element_blank()
+            ,panel.background = element_rect(fill = '#FFFFFF')  #'#333333'
+            ,plot.background = element_rect(fill = '#FFFFFF')
+            ,legend.position = c(.18,.36)
+            ,legend.background = element_blank()
+            ,legend.key = element_blank()
+      ) 
+    results=list(g=g,tab=tab)
+    return(results)
   }
   
   CAmap <- function(input, values){
@@ -975,6 +1137,7 @@ server <- function(input, output, session) {
       if (length(tab>=2)){
         
         minDegree=as.numeric(tab[input$CSn])
+        
         values$CS <- conceptualStructure(values$M, method=input$method , field=input$CSfield, minDegree=minDegree, k.max = 8, stemming=F, labelsize=input$CSlabelsize,documents=input$CSdoc,graph=FALSE)
         plot(values$CS$graph_terms)
         
@@ -989,27 +1152,50 @@ server <- function(input, output, session) {
   }
   
   TMmap <- function(input,values){
-    NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences",network = "keywords", sep = ";")
+    
+    switch(input$TMfield,
+           ID={
+             NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences", network = "keywords", sep = ";")
+             
+           },
+           DE={
+             NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences", network = "author_keywords", sep = ";")
+             
+           },
+           TI={
+             if(!("TI_TM" %in% names(values$M))){values$M=termExtraction(values$M,Field="TI",verbose=FALSE)}
+             NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences", network = "titles", sep = ";")
+             
+           },
+           AB={
+             if(!("AB_TM" %in% names(values$M))){values$M=termExtraction(values$M,Field="AB",verbose=FALSE)}
+             NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences", network = "abstracts", sep = ";")
+             
+           })
+    
     S <- normalizeSimilarity(NetMatrix, type = "association")
     capture.output(net1 <- networkPlot(S, n=500, Title = "Keyword co-occurrences",type="fruchterman",
                                        labelsize = 2, halo = F, cluster = "walktrap",remove.isolates=FALSE,
                                        remove.multiple=FALSE, noloops=TRUE, weighted=TRUE,label.cex=T,edgesize=5, size=1,edges.min = 2))
     Map=thematicMap(net1, NetMatrix, S = S, minfreq=input$TMn)
-    plot(Map$map)
+    #plot(Map$map)
+    values$TM=Map
+    return(values)
   }
   
   intellectualStructure <- function(input,values){
     n = input$citNodes
     label.n = input$citLabels
     
-    if ((dim(values$NetRefs)[1])==1 | !(input$citField==values$citField) | !(input$citSep==values$citSep)){
+    if ((dim(values$NetRefs)[1])==1 | !(input$citField==values$citField) | !(input$citSep==values$citSep) | !(input$citShortlabel==values$citShortlabel)){
       
       values$citField=input$citField
       values$citSep=input$citSep
-      
+      if (input$citShortlabel=="Yes"){shortlabel=TRUE}else{shortlabel=FALSE}
+      values$citShortlabel=input$citShortlabel
       switch(input$citField,
              CR={
-               values$NetRefs <- biblioNetwork(values$M, analysis = "co-citation", network = "references", sep = input$citSep)
+               values$NetRefs <- biblioNetwork(values$M, analysis = "co-citation", network = "references", sep = input$citSep, shortlabel=shortlabel)
                values$Title= "Cited References network"
                
              },
@@ -1035,18 +1221,24 @@ server <- function(input, output, session) {
     values$cocitnet=networkPlot(values$NetRefs, normalize=NULL, n = n, Title = values$Title, type = input$citlayout, 
                                 size.cex=size.cex, size=input$citsize , remove.multiple=F, edgesize = input$citedgesize, 
                                 labelsize=input$citlabelsize,label.cex=label.cex, curved=curved,
-                                label.n=label.n,edges.min=input$citedges.min,label.color = F)
+                                label.n=label.n,edges.min=input$citedges.min,label.color = F,remove.isolates = FALSE,alpha=input$cocitAlpha)
+    return(values)
   }
   
   historiograph <- function(input,values){
     
-    if (values$Histfield=="NA"){
-      values$histResults <- histNetwork(values$M, min.citations=quantile(values$M$TC,0.75), sep = ";")
+    if (input$histsearch=="FAST"){
+      min.cit=quantile(values$M$TC,0.75)
+    }else{min.cit=1}
+    
+    if (values$Histfield=="NA" | values$histsearch!=input$histsearch){
+      values$histResults <- histNetwork(values$M, min.citations=min.cit, sep = ";")
       values$Histfield="done"
-      
+      values$histsearch=input$histsearch
     }
     
     values$histlog<- capture.output(values$histPlot <- histPlot(values$histResults, n=input$histNodes, size.cex=TRUE , size =input$histsize, labelsize = input$histlabelsize, arrowsize = 0.5))
+  return(values)
   }
   
   socialStructure<-function(input,values){
@@ -1086,13 +1278,95 @@ server <- function(input, output, session) {
     if (input$colsize.cex=="Yes"){size.cex=TRUE}else{size.cex=FALSE}
     if (input$soc.curved=="Yes"){curved=TRUE}else{curved=FALSE}
     
-    values$colnet=networkPlot(values$ColNetRefs, normalize=normalize, n = n, Title = values$Title, type = input$collayout, 
+    type=input$collayout
+    if (input$collayout=="worldmap"){type="auto"}
+    
+    values$colnet=networkPlot(values$ColNetRefs, normalize=normalize, n = n, Title = values$Title, type = type, 
                               size.cex=size.cex, size=input$colsize , remove.multiple=F, edgesize = input$coledgesize, 
                               labelsize=input$collabelsize,label.cex=label.cex, curved=curved,
-                              label.n=label.n,edges.min=input$coledges.min,label.color = F)
+                              label.n=label.n,edges.min=input$coledges.min,label.color = F,alpha=input$colAlpha,remove.isolates = T)
     
     return(values)
     
   }
   
+  countrycollaboration <- function(M,label,edgesize,min.edges){
+    M=metaTagExtraction(M,"AU_CO")
+    net=biblioNetwork(M,analysis="collaboration",network="countries")
+    CO=data.frame(Tab=rownames(net),Freq=diag(net),stringsAsFactors = FALSE)
+    bsk.network=igraph::graph_from_adjacency_matrix(net,mode="undirected")
+    COedges=as.data.frame(igraph::ends(bsk.network,igraph::E(bsk.network),names=TRUE),stringsAsFactors = FALSE)
+    
+    map.world <- map_data("world")
+    map.world$region=toupper(map.world$region)
+    map.world$region=gsub("UK","UNITED KINGDOM",map.world$region)
+    map.world$region=gsub("SOUTH KOREA","KOREA",map.world$region)
+    
+    country.prod <- dplyr::left_join( map.world, CO, by = c('region' = 'Tab')) 
+    
+    #tab=data.frame(country.prod %>%
+    #                 dplyr::group_by(region) %>%
+    #                 dplyr::summarise(Freq=mean(Freq)))
+    
+    #tab=tab[!is.na(tab$Freq),]
+    
+    #tab=tab[order(-tab$Freq),]
+    
+    breaks=as.numeric(round(quantile(CO$Freq,c(0.2,0.4,0.6,0.8,1))))
+    names(breaks)=breaks
+    breaks=log(breaks)
+    data("countries",envir=environment())
+    names(countries)[1]="Tab"
+    
+    COedges=dplyr::inner_join(COedges,countries, by=c('V1'='Tab'))
+    COedges=dplyr::inner_join(COedges,countries, by=c('V2'='Tab'))
+    COedges=COedges[COedges$V1!=COedges$V2,]
+    COedges=count.duplicates(COedges)
+    tab=COedges
+    COedges=COedges[COedges$count>=min.edges,]
+    
+    g=ggplot(country.prod, aes( x = country.prod$long, y = country.prod$lat, group = country.prod$group )) +
+      geom_polygon(aes(fill = log(Freq))) +
+      scale_fill_continuous(low='dodgerblue', high='dodgerblue4',breaks=breaks)+
+      #guides(fill = guide_legend(reverse = T)) +
+      guides(colour=FALSE, fill=FALSE)+
+      geom_curve(data=COedges, aes(x = COedges$Longitude.x , y = COedges$Latitude.x, xend = COedges$Longitude.y, yend = COedges$Latitude.y,     # draw edges as arcs
+                                   color = "firebrick4", size = COedges$count, group=COedges$continent.x),
+                 curvature = 0.33,
+                 alpha = 0.5) +
+      labs(title = "Country Collaboration Map", x = "Latitude", y = "Longitude")+
+      scale_size_continuous(guide = FALSE, range = c(0.25, edgesize))+
+      theme(text = element_text(color = '#333333')
+            ,plot.title = element_text(size = 28)
+            ,plot.subtitle = element_text(size = 14)
+            ,axis.ticks = element_blank()
+            ,axis.text = element_blank()
+            ,panel.grid = element_blank()
+            ,panel.background = element_rect(fill = '#FFFFFF')  #'#333333'
+            ,plot.background = element_rect(fill = '#FFFFFF')
+            ,legend.position = c(.18,.36)
+            ,legend.background = element_blank()
+            ,legend.key = element_blank()
+      )
+    if (isTRUE(label)){
+      CO=dplyr::inner_join(CO,countries, by=c('Tab'='Tab'))
+      g=g+
+        ggrepel::geom_text_repel(data=CO, aes(x = .data$Longitude, y = .data$Latitude, label = .data$Tab, group=.data$continent),             # draw text labels
+                                 hjust = 0, nudge_x = 1, nudge_y = 4,
+                                 size = 3, color = "orange", fontface = "bold")
+    }
+    
+    results=list(g=g,tab=tab)
+    return(results)
+  }
+  
+  count.duplicates <- function(DF){
+    x <- do.call('paste', c(DF, sep = '\r'))
+    ox <- order(x)
+    rl <- rle(x[ox])
+    cbind(DF[ox[cumsum(rl$lengths)],,drop=FALSE],count = rl$lengths)
+    
+  }
+  
+
 } ## End of Server

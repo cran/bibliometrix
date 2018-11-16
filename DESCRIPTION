@@ -1,8 +1,8 @@
 Package: bibliometrix
 Type: Package
 Title: An R-Tool for Comprehensive Science Mapping Analysis
-Version: 2.0.1
-Date: 2018-10-09
+Version: 2.0.2
+Date: 2018-11-15
 Authors@R: c(person("Massimo", "Aria", email = "aria@unina.it", role=c("cre","aut")),
              person("Corrado", "Cuccurullo", email = "cuccurullocorrado@gmail.com", role="aut"))
 Description: Tool for quantitative research in scientometrics and bibliometrics.
@@ -22,10 +22,10 @@ Imports: stats, dplyr, DT, factoextra, FactoMineR, ggraph, ggplot2,
 Suggests: knitr, rmarkdown,
 RoxygenNote: 6.1.0
 NeedsCompilation: no
-Packaged: 2018-10-09 12:30:18 UTC; Massimo
+Packaged: 2018-11-16 11:42:15 UTC; Massimo
 Author: Massimo Aria [cre, aut],
   Corrado Cuccurullo [aut]
 Maintainer: Massimo Aria <aria@unina.it>
 VignetteBuilder: knitr,
 Repository: CRAN
-Date/Publication: 2018-10-09 12:50:03 UTC
+Date/Publication: 2018-11-16 12:00:03 UTC
