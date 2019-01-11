@@ -32,7 +32,7 @@
 #' @param label.color is logical. If TRUE, for each vertex, the label color is the same as its cluster. 
 #' @param label.cex is logical. If TRUE the label size of each vertex is proportional to its degree.  
 #' @param halo is logical. If TRUE communities are plotted using different colors. Default is \code{halo=FALSE}
-#' @param cluster is a character. It indicates the type of cluster to perform among ("none", optimal", "lovain","infomap","edge_betweenness","walktrap").
+#' @param cluster is a character. It indicates the type of cluster to perform among ("none", optimal", "louvain","infomap","edge_betweenness","walktrap").
 #' @param curved is a logical or a number. If TRUE edges are plotted with an optimal curvature. Default is \code{curved=FALSE}. Curved values are any numbers from 0 to 1.
 #' @param weighted This argument specifies whether to create a weighted graph from an adjacency matrix. 
 #' If it is NULL then an unweighted graph is created and the elements of the adjacency matrix gives the number of edges between the vertices. 
@@ -90,7 +90,7 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, degree=NULL, Title="Plo
   
   
   # vertex labels 
-  V(bsk.network)$name <- colnames(NET)
+  V(bsk.network)$name <- tolower(colnames(NET))
   
   
   # Compute node degrees (#links) and use that to set node size:
@@ -101,7 +101,9 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, degree=NULL, Title="Plo
   
   # label size
   if (isTRUE(label.cex)){
-    V(bsk.network)$label.cex <- log(1+(deg/max(deg)[1])*labelsize)}else{
+    lsize=log(1+(deg/max(deg)[1]))*labelsize
+    lsize[lsize<0.5]=0.5  ### min labelsize is fixed to 0.5
+    V(bsk.network)$label.cex <- lsize}else{
       V(bsk.network)$label.cex <- labelsize}
   
  # Select number of vertices to plot
@@ -158,10 +160,16 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, degree=NULL, Title="Plo
       LABEL=V(bsk.network)$name
       if (!is.null(label.n)){
         q=1-(label.n/length(V(bsk.network)$deg))
+        if (q<=0){
+          LABEL=rep("",length(LABEL))
+          V(bsk.network)$labelsize=10
+        } else {
         if (q>1){q=1}
-        if (q<0){q=0}
         q=quantile(V(bsk.network)$deg,q)
         LABEL[V(bsk.network)$deg<q]=""
+        V(bsk.network)$labelsize=10
+        V(bsk.network)$labelsize[V(bsk.network)$deg<q]=0
+        }
       }
     }
     
@@ -193,13 +201,13 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, degree=NULL, Title="Plo
       plot(net_groups,bsk.network1, rescale=T, asp=0, ylim=c(-1,1), xlim=c(-1,1), layout = l, edge.curved=curved, 
            vertex.label.dist = 0.7, vertex.frame.color = adjustcolor('black',alpha), vertex.label.color = adjustcolor('black',min(c(1,alpha+0.1))),
            vertex.color=adjustcolor(V(bsk.network1)$color,alpha),
-           vertex.label.font = 2, vertex.label = tolower(LABEL), main=Title)
+           vertex.label.font = 2, vertex.label = LABEL, main=Title)
       
     }else{
       plot(bsk.network1, rescale=T, asp=0, ylim=c(-1,1), xlim=c(-1,1), layout = l, edge.curved=curved, 
            vertex.label.dist = 0.7, vertex.frame.color = adjustcolor('black',alpha), 
            vertex.color=adjustcolor(V(bsk.network1)$color,alpha),vertex.label.color = adjustcolor(lab.color, min(c(1,alpha+0.2))), 
-           vertex.label.font = 2, vertex.label = tolower(LABEL), main=Title, edge.color=adjustcolor(E(bsk.network1)$color,alpha/2))
+           vertex.label.font = 2, vertex.label = LABEL, main=Title, edge.color=adjustcolor(E(bsk.network1)$color,alpha/2))
     }
     
   }else{net_groups$modularity=rep(1,vcount(bsk.network))} 
@@ -212,7 +220,7 @@ networkPlot<-function(NetMatrix, normalize=NULL, n=NULL, degree=NULL, Title="Plo
   } else {cluster_res=NA}
   
   
-  net=list(graph=bsk.network, graph_pajek=bsk.save, cluster_obj=net_groups, cluster_res=cluster_res,layout=l)
+  net=list(graph=bsk.network1, graph_pajek=bsk.save, cluster_obj=net_groups, cluster_res=cluster_res,layout=l)
   
   return(net)}
 
@@ -233,7 +241,7 @@ delete.isolates <- function(graph, mode = 'all') {
 ### clusteringNetwork
 
 clusteringNetwork <- function(bsk.network,cluster){
-  colorlist= c(brewer.pal(9, 'Set1'), brewer.pal(8, 'Set2'),brewer.pal(12, 'Set3'),brewer.pal(12, 'Paired'))
+  colorlist= c(brewer.pal(9, 'Set1')[-6], brewer.pal(8, 'Set2')[-7], brewer.pal(12, 'Paired')[-11],brewer.pal(12, 'Set3')[-c(2,8,12)])
   
   switch(cluster,
          none={
@@ -256,16 +264,17 @@ clusteringNetwork <- function(bsk.network,cluster){
   )
   
   V(bsk.network)$color <- colorlist[net_groups$membership]
+  
   ### set egde intra-class colors
   V(bsk.network)$community <- net_groups$membership
   El=as.data.frame(get.edgelist(bsk.network,names=F))
   
-  
+  colorlist= c(brewer.pal(9, 'Set1')[-6], brewer.pal(8, 'Set2')[-7], brewer.pal(12, 'Paired')[-11],brewer.pal(12, 'Set3')[-c(2,8,12)])
   E(bsk.network)$color <- apply(El, 1, function(x){
-                        colorlist= c(brewer.pal(9, 'Set1'), brewer.pal(8, 'Set2'),brewer.pal(12, 'Set3'),brewer.pal(12, 'Paired'))
+                        
                         if (V(bsk.network)$community[x[1]] == V(bsk.network)$community[x[2]]){
                           C=colorlist[V(bsk.network)$community[x[1]]]
-                        }else{C='#E8E8E8'}
+                        }else{C='gray70'}
                         return(C)
                         })
   ### end

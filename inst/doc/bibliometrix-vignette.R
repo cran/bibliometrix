@@ -28,15 +28,15 @@ plot(x = results, k = 10, pause = FALSE)
 # M$CR[1]
 
 ## ----Article citation-------------------------------------------------------------------------------------------------
-CR <- citations(M, field = "article", sep = ".  ")
+CR <- citations(M, field = "article", sep = ";")
 cbind(CR$Cited[1:10])
 
 ## ----Author citation--------------------------------------------------------------------------------------------------
-CR <- citations(M, field = "author", sep = ".  ")
+CR <- citations(M, field = "author", sep = ";")
 cbind(CR$Cited[1:10])
 
 ## ----Local Author citation--------------------------------------------------------------------------------------------
-CR <- localCitations(M, sep = ".  ")
+CR <- localCitations(M, sep = ";")
 CR$Authors[1:10,]
 CR$Papers[1:10,]
 
@@ -46,7 +46,7 @@ DF
 
 ## ----h-index----------------------------------------------------------------------------------------------------------
 
-indices <- Hindex(M, authors="BORNMANN L", sep = ";",years=10)
+indices <- Hindex(M, field = "author", elements="BORNMANN L", sep = ";", years = 10)
 
 # Bornmann's impact indices:
 indices$H
@@ -59,7 +59,7 @@ indices$CitationList
 
 authors=gsub(","," ",names(results$Authors)[1:10])
 
-indices <- Hindex(M, authors, sep = ";",years=50)
+indices <- Hindex(M, field = "author", elements=authors, sep = ";", years = 50)
 
 indices$H
 
@@ -161,7 +161,7 @@ net=networkPlot(NetMatrix, n = dim(NetMatrix)[1], Title = "Country Collaboration
 ## ----Co-citation network, fig.height=7, fig.width=7, warning=FALSE----------------------------------------------------
 # Create a co-citation network
 
-NetMatrix <- biblioNetwork(M, analysis = "co-citation", network = "references", sep = ".  ")
+NetMatrix <- biblioNetwork(M, analysis = "co-citation", network = "references", sep = ";")
 
 # Plot the network
 net=networkPlot(NetMatrix, n = 30, Title = "Co-Citation Network", type = "fruchterman", size=T, remove.multiple=FALSE, labelsize=0.7,edgesize = 5)
@@ -186,9 +186,9 @@ CS <- conceptualStructure(M,field="ID", method="CA", minDegree=4, k.max=8, stemm
 ## ----Historical Co-citation network, fig.height=7, fig.width=10, warning=FALSE--------------------------------------------------
 # Create a historical citation network
 options(width=130)
-histResults <- histNetwork(M, min.citations = 10, sep = ".  ")
+histResults <- histNetwork(M, min.citations = 10, sep = ";")
 
 # Plot a historical co-citation network
-net <- histPlot(histResults, n=10, size = 10, labelsize=5, size.cex=TRUE, arrowsize = 0.5, color = TRUE)
+net <- histPlot(histResults, n=15, size = 20, labelsize=5, size.cex=TRUE, arrowsize = 0.5, color = TRUE)
 
 

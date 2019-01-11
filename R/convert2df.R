@@ -257,9 +257,9 @@
 convert2df<-function(file,dbsource="isi",format="plaintext"){
 
   cat("\nConverting your",dbsource,"collection into a bibliographic dataframe\n\n")
-  if (length(setdiff(dbsource,c("isi","scopus","pubmed","cochrane")))>0){
+  if (length(setdiff(dbsource,c("isi","scopus","pubmed","cochrane","generic")))>0){
     cat("\n 'dbsource' argument is not properly specified")
-    cat("\n 'dbsource' argument has to be a character string matching 'isi, 'scopus' or 'pubmed'.\n")}
+    cat("\n 'dbsource' argument has to be a character string matching 'isi, 'scopus', 'generic', or 'pubmed'.\n")}
   if (length(setdiff(format,c("plaintext","bibtex","pubmed","cochrane")))>0){
     cat("\n 'format' argument is not properly specified")
     cat("\n 'format' argument has to be a character string matching 'plaintext or 'bibtex'.\n")}
@@ -269,21 +269,22 @@ convert2df<-function(file,dbsource="isi",format="plaintext"){
   switch(dbsource,
     isi={
       switch(format,
-             bibtex={M=isibib2df(file)},
+             bibtex={M=bib2df(file,dbsource="isi")},
              plaintext={M=isi2df(file)}
       )},
-    scopus={M=scopus2df(file)
+    scopus={M=bib2df(file,dbsource="scopus")
+    },
+    generic={print("SI")
+      M=bib2df(file,dbsource="generic")
     },
     pubmed={M=pubmed2df(file)
-    M$CR="none"
     },
     cochrane={M=cochrane2df(file)
-    M$CR="none"
     }
 )
   if ("PY" %in% names(M)){M$PY=as.numeric(M$PY)} else {M$PY=NA}
   if ("TC" %in% names(M)){M$TC=as.numeric(M$TC)} else {M$TC=NA}
-  
+  if (!("CR" %in% names(M))){M$CR="none"}
   if (dbsource!="cochrane"){M$AU=gsub(intToUtf8(8217),intToUtf8(39),M$AU)}
   
   cat("Done!\n\n")
@@ -319,8 +320,6 @@ convert2df<-function(file,dbsource="isi",format="plaintext"){
     }
  
   row.names(M) <- SR
-    
-  
   
   return(M)
 
