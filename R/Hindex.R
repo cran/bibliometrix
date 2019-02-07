@@ -47,6 +47,7 @@
 
 Hindex <- function(M, field="author", elements, sep = ";",years=10){
   
+  #elements=paste("\\\b",elements,"\\\b",sep="")
   M$TC=as.numeric(M$TC)
   M$PY=as.numeric(M$PY)
   Today=as.numeric(substr(Sys.time(),1,4))
@@ -58,8 +59,9 @@ Hindex <- function(M, field="author", elements, sep = ";",years=10){
   switch(field,
          author={
            AU=M$AU
-           AU=gsub(","," ",AU)
-           AU=gsub("  "," ",AU)
+           AU=trimES(gsub(","," ",AU))
+           i=which(regexpr("ANONYMOUS",elements)>-1)
+           if(length(i)>0){elements=elements[-i]}
            Name="Author"
            },
          source={
@@ -74,7 +76,9 @@ Hindex <- function(M, field="author", elements, sep = ";",years=10){
   TotalCitations=list()
   for (j in 1:length(elements)){
     author=elements[j]
-    ind=which(regexpr(author,AU)!=-1)
+    if (field=="source"){ind=which(AU==author)} else{
+      ind=which(regexpr(author,AU)!=-1)
+    }
     
     if (length(ind)>0){
     range=as.numeric(format(Sys.Date(),'%Y'))-min(as.numeric(M$PY[ind]))+1
@@ -99,4 +103,5 @@ Hindex <- function(M, field="author", elements, sep = ";",years=10){
   names(H)[1]=Name
   results=list(H=H,CitationList=TotalCitations)
   return(results)
-  }
+}
+

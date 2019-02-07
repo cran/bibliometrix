@@ -415,9 +415,9 @@ Local citations measures how many times an author (or a document) included in th
 
 To obtain the most frequent local cited authors:
 ```{r Local Author citation}
-CR <- localCitations(M, sep = ";")
-CR$Authors[1:10,]
-CR$Papers[1:10,]
+#CR <- localCitations(M, sep = ";")
+#CR$Authors[1:10,]
+#CR$Papers[1:10,]
 ```
 
 
@@ -472,6 +472,25 @@ indices <- Hindex(M, field = "author", elements=authors, sep = ";", years = 50)
 
 indices$H
 ```
+
+
+## Top-Authors' Productivity over the Time
+
+The function *AuthorProdOverTime* calculates and plots the authors' production (in terms of number of publications, and total citations per year) over the time.
+
+Function arguments are: *M* a bibliographic data frame; *k* is the number of *k* Top Authors; *graph* is a logical. If *graph=TRUE*, the function plots the author production over time graph. 
+
+```{r AuthorProdOverTime, fig.height=6, fig.width=8}
+
+topAU <- authorProdOverTime(M, k = 10, graph = TRUE)
+
+## Table: Author's productivity per year
+head(topAU$dfAU)
+
+## Table: Auhtor's documents list
+#head(topAU$dfPapersAU)
+```
+
 
 
 ## Lotka's Law coefficient estimation
@@ -844,7 +863,7 @@ options(width=130)
 histResults <- histNetwork(M, min.citations = 10, sep = ";")
 
 # Plot a historical co-citation network
-net <- histPlot(histResults, n=15, size = 20, labelsize=5, size.cex=TRUE, arrowsize = 0.5, color = TRUE)
+net <- histPlot(histResults, n=15, size = 20, labelsize=10, size.cex=TRUE, arrowsize = 0.5, color = TRUE)
 
 ```
 

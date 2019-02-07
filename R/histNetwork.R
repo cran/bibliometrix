@@ -33,17 +33,21 @@
 #'
 #' @export
 
-histNetwork<-function(M, min.citations = 0, sep = ";"){
+histNetwork<-function(M, min.citations = 1, sep = ";"){
   
   #if (M$DB[1]!="ISI"){cat("\nSorry, but for the moment histNetwork works only with WoS collections\n\n")
   #  return()}
+  min.citations=max(c(1,min.citations))
   M$TC=as.numeric(M$TC)
-  if (!("SR" %in% names(M))){M=metaTagExtraction(M,Field="SR")} 
+  M=M[!is.na(M$TC),]
+  
+  if (!("SR_FULL" %in% names(M))){M=metaTagExtraction(M,Field="SR")} 
   M=M[order(M$PY),]
   
   M2=M[M$TC>=min.citations,]
   if (dim(M2)[1]==0){cat("\nNo document has a number of citations above the fixed threshold\n");return(NULL)}
   
+  #M2$SR=M2$SR_FULL
   
   N=dim(M2)[1]
   N2=dim(M)[1]
@@ -56,7 +60,7 @@ histNetwork<-function(M, min.citations = 0, sep = ";"){
        ## matching by SR
             for (i in 1:N){
                 if (i%%100==0 | i==N) cat("Articles analysed  ",i,"\n")
-                x=M2$SR[i]
+                x=M2$SR_FULL[i]
                 Year=M2$PY[i]
                 pos = grep(x, M$CR[M$PY>=Year])
                 pos = rows[M$PY>=Year][pos]

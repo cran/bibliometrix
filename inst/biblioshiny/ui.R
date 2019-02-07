@@ -11,6 +11,7 @@ if (!require(colourpicker)){install.packages("colourpicker")}
 if (!require(treemap)){install.packages("treemap")}
 if (!require(ggmap)){install.packages("ggmap"); require(ggmap, quietly=TRUE)}
 if (!require(visNetwork)){install.packages("visNetwork"); require(visNetwork, quietly=TRUE)}
+if (!require(plotly)){install.packages("plotly"); require(plotly, quietly=TRUE)}
 require(Matrix, quietly = TRUE)
 
 # Main NavBar ----
@@ -79,6 +80,8 @@ tabPanel(
   "Load", 
   sidebarLayout(
     sidebarPanel(width=3,
+                 h3(em(strong("Loading and Converting "))),
+                 br(),
       selectInput("dbsource", 
                   label = "Database",
                   choices = c("Web of Knowledge"="isi", 
@@ -135,11 +138,19 @@ tabPanel(
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
+                                   h3(em(strong("Filtering "))),
+                                   br(),
                                    uiOutput("textDim"),
                                    uiOutput("selectType"),
                                    uiOutput("sliderPY"),
                                    uiOutput("sliderTC"),
-                                   uiOutput("selectSource")
+                                   #uiOutput("selectSource"),
+                                   selectInput("bradfordSources", 
+                                               label = "Source by Bradford Law Zones",
+                                               choices = c("Core Sources"="core", 
+                                                           "Core + Zone 2 Sources"="zone2",
+                                                           "All Sources"="all"),
+                                               selected = "all")
                                    
                       ),
                       mainPanel(DT::DTOutput("dataFiltered"))
@@ -154,21 +165,47 @@ navbarMenu("Dataset",
            "  ",
            tabPanel("Main Information",
                     sidebarLayout(
-                      sidebarPanel(width=3),
+                      sidebarPanel(width=3,
+                                   h3(em(strong("Main Information about the collection "))),
+                                   br()),
                       mainPanel(
                         shinycssloaders::withSpinner(DT::DTOutput(outputId = "MainInfo"))
                     )
            )),
            tabPanel("Annual Scientific Production",
                     sidebarLayout(
-                      sidebarPanel(width=3),
+                      sidebarPanel(width=3,
+                                   "  ",
+                                   "  ",
+                                   h3(em(strong("Annual Scientific Production "))),
+                                   "  "
+                                   ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "AnnualProdPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "AnnualProdPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("AnnualProdTable"))
+                                    ))
+                      )
+                    )
+           ),
+           tabPanel("Average Citations per Year",
+                    sidebarLayout(
+                      sidebarPanel(width=3,
+                                   "  ",
+                                   "  ",
+                                   h3(em(strong("Average Citations per Year "))),
+                                   "  "
+                      ),
+                      mainPanel(
+                        tabsetPanel(type = "tabs",
+                                    tabPanel("Plot",
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "AnnualTotCitperYearPlot", height = 700))
+                                    ),
+                                    tabPanel("Table",
+                                             shinycssloaders::withSpinner(DT::DTOutput("AnnualTotCitperYearTable"))
                                     ))
                       )
                     )
@@ -183,8 +220,8 @@ navbarMenu("Sources",
            tabPanel("Most Relevant Sources",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   "  ",
-                                   "  ",
+                                   h3(em(strong("Most Relevant Sources "))),
+                                   br(),
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostRelSourcesK", 
@@ -194,7 +231,7 @@ navbarMenu("Sources",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "MostRelSourcesPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelSourcesPlot",height = 700))
                                     ),
                                     tabPanel("Table",
                                               shinycssloaders::withSpinner(DT::DTOutput("MostRelSourcesTable"))
@@ -207,12 +244,14 @@ navbarMenu("Sources",
                     
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   helpText("")            
+                                   h3(em(strong("Source clustering"))),
+                                   h4(em(strong("through Bradford's Law "))),
+                                   br()            
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "bradfordPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "bradfordPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("bradfordTable"))
@@ -221,12 +260,12 @@ navbarMenu("Sources",
                       
                     )
            ),
-           ### SOURCE HINDEX MENU ----
-           tabPanel("Source's H-index",
+           ### SOURCE IMPACT MENU ----
+           tabPanel("Source Impact",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   "  ",
-                                   "  ",
+                                   h3(em(strong("Source Impact"))),
+                                   br(),            
                                    actionButton("applyHsource", "Apply!"),
                                    "  ",
                                    "  ",
@@ -248,7 +287,7 @@ navbarMenu("Sources",
                         
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "SourceHindexPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "SourceHindexPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput(outputId = "SourceHindexTable"))
@@ -263,6 +302,8 @@ navbarMenu("Sources",
                     sidebarLayout(
                       # Sidebar with a slider and selection inputs
                       sidebarPanel(width=3,
+                                   h3(em(strong("Source Dynamics"))),
+                                   br(),   
                                    selectInput("cumSO", "Occurrences",
                                                choices = c("Cumulate" = "Cum",
                                                            "Per year" = "noCum"),
@@ -300,18 +341,25 @@ navbarMenu("Authors",
            tabPanel("Most Relevant Authors",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   "  ",
-                                   "  ",
+                                   h3(em(strong("Most Relevant Authors"))),
+                                   br(),
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostRelAuthorsK", 
                                                 label=("Number of Authors"), 
-                                                value = 20)
+                                                value = 20),
+                                   "  ",
+                                   selectInput("AuFreqMeasure", 
+                                               label = "Frequency measure",
+                                               choices = c("N. of Documents "="t", 
+                                                           "Percentage"="p",
+                                                           "Frequency Fractionalized"="f"),
+                                               selected = "t")
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "MostRelAuthorsPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelAuthorsPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostRelAuthorsTable"))
@@ -320,12 +368,12 @@ navbarMenu("Authors",
                     )
            ),
            
-           ### AUTHOR'S PRODUCTION OVER TIME  ----
-           tabPanel("Author's Production over Time",
+           ### AUTHORS' PRODUCTION OVER TIME  ----
+           tabPanel("Authors' Production over Time",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   "  ",
-                                   "  ",
+                                   h3(em(strong("Authors' Production over Time"))),
+                                   br(),
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("TopAuthorsProdK", 
@@ -335,10 +383,13 @@ navbarMenu("Authors",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "TopAuthorsProdPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "TopAuthorsProdPlot", height=700))
                                     ),
-                                    tabPanel("Table",
+                                    tabPanel("Table - Top Authors' Production per Year",
                                              shinycssloaders::withSpinner(DT::DTOutput("TopAuthorsProdTable"))
+                                    ),
+                                    tabPanel("Table - Top Author's Documents",
+                                             shinycssloaders::withSpinner(DT::DTOutput("TopAuthorsProdTablePapers"))
                                     ))
                       )
                     )
@@ -349,12 +400,14 @@ navbarMenu("Authors",
                     
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   helpText("")            
+                                   h3(em(strong("Author Productivity"))),
+                                   h4(em(strong("through Lotka's Law"))),
+                                   br()         
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "lotkaPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "lotkaPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("lotkaTable"))
@@ -363,12 +416,12 @@ navbarMenu("Authors",
                       
                     )
            ),
-           ### AUTHOR HINDEX ----
-           tabPanel("Author's H-index",
+           ### AUTHOR IMPACT ----
+           tabPanel("Author Impact",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   "  ",
-                                   "  ",
+                                   h3(em(strong("Author Impact"))),
+                                   br(),
                                    actionButton("applyHauthor", "Apply!"),
                                    "  ",
                                    "  ",
@@ -390,7 +443,7 @@ navbarMenu("Authors",
                         
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "AuthorHindexPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "AuthorHindexPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput(outputId = "AuthorHindexTable"))
@@ -406,8 +459,8 @@ navbarMenu("Authors",
            tabPanel("Most Relevant Affiliations",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   "  ",
-                                   "  ",
+                                   h3(em(strong("Most Relevant Affiliations"))),
+                                   br(),
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostRelAffiliationsK", 
@@ -417,7 +470,7 @@ navbarMenu("Authors",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "MostRelAffiliationsPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelAffiliationsPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostRelAffiliationsTable"))
@@ -432,8 +485,8 @@ navbarMenu("Authors",
            tabPanel("Corresponding Author's Country",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   "  ",
-                                   "  ",
+                                   h3(em(strong("Corresponding Author's Country"))),
+                                   br(),
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostRelCountriesK", 
@@ -443,7 +496,7 @@ navbarMenu("Authors",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "MostRelCountriesPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelCountriesPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostRelCountriesTable"))
@@ -455,13 +508,14 @@ navbarMenu("Authors",
            tabPanel("Country Scientific Production",
                     
                     sidebarLayout(
-                      sidebarPanel(width=3
-                                   ,helpText("")            
+                      sidebarPanel(width=3,
+                                   h3(em(strong("Country Scientific Production"))),
+                                   br()
                       ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "countryProdPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "countryProdPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("countryProdTable"))
@@ -474,8 +528,8 @@ navbarMenu("Authors",
            tabPanel("Most Cited Countries",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   "  ",
-                                   "  ",
+                                   h3(em(strong("Most Cited Countries"))),
+                                   br(),
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    selectInput("CitCountriesMeasure", 
@@ -491,7 +545,7 @@ navbarMenu("Authors",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "MostCitCountriesPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostCitCountriesPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostCitCountriesTable"))
@@ -509,8 +563,8 @@ navbarMenu("Documents",
            tabPanel("Most Global Cited Documents",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   "  ",
-                                   "  ",
+                                   h3(em(strong("Most Global Cited Documents"))),
+                                   br(),
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostCitDocsK", 
@@ -527,7 +581,7 @@ navbarMenu("Documents",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "MostCitDocsPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostCitDocsPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostCitDocsTable"))
@@ -538,8 +592,8 @@ navbarMenu("Documents",
            tabPanel("Most Local Cited Documents",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   "  ",
-                                   "  ",
+                                   h3(em(strong("Most Local Cited Documents"))),
+                                   br(),
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostLocCitDocsK", 
@@ -557,7 +611,7 @@ navbarMenu("Documents",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "MostLocCitDocsPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostLocCitDocsPlot",height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostLocCitDocsTable"))
@@ -573,8 +627,8 @@ navbarMenu("Documents",
            tabPanel("Most Local Cited References",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   "  ",
-                                   "  ",
+                                   h3(em(strong("Most Local Cited References"))),
+                                   br(),
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostCitRefsK", 
@@ -591,7 +645,7 @@ navbarMenu("Documents",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             shinycssloaders::withSpinner(plotOutput(outputId = "MostCitRefsPlot"))
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostCitRefsPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostCitRefsTable"))
@@ -604,17 +658,17 @@ navbarMenu("Documents",
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
+                                   h3(em(strong("Reference Spectroscopy"))),
+                                   br(),
+                                   h4(em(strong("Parameters: "))),
                                    "  ",
-                                   "  ",
-                                   h4(em(strong("Graphical Parameters: "))),
-                                   "  ",
-                                   sliderInput("sliderYears",
-                                               label = "Timespan",
-                                               min = 1700,
-                                               max = as.numeric(substr(Sys.Date(),1,4)),
-                                               step = 10, sep="",
-                                               value = c(1700, as.numeric(substr(Sys.Date(),1,4)))
-                                   ),
+                                   # sliderInput("sliderYears",
+                                   #             label = "Timespan",
+                                   #             min = 1700,
+                                   #             max = as.numeric(substr(Sys.Date(),1,4)),
+                                   #             step = 10, sep="",
+                                   #             value = c(1700, as.numeric(substr(Sys.Date(),1,4)))
+                                   # ),
                                    
                                    selectInput(inputId = "rpysSep", 
                                                label = "Field separator character", 
@@ -627,7 +681,7 @@ navbarMenu("Documents",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Graph", 
-                                             withSpinner(plotOutput(outputId = "rpysPlot"))),
+                                             withSpinner(plotlyOutput(outputId = "rpysPlot", height = 700))),
                                     tabPanel("RPY Table", 
                                              shinycssloaders::withSpinner(DT::DTOutput(
                                                outputId = "rpysTable"))),
@@ -647,6 +701,10 @@ navbarMenu("Documents",
                     sidebarLayout(
                       # Sidebar with a slider and selection inputs
                       sidebarPanel(width=3,
+                                   h3(em(strong("Most Frequent Words"))),
+                                   br(),
+                                   h4(em(strong("Parameters:"))),
+                                   " ",
                                    selectInput("MostRelWords", "Field",
                                                choices = c("Keywords Plus" = "ID",
                                                            "Author's keywords" = "DE",
@@ -662,7 +720,7 @@ navbarMenu("Documents",
                       mainPanel(
                         tabsetPanel(type = "tabs",
                                     tabPanel("Plot",
-                                             withSpinner(plotOutput(outputId = "MostRelWordsPlot"))
+                                             withSpinner(plotlyOutput(outputId = "MostRelWordsPlot", height = 700))
                                     ),
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("MostRelWordsTable"))
@@ -677,6 +735,10 @@ navbarMenu("Documents",
                     sidebarLayout(
                       # Sidebar with a slider and selection inputs
                       sidebarPanel(width=3,
+                                   h3(em(strong("WordCloud"))),
+                                   br(),
+                                   h4(em(strong("Graphical Parameters:"))),
+                                   " ",
                                    selectInput("summaryTerms", "Field",
                                                choices = c("Keywords Plus" = "ID",
                                                            "Author's keywords" = "DE",
@@ -734,6 +796,10 @@ navbarMenu("Documents",
                     sidebarLayout(
                       # Sidebar with a slider and selection inputs
                       sidebarPanel(width=3,
+                                   h3(em(strong("TreeMap "))),
+                                   br(),
+                                   h4(em(strong("Graphical Parameters:"))),
+                                   " ",
                                    selectInput("treeTerms", "Field",
                                                choices = c("Keywords Plus" = "ID",
                                                            "Author's keywords" = "DE",
@@ -780,6 +846,10 @@ navbarMenu("Documents",
                     sidebarLayout(
                       # Sidebar with a slider and selection inputs
                       sidebarPanel(width=3,
+                                   h3(em(strong("Word Dynamics"))),
+                                   br(),
+                                   h4(em(strong("Graphical Parameters:"))),
+                                   " ",
                                    selectInput("growthTerms", "Field",
                                                choices = c("Keywords Plus" = "ID",
                                                            "Author's keywords" = "DE",
@@ -821,12 +891,14 @@ navbarMenu("Conceptual Structure",
            #### Co-occurrence Network ----
            "  ",
            "  ",
-           "Co-Word Analysis",
+           "Network Approach",
            tabPanel("Co-occurrence Network",
                     
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
+                                   h3(em(strong("Co-occurrence Network"))),
+                                   br(),
                          
                                    actionButton("applyCoc", "Apply!"),
                                    downloadButton("network.coc", "Save Pajek"),
@@ -844,14 +916,14 @@ navbarMenu("Conceptual Structure",
                                       selected = "ID"),
                         
                         selectInput("layout", 
-                                    label = "Layout",
-                                    choices = c("auto", 
-                                                "circle",
-                                                "fruchterman",
-                                                "kamada",
-                                                "mds",
-                                                "sphere",
-                                                "star"),
+                                    label = "Network Layout",
+                                    choices = c("Automatic layout"="auto", 
+                                                "Circle"="circle",
+                                                "Fruchterman & Reingold"="fruchterman",
+                                                "Kamada & Kawai"="kamada",
+                                                "MultiDimensional Scaling"="mds",
+                                                "Sphere"="sphere",
+                                                "Star"="star"),
                                     selected = "auto"),
                         
                         selectInput("normalize", 
@@ -864,11 +936,22 @@ navbarMenu("Conceptual Structure",
                                                 "equivalence"),
                                     selected = "association"),
                         
+                        selectInput("cocCluster", 
+                                    label = "Clustering Algorithm",
+                                    choices = c("None" = "none", 
+                                                "Edge Betweenness" = "edge_betweenness",
+                                                "InfoMap" = "infomap",
+                                                "Leading Eigenvalues" = "leading_eigen",
+                                                "Louvain" = "louvain",
+                                                "Spinglass" = "spinglass",
+                                                "Walktrap" = "walktrap"),
+                                    selected = "walktrap"),
+                        
                         sliderInput(inputId = "Nodes",
                                     label = "Number of Nodes",
                                     min = 5,
                                     max = 1000,
-                                    value = 30),
+                                    value = 50),
                         
                         numericInput("edges.min", 
                                      label=("Min edges"),
@@ -928,7 +1011,7 @@ navbarMenu("Conceptual Structure",
                     
                     mainPanel(
                       tabsetPanel(type = "tabs",
-                                  tabPanel("Graph", 
+                                  tabPanel("Map", 
                                            shinycssloaders::withSpinner(visNetworkOutput("cocPlot", height = "750px",width = "1100px"))),
                                   tabPanel("Table", 
                                            shinycssloaders::withSpinner(DT::DTOutput(
@@ -939,12 +1022,174 @@ navbarMenu("Conceptual Structure",
                     )
            ), ## End of tabPanel ("CS network")
            
+           ### Thematic Map ----
+           #"  ",
+           #"  ",
+           #"Thematic Analysis",
+           tabPanel("Thematic Map",
+                    sidebarLayout(
+                      sidebarPanel(width=3,
+                                   h3(em(strong("Thematic Map"))),
+                                   br(),
+                                   
+                                   actionButton("applyTM", "Apply!"),
+                                   "  ",
+                                   "  ",
+                                   h4(em(strong("TM Parameters: "))),
+                                   "  ",
+                                   selectInput("TMfield", 
+                                               label = "Field",
+                                               choices = c("Keywords Plus" = "ID", 
+                                                           "Author's Keywords" = "DE",
+                                                           "Titles" = "TI",
+                                                           "Abstracts" = "AB"),
+                                               selected = "ID"),
+                                   conditionalPanel(
+                                     condition = "input.TMfield == 'TI' | input.TMfield == 'AB'",
+                                     selectInput("TMstemming", label="Word Stemming",
+                                                 choices = c("Yes" = TRUE,
+                                                             "No" = FALSE),
+                                                 selected = FALSE)),
+                                   sliderInput("TMn", label="Number of Words",value=250,min=50,max=500,step=10),
+                                   sliderInput("TMfreq", label="Min Cluster Frequency",value=5,min=1,max=100,step=1),
+                                   sliderInput("sizeTM", label="Label size",value=0.3,min=0.1,max=1,step=0.05)
+                      ),
+                      mainPanel("Thematic Map",
+                                tabsetPanel(type = "tabs",
+                                            tabPanel("Map",
+                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot", height = 700))
+                                            ),
+                                            tabPanel("Network",
+                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot", height = "750px",width = "1100px"))),
+                                            tabPanel("Table",
+                                                     shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable"))
+                                            )
+                                )
+                                
+                      )
+                      
+                    )
+           ), ## End of tabPanel ("Thematic Map")
+           
+           ### Thematic Evolution ----
+           tabPanel("Thematic Evolution",
+                    sidebarLayout(
+                      sidebarPanel(width=3,
+                                   h3(em(strong("Thematic Evolution"))),
+                                   br(),
+                                   actionButton("applyTE", "Apply!"),
+                                   br(),
+                                   h4(em(strong("TE Parameters: "))),
+                                   "  ",
+                                   selectInput("TEfield", 
+                                               label = "Field",
+                                               choices = c("Keywords Plus" = "ID", 
+                                                           "Author's Keywords" = "DE",
+                                                           "Titles" = "TI",
+                                                           "Abstracts" = "AB"),
+                                               selected = "ID"),
+                                   
+                                   sliderInput("nTE", label="Number of Words",value=250,min=50,max=500,step=10),
+                                   sliderInput("fTE", label="Min Cluster Frequency",value=5,min=1,max=100,step=1),
+                                   selectInput("TEmeasure", 
+                                               label = "Weight index",
+                                               choices = c("Inclusion Index" = "inclusion", 
+                                                           "Stability Index" = "stability"
+                                               ),
+                                               selected = "inclusion"),
+                                   sliderInput("minFlowTE", label="Min Weigth Index",value=0.1,min=0.02,max=1,step=0.02),
+                                   sliderInput("sizeTE", label="Label size",value=0.3,min=0.1,max=1,step=0.05),
+                                   br(),
+                                   h4(em(strong("Time Slices: "))),
+                                   numericInput("numSlices", label="Number of Cutting Points",min=1,max=4,value=1),
+                                   "Please, write the cutting points (in year) for your collection",
+                                   uiOutput("sliders")
+                                   
+                                   
+                      ),
+                      mainPanel("Thematic Evolution",
+                                
+                                tabsetPanel(type = "tabs",
+                                            tabPanel("Thematic Evolution", tabsetPanel(type="tabs",
+                                              tabPanel("Map",
+                                                       shinycssloaders::withSpinner(networkD3::sankeyNetworkOutput(outputId = "TEPlot",height = "600px"))
+                                                      ),
+                                              tabPanel("Table",
+                                                       shinycssloaders::withSpinner(DT::DTOutput(outputId = "TETable"))
+                                                      ))
+                                            ),
+                                            tabPanel("Time Slice 1", tabsetPanel(type="tabs",
+                                                                                          tabPanel("Thematic Map",
+                                                                                                    shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot1", height = 700))
+                                                                                            ),
+                                                                                          tabPanel("Network",
+                                                                                                    shinycssloaders::withSpinner(visNetworkOutput("NetPlot1", height = "750px",width = "1100px"))
+                                                                                            ),
+                                                                                          tabPanel("Table",
+                                                                                                    shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable1"))
+                                                                                          ))      
+                                            ),
+                                            tabPanel("Time Slice 2", tabsetPanel(type="tabs",
+                                                                                            tabPanel("Thematic Map",
+                                                                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot2", height = 700))
+                                                                                            ),
+                                                                                            tabPanel("Network",
+                                                                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot2", height = "750px",width = "1100px"))
+                                                                                            ),
+                                                                                            tabPanel("Table",
+                                                                                                    shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable2"))
+                                                                                            )) 
+                                            ),
+                                            tabPanel("Time Slice 3", tabsetPanel(type="tabs",
+                                                                                            tabPanel("Thematic Map",
+                                                                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot3", height = 700))
+                                                                                            ),
+                                                                                            tabPanel("Network",
+                                                                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot3", height = "750px",width = "1100px"))
+                                                                                            ),
+                                                                                            tabPanel("Table",
+                                                                                                     shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable3"))
+                                                                                            )) 
+                                            ),
+                                            tabPanel("Time Slice 4", tabsetPanel(type="tabs",
+                                                                                            tabPanel("Thematic Map",
+                                                                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot4", height = 700))
+                                                                                            ),
+                                                                                            tabPanel("Network",
+                                                                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot4", height = "750px",width = "1100px"))
+                                                                                            ),
+                                                                                            tabPanel("Table",
+                                                                                                      shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable4"))
+                                                                                            )) 
+                                            ),
+                                            tabPanel("Time Slice 5", tabsetPanel(type="tabs",
+                                                                                            tabPanel("Thematic Map",
+                                                                                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "TMPlot5", height = 700))
+                                                                                            ),
+                                                                                            tabPanel("Network",
+                                                                                                     shinycssloaders::withSpinner(visNetworkOutput("NetPlot5", height = "750px",width = "1100px"))
+                                                                                            ),
+                                                                                            tabPanel("Table",
+                                                                                                     shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable5"))
+                                                                                            ))
+                                            )
+                                )
+                                
+                      )
+                    )
+                    
+           ), ## End of tabPanel ("Thematic Map")
            ### Factorial Analysis ----
+           "  ",
+           "  ",
+           "Factorial Approach",
            tabPanel("Factorial Analysis",
                     
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
+                                   h3(em(strong("Factorial Analysis"))),
+                                   br(),
                                    actionButton("applyCA", "Apply!"),
                                    
                         
@@ -983,7 +1228,7 @@ navbarMenu("Conceptual Structure",
                           value = 10),
                         numericInput("CSdoc", 
                                      label=("Num. of documents"), 
-                                     value = 10)
+                                     value = 20)
                         
                       ),
                       
@@ -1002,92 +1247,11 @@ navbarMenu("Conceptual Structure",
                           )
                       )
                     )
-           ), ## End of tabPanel ("Correspondence Analysis")
+           ) ## End of tabPanel ("Correspondence Analysis")
            
-           ### Thematic Map ----
-           "  ",
-           "  ",
-           "Thematic Analysis",
-           tabPanel("Thematic Map",
-                    sidebarLayout(
-                      sidebarPanel(width=3,
-                        
-                                   actionButton("applyTM", "Apply!"),
-                                   "  ",
-                                   "  ",
-                                   h4(em(strong("TM Parameters: "))),
-                                   "  ",
-                                   selectInput("TMfield", 
-                                               label = "Field",
-                                               choices = c("Keywords Plus" = "ID", 
-                                                           "Author's Keywords" = "DE",
-                                                           "Titles" = "TI",
-                                                           "Abstracts" = "AB"),
-                                               selected = "ID"),
-                                   sliderInput("TMn", label="Number of Words",value=250,min=50,max=500,step=10),
-                                   sliderInput("TMfreq", label="Min Cluster Frequency",value=5,min=1,max=100,step=1)
-                                   ),
-                    mainPanel("Thematic Map",
-                              tabsetPanel(type = "tabs",
-                                tabPanel("Map",
-                                  shinycssloaders::withSpinner(plotOutput(outputId = "TMPlot"))
-                                ),
-                              tabPanel("Table",
-                                shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTable"))
-                                )
-                              )
-                    
-                    )
-                    
-            )
-           ), ## End of tabPanel ("Thematic Map")
+
            
-           ### Thematic Evolution ----
-           tabPanel("Thematic Evolution",
-                    sidebarLayout(
-                      sidebarPanel(width=3,
-                                   
-                                   "  ",
-                                   "  ",
-                                   h4(em(strong("TE Parameters: "))),
-                                   "  ",
-                                   selectInput("TEfield", 
-                                               label = "Field",
-                                               choices = c("Keywords Plus" = "ID", 
-                                                           "Author's Keywords" = "DE",
-                                                           "Titles" = "TI",
-                                                           "Abstracts" = "AB"),
-                                               selected = "ID"),
-                                   sliderInput("nTE", label="Number of Words",value=250,min=50,max=500,step=10),
-                                   sliderInput("fTE", label="Min Cluster Frequency",value=5,min=1,max=100,step=1),
-                                   selectInput("TEmeasure", 
-                                               label = "Weight index",
-                                               choices = c("Inclusion Index" = "inclusion", 
-                                                           "Stability Index" = "stability"
-                                                           ),
-                                               selected = "inclusion"),
-                                   numericInput("numSlices", label="Number of Cutting Points",min=1,max=4,value=1),
-                                   "Please, write the cutting points (in year) for your collection",
-                                   uiOutput("sliders"),
-                                   actionButton("applyTE", "Apply!")
-                                   
-                      ),
-                      mainPanel("Thematic Evolution",
-                                
-                                tabsetPanel(type = "tabs",
-                                            tabPanel("Map",
-                                                     shinycssloaders::withSpinner(networkD3::sankeyNetworkOutput(outputId = "TEPlot",height = "600px"))
-                                            ),
-                                            tabPanel("Table",
-                                                     shinycssloaders::withSpinner(DT::DTOutput(outputId = "TETable"))
-                                            )
-                                )
-                                
-                                )
-                    )
-                    
-           ) ## End of tabPanel ("Thematic Map")
-           
+          
 ),
 
 ### Intellectual Structure ----
@@ -1097,6 +1261,8 @@ navbarMenu("Intellectual Structure",
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
+                                   h3(em(strong("Co-cocitation Network"))),
+                                   br(),
                                    actionButton("applyCocit", "Apply!"),
                                    downloadButton("network.cocit", "Save Pajek"),
                                    downloadButton("networkCocit.fig", "Save Fig"),
@@ -1120,21 +1286,32 @@ navbarMenu("Intellectual Structure",
                                   selected = "';'"),
                         
                         selectInput("citlayout", 
-                                    label = "Layout",
-                                    choices = c("auto", 
-                                                "circle",
-                                                "fruchterman",
-                                                "kamada",
-                                                "mds",
-                                                "sphere",
-                                                "star"),
+                                    label = "Network Layout",
+                                    choices = c("Automatic layout"="auto", 
+                                                "Circle"="circle",
+                                                "Fruchterman & Reingold"="fruchterman",
+                                                "Kamada & Kawai"="kamada",
+                                                "MultiDimensional Scaling"="mds",
+                                                "Sphere"="sphere",
+                                                "Star"="star"),
                                     selected = "auto"),
+                        
+                        selectInput("cocitCluster", 
+                                    label = "Clustering Algorithm",
+                                    choices = c("None" = "none", 
+                                                "Edge Betweenness" = "edge_betweenness",
+                                                "InfoMap" = "infomap",
+                                                "Leading Eigenvalues" = "leading_eigen",
+                                                "Louvain" = "louvain",
+                                                "Spinglass" = "spinglass",
+                                                "Walktrap" = "walktrap"),
+                                    selected = "walktrap"),
                         
                         sliderInput(inputId = "citNodes",
                                     label = "Number of Nodes",
                                     min = 5,
-                                    max = 250,
-                                    value = 30),
+                                    max = 1000,
+                                    value = 50),
                         numericInput("citedges.min", 
                                      label=("Min edges"),
                                      value = 2,
@@ -1215,6 +1392,8 @@ navbarMenu("Intellectual Structure",
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
+                                   h3(em(strong("Historiograph "))),
+                                   br(),
                                    actionButton("applyHist", "Apply!"),
                                    #selectInput('save_colnet', 'Save network as:', choices = c('No, thanks!' = 'no_thanks', 'Pajek format' = 'pajek')),
                                    #conditionalPanel(condition = "input.save_colnet == 'pajek'",
@@ -1222,7 +1401,7 @@ navbarMenu("Intellectual Structure",
                                    
                                    "  ",
                                    "  ",
-                                   h4(em(strong("Network Parameters: "))),
+                                   h4(em(strong("Historiograph Parameters: "))),
                                    "  ",
                                    
                                    sliderInput(inputId = "histNodes",
@@ -1276,6 +1455,8 @@ navbarMenu("Social Structure",
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
+                                   h3(em(strong("Collaboration Network"))),
+                                   br(),
                                    actionButton("applyCol", "Apply!"),
                                    downloadButton("network.col", "Save Pakek"),
                                    downloadButton("networkCol.fig", "Save Fig"),
@@ -1313,11 +1494,22 @@ navbarMenu("Social Structure",
                                                            "Star"="star"),
                                                selected = "auto"),
                                    
+                                   selectInput("colCluster", 
+                                               label = "Clustering Algorithm",
+                                               choices = c("None" = "none", 
+                                                           "Edge Betweenness" = "edge_betweenness",
+                                                           "InfoMap" = "infomap",
+                                                           "Leading Eigenvalues" = "leading_eigen",
+                                                           "Louvain" = "louvain",
+                                                           "Spinglass" = "spinglass",
+                                                           "Walktrap" = "walktrap"),
+                                               selected = "walktrap"),
+                                   
                                    sliderInput(inputId = "colNodes",
                                                label = "Number of Nodes",
                                                min = 5,
-                                               max = 250,
-                                               value = 30),
+                                               max = 1000,
+                                               value = 50),
                                    numericInput("coledges.min", 
                                                 label=("Min edges"),
                                                 value = 2,
@@ -1388,14 +1580,17 @@ navbarMenu("Social Structure",
                     )
                     
            ), ## End of tabPanel "Social Structure" 
-           tabPanel(title="WorldMap Collaboration",
+           ### Collaboration WorldMap ----
+           tabPanel(title="Collaboration WorldMap",
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
+                                   h3(em(strong("Collaboration WorldMap"))),
+                                   br(),
                                    actionButton("applyWM", "Apply!"),
                                    "  ",
                                    "  ",
-                                   h4(em(strong("Network Parameters: "))),
+                                   h4(em(strong("Map Parameters: "))),
                                    "  ",
                                    numericInput("WMedges.min", 
                                                 label=("Min edges"),

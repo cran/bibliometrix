@@ -36,9 +36,9 @@ CR <- citations(M, field = "author", sep = ";")
 cbind(CR$Cited[1:10])
 
 ## ----Local Author citation--------------------------------------------------------------------------------------------
-CR <- localCitations(M, sep = ";")
-CR$Authors[1:10,]
-CR$Papers[1:10,]
+#CR <- localCitations(M, sep = ";")
+#CR$Authors[1:10,]
+#CR$Papers[1:10,]
 
 ## ----Dominance Ranking------------------------------------------------------------------------------------------------
 DF <- dominance(results, k = 10)
@@ -62,6 +62,16 @@ authors=gsub(","," ",names(results$Authors)[1:10])
 indices <- Hindex(M, field = "author", elements=authors, sep = ";", years = 50)
 
 indices$H
+
+## ----AuthorProdOverTime, fig.height=6, fig.width=8--------------------------------------------------------------------
+
+topAU <- authorProdOverTime(M, k = 10, graph = TRUE)
+
+## Table: Author's productivity per year
+head(topAU$dfAU)
+
+## Table: Auhtor's documents list
+#head(topAU$dfPapersAU)
 
 ## ----Lotka law--------------------------------------------------------------------------------------------------------
 L <- lotka(results)
@@ -189,6 +199,6 @@ options(width=130)
 histResults <- histNetwork(M, min.citations = 10, sep = ";")
 
 # Plot a historical co-citation network
-net <- histPlot(histResults, n=15, size = 20, labelsize=5, size.cex=TRUE, arrowsize = 0.5, color = TRUE)
+net <- histPlot(histResults, n=15, size = 20, labelsize=10, size.cex=TRUE, arrowsize = 0.5, color = TRUE)
 
 

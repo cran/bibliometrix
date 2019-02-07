@@ -8,7 +8,7 @@ server <- function(input, output, session) {
   ## file upload max size
   options(shiny.maxRequestSize=30*1024^2) 
   
-  ## initial values
+  ### initial values ####
   values = reactiveValues()
   values$results=list("NA")
   values$log="working..."
@@ -25,6 +25,7 @@ server <- function(input, output, session) {
   values$citShortlabel="NA"
   values$S=list("NA")
 
+  
   
   
   
@@ -88,7 +89,7 @@ server <- function(input, output, session) {
       
       load(inFile$datapath)
     }
-    
+    values=initial(values)
     values$M <- M
     values$Morig=M
     values$Histfield="NA"
@@ -105,7 +106,6 @@ server <- function(input, output, session) {
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(MData))-1))))  
                   ,class = 'cell-border compact stripe')  %>% 
-                  
                   formatStyle(names(MData),  backgroundColor = 'white', textAlign = 'center',fontSize = '70%') 
     
     
@@ -118,7 +118,7 @@ server <- function(input, output, session) {
     },
     content <- function(file) {
       switch(input$save_file,
-             xlsx={rio::export(values$M, file=file)})
+             xlsx={suppressWarnings(rio::export(values$M, file=file))})
       
     },
     contentType = input$save_file
@@ -171,13 +171,23 @@ server <- function(input, output, session) {
   output$dataFiltered <- DT::renderDT({
     
     M=values$Morig
-    
-    M=(M[(M$PY>=input$sliderPY[1] & M$PY<=input$sliderPY[2]),])
-    M=(M[(M$TC>=input$sliderTC[1] & M$TC<=input$sliderTC[2]),])
-    indexDT=(ifelse(M$DT %in% input$selectType,TRUE,FALSE))
-    M=(M[indexDT,])
-    indexSO=(ifelse(M$SO %in% input$selectSource,TRUE,FALSE))
-    M=((M[M$SO %in% input$selectSource,]))
+    B=bradford(M)$table
+    M=subset(M, M$PY>=input$sliderPY[1] & M$PY<=input$sliderPY[2])
+    M=subset(M, M$TC>=input$sliderTC[1] & M$TC<=input$sliderTC[2])
+    M=subset(M, M$DT %in% input$selectType)
+    switch(input$bradfordSources,
+           "core"={
+             SO=B$SO[B$Zone %in% "Zone 1"]
+           },
+           "zone2"={
+             SO=B$SO[B$Zone %in% c("Zone 1", "Zone 2")]
+           },
+           "all"={SO=B$SO})
+    M=M[M$SO %in% SO,]
+    #indexDT=(ifelse(M$DT %in% input$selectType,TRUE,FALSE))
+    #M=(M[indexDT,])
+    #indexSO=(ifelse(M$SO %in% input$selectSource,TRUE,FALSE))
+    #M=((M[M$SO %in% input$selectSource,]))
     values$M=M
     #values$results=list("NA") ## to reset summary statistics
     values<-initial(values)
@@ -202,7 +212,7 @@ server <- function(input, output, session) {
     values <-res$values
     
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 30, dom = 'Bfrtip',
+                  options = list(pageLength = 30, dom = 'Bfrtip',ordering=F,
                                  buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
@@ -211,7 +221,7 @@ server <- function(input, output, session) {
     
   })
   
-  output$AnnualProdPlot <- renderPlot({
+  output$AnnualProdPlot <- renderPlotly({
     res <- descriptive(values,type="tab2")
     values <-res$values
     Tab=table(values$results$Years)
@@ -223,9 +233,9 @@ server <- function(input, output, session) {
     
     names(Y)=c("Year","Freq")
     
-    g=ggplot2::ggplot(Y, aes(x = Y$Year, y = Y$Freq)) +
-      geom_line() +
-      geom_area(fill = '#002F80', alpha = .5) +
+    g=ggplot2::ggplot(Y, aes(x = Y$Year, y = Y$Freq, text=paste("Year: ",Y$Year,"\nN .of Documents: ",Y$Freq))) +
+      geom_line(aes(group="NA")) +
+      geom_area(aes(group="NA"),fill = '#002F80', alpha = .5) +
       labs(x = 'Year'
            , y = 'Articles'
            , title = "Annual Scientific Production") +
@@ -239,11 +249,74 @@ server <- function(input, output, session) {
             ,axis.title.y = element_text(vjust = 1, angle = 0)
             ,axis.title.x = element_text(hjust = 0)
       )
-    plot(g)
-  }, height = 500, width =900)
+    plot.ly(g)
+  })#, height = 500, width =900)
   
   output$AnnualProdTable <- DT::renderDT({
     TAB <- values$TAB
+    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
+                  options = list(pageLength = 20, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
+                  class = 'cell-border compact stripe') %>%
+      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+    
+  })
+  
+  output$AnnualTotCitperYearPlot <- renderPlotly({
+    
+    if (values$results[[1]]=="NA"){
+      values$results=biblioAnalysis(values$M)}
+    x=values$results
+    
+    # Total Citation Plot
+    Table2=aggregate(x$TotalCitation,by=list(x$Years),length)
+    Table2$xx=aggregate(x$TotalCitation,by=list(x$Years),mean)$x
+    Table2$Annual=NA
+    d=date()
+    d=as.numeric(substring(d,nchar(d)-3,nchar(d)))
+    Table2$Years=d-Table2$Group.1
+    Table2$Annual=Table2$xx/Table2$Years
+    names(Table2)=c("Year","N","MeanTCperArt","MeanTCperYear","CitableYears")
+    
+    ## inserting missing years
+    YY=setdiff(seq(min(x$Years,na.rm=TRUE),max(x$Years,na.rm=TRUE)),Table2$Year)
+    if (length(YY>0)){
+      YY=data.frame(YY,0,0,0,0)
+      names(YY)=c("Year","N","MeanTCperArt","MeanTCperYear","CitableYears")
+      Table2=rbind(Table2,YY)
+      Table2=Table2[order(Table2$Year),]
+      row.names(Table2)=Table2$Year}
+    
+    values$AnnualTotCitperYear=Table2
+    Table2$group="A"
+    
+    g=ggplot(Table2, aes(x = Table2$Year, y =Table2$MeanTCperYear,text=paste("Year: ",Table2$Year,"\nAverage Citations per Year: ",round(Table2$MeanTCperYear,1)))) +
+      geom_line(aes(x = Table2$Year, y = Table2$MeanTCperYear, group=Table2$group)) +
+      geom_area(aes(x = Table2$Year, y = Table2$MeanTCperYear, group=Table2$group),fill = '#002F80', alpha = .5) +
+      labs(x = 'Year'
+           , y = 'Citations'
+           , title = "Average Article Citations per Year")+
+      scale_x_continuous(breaks= (Table2$Year[seq(1,length(Table2$Year),by=2)])) +
+      theme(text = element_text(color = "#444444")
+            ,panel.background = element_rect(fill = '#EFEFEF')
+            ,panel.grid.minor = element_line(color = '#FFFFFF')
+            ,panel.grid.major = element_line(color = '#FFFFFF')
+            ,plot.title = element_text(size = 24)
+            ,axis.title = element_text(size = 14, color = '#555555')
+            ,axis.title.y = element_text(vjust = 1, angle = 0)
+            ,axis.title.x = element_text(hjust = 0)
+      )
+    
+    plot.ly(g)
+   
+    
+  })
+  
+  output$AnnualTotCitperYearTable <- DT::renderDT({
+    
+    TAB <- values$AnnualTotCitperYear
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
@@ -258,7 +331,7 @@ server <- function(input, output, session) {
   
   output$MostRelSourcesTable <- DT::renderDT({
     
-    TAB <- values$TAB
+    TAB <- values$TABSo
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
@@ -269,34 +342,40 @@ server <- function(input, output, session) {
     
   })
   
-  output$MostRelSourcesPlot <- renderPlot({
+  output$MostRelSourcesPlot <- renderPlotly({
     res <- descriptive(values,type="tab7")
     values <-res$values
-    
-    xx=as.data.frame(values$results$Sources)
+    values$TABSo<-values$TAB
+    #xx=as.data.frame(values$results$Sources)
+    xx<- values$TAB
     if (input$MostRelSourcesK>dim(xx)[1]){
       k=dim(xx)[1]
     } else {k=input$MostRelSourcesK}
-    xx=xx[1:k,]
-    g=ggplot2::ggplot(data=xx, aes(x=xx$SO, y=xx$Freq, fill=-xx$Freq)) +
-      geom_bar(stat="identity")+
+    #xx=xx[1:k,]
+    xx=subset(xx, row.names(xx) %in% row.names(xx)[1:k])
+    xx$Articles=as.numeric(xx$Articles)
+    xx$Sources=substr(xx$Sources,1,50)
+    
+    
+    g=ggplot2::ggplot(data=xx, aes(x=xx$Sources, y=xx$Articles, fill=-xx$Articles,text=paste("Source: ",xx$Sources,"\nN. of Documents: ",xx$Articles))) +
+      geom_bar(aes(group="NA"),stat="identity")+
       scale_fill_continuous(type = "gradient")+
-      scale_x_discrete(limits = rev((xx$SO)), labels=substr(rev(xx$SO),1,50))+
+      scale_x_discrete(limits = rev(xx$Sources))+
       labs(title="Most Relevant Sources", x = "Sources")+
       labs(y = "N. of Documents")+
-      theme_minimal() +
+      theme_minimal()+
       guides(fill=FALSE)+
       coord_flip()
     
-    plot(g)
-  }, height = 500, width =900)
+    plot.ly(g)
+  })#, height = 500, width =900)
   
-  output$bradfordPlot <- renderPlot({
+  output$bradfordPlot <- renderPlotly({
     
     values$bradford=bradford(values$M)
-    values$bradford$graph
+    plot.ly(values$bradford$graph)
     
-  },height = 600)
+  })#,height = 600)
   
   output$bradfordTable <- DT::renderDT({
     
@@ -309,15 +388,15 @@ server <- function(input, output, session) {
       formatStyle(names(values$bradford$table),  backgroundColor = 'white',textAlign = 'center')
   })
   
-  output$SourceHindexPlot <- renderPlot({
+  output$SourceHindexPlot <- renderPlotly({
     
     input$applyHsource
     
     isolate(res <- Hindex_plot(values,type="source"))
     
-    isolate(plot(res$g))
+    isolate(plot.ly(res$g))
    
-  }, height = 500, width =900)
+  })#, height = 500, width =900)
   
   output$SourceHindexTable <- DT::renderDT({
     
@@ -399,31 +478,51 @@ server <- function(input, output, session) {
   ### AUTHORS MENU ####
   
       ### Authors ----
-  output$MostRelAuthorsPlot <- renderPlot({
+  output$MostRelAuthorsPlot <- renderPlotly({
     res <- descriptive(values,type="tab3")
     values <-res$values
+    values$TABAu<-values$TAB
     
-    xx=as.data.frame(values$results$Authors, stringsAsFactors = FALSE)
+    #xx=as.data.frame(values$results$Authors, stringsAsFactors = FALSE)
+    xx=values$TABAu
+    switch(input$AuFreqMeasure,
+           t={
+             lab="N. of Documents"
+             xx=xx[,1:2]
+             },
+           p={xx=xx[,1:2]
+              xx[,2]=as.numeric(xx[,2])/dim(values$M)[1]*100
+              lab="N. of Documents (in %)"
+                },
+           f={
+             xx=xx[,3:4]
+             lab="N. of Documents (Fractionalized)"
+             })
+    
+    xx[,2]=as.numeric(xx[,2])
+    
     if (input$MostRelAuthorsK>dim(xx)[1]){
       k=dim(xx)[1]
     } else {k=input$MostRelAuthorsK}
+    
     xx=xx[1:k,]
-    g=ggplot2::ggplot(data=xx, aes(x=xx$AU, y=xx$Freq, fill=-xx$Freq)) +
-      geom_bar(stat="identity")+
+    xx[,2]=round(xx[,2],1)
+    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,2], fill=-xx[,2], text=paste("Author: ",xx[,1],"\n",lab,": ",xx[,2]))) +
+      geom_bar(aes(group="NA"),stat="identity")+
       scale_fill_continuous(type = "gradient")+
-      scale_x_discrete(limits = rev(xx$AU))+
+      scale_x_discrete(limits = rev(xx[,1]))+
       labs(title="Most Relevant Authors", x = "Authors")+
-      labs(y = "N. of Documents")+
+      labs(y = lab)+
       theme_minimal() +
       guides(fill=FALSE)+
       coord_flip()
     
-    plot(g)
-  }, height = 500, width =900)
+    plot.ly(g)
+  })#, height = 500, width =900)
   
   output$MostRelAuthorsTable <- DT::renderDT({
     
-    TAB <- values$TAB
+    TAB <- values$TABAu
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
@@ -434,15 +533,15 @@ server <- function(input, output, session) {
     
   })
  
-  output$AuthorHindexPlot <- renderPlot({
+  output$AuthorHindexPlot <- renderPlotly({
     
     input$applyHauthor
     
     isolate(res <- Hindex_plot(values,type="author"))
     
-    isolate(plot(res$g))
+    isolate(plot.ly(res$g))
     
-  }, height = 500, width =900)
+  })#, height = 500, width =900)
   
   output$AuthorHindexTable <- DT::renderDT({
     
@@ -452,15 +551,17 @@ server <- function(input, output, session) {
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$H))-1)))), 
                   class = 'cell-border compact stripe') %>%
-      formatStyle(names(values$H),  backgroundColor = 'white',textAlign = 'center')
+      formatStyle(names(values$H),  backgroundColor = 'white',textAlign = 'center') %>%
+      formatRound(names(values$H)[4], 3)
     
   })
   
-  output$TopAuthorsProdPlot <- renderPlot({
-    values$AUProdOverTime <- authorProdOverTime(values$M, k=input$TopAuthorsProdK)
+  output$TopAuthorsProdPlot <- renderPlotly({
+    values$AUProdOverTime <- authorProdOverTime(values$M, k=input$TopAuthorsProdK, graph=FALSE)
     
-    plot(values$AUProdOverTime$graph)
-  }, height = 550, width =1100)
+    plot.ly(values$AUProdOverTime$graph)
+    
+  })#, height = 550, width =1100)
   
   output$TopAuthorsProdTable <- DT::renderDT({
     TAB <- values$AUProdOverTime$dfAU
@@ -470,22 +571,39 @@ server <- function(input, output, session) {
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') %>%
+      formatRound(names(TAB)[dim(TAB)[2]], 3)
     
   })
   
-  output$lotkaPlot <- renderPlot({
+  output$TopAuthorsProdTablePapers <- DT::renderDT({
+    TAB <- values$AUProdOverTime$dfPapersAU
+    TAB$DOI=paste0('<a href=\"http://doi.org/',TAB$DOI,'\" target=\"_blank\">',TAB$DOI,'</a>')
+    DT::datatable(TAB, rownames = FALSE, escape = FALSE,extensions = c("Buttons"),
+                  options = list(pageLength = 20, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
+                  class = 'cell-border compact stripe') %>%
+      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') %>%
+      formatRound(names(TAB)[dim(TAB)[2]], 3)
+    
+  })
+  
+  output$lotkaPlot <- renderPlotly({
     
     values$lotka=lotka(biblioAnalysis(values$M))
     AuProd=values$lotka$AuthorProd
     AuProd$Theoretical=10^(log10(values$lotka$C)-2*log10(AuProd[,1]))
     
-    g=ggplot2::ggplot(AuProd, aes(x = AuProd$N.Articles, y = AuProd$Freq*100)) +
-      geom_line() +
-      geom_area(fill = '#002F80', alpha = .5) +
-      labs(x = 'N. Articles'
-           , y = '% of total scientific production'
-           , title = "Author Scientific Productivity") +
+    g=ggplot2::ggplot(AuProd, aes(x = AuProd$N.Articles, y = AuProd$Freq*100, text=paste("N.Articles: ",AuProd$N.Articles,"\n% of production: ",round(AuProd$Freq*100,1)))) +
+      geom_line(aes(group="NA")) +
+      geom_area(aes(group="NA"),fill = '#002F80', alpha = .5) +
+      geom_line(aes(y=AuProd$Theoretical*100, group="NA"),linetype = "dashed",color="black",alpha=0.8)+
+      xlim(0,max(AuProd$N.Articles)+1)+
+      labs(x = 'Documents written'
+           , y = '% of Authors'
+           , title = "The Frequency Distribution of Scientific Productivity") +
       #scale_x_continuous(breaks= (Y$Year[seq(1,length(Y$Year),by=2)])) +
       theme(text = element_text(color = "#444444")
             ,panel.background = element_rect(fill = '#EFEFEF')
@@ -496,34 +614,36 @@ server <- function(input, output, session) {
             ,axis.title.y = element_text(vjust = 1, angle = 90)
             ,axis.title.x = element_text(hjust = 0)
       )
-    plot(g)
+    plot.ly(g)
     
-  },height = 600)
+  })#,height = 600)
   
   output$lotkaTable <- DT::renderDT({
-    
+    names(values$lotka$AuthorProd)=c("Documents written","N. of Authors","Proportion of Authors")
     DT::datatable(values$lotka$AuthorProd, rownames = FALSE,
                   options = list(pageLength = 20, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy','excel', 'pdf', 'print'),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$lotka$AuthorProd))-1)))), 
                   class = 'cell-border compact stripe') %>%
-      formatStyle(names(values$lotka$AuthorProd),  backgroundColor = 'white',textAlign = 'center')
+      formatStyle(names(values$lotka$AuthorProd),  backgroundColor = 'white',textAlign = 'center') %>%
+      formatRound(names(values$lotka$AuthorProd)[3], 3)
   })
   
       ### Affiliations ----
   
-  output$MostRelAffiliationsPlot <- renderPlot({
+  output$MostRelAffiliationsPlot <- renderPlotly({
     res <- descriptive(values,type="tab11")
     values <-res$values
+    values$TABAff <- values$TAB
     
     xx=as.data.frame(values$results$Affiliations, stringsAsFactors = FALSE)
     if (input$MostRelAffiliationsK>dim(xx)[1]){
       k=dim(xx)[1]
     } else {k=input$MostRelAffiliationsK}
     xx=xx[1:k,]
-    g=ggplot2::ggplot(data=xx, aes(x=xx$AFF, y=xx$Freq, fill=-xx$Freq)) +
-      geom_bar(stat="identity")+
+    g=ggplot2::ggplot(data=xx, aes(x=xx$AFF, y=xx$Freq, fill=-xx$Freq, text=paste("Affiliation: ",xx$AFF,"\nN.of Documents: ",xx$Freq))) +
+      geom_bar(aes(group="NA"),stat="identity")+
       scale_fill_continuous(type = "gradient")+
       scale_x_discrete(limits = rev(xx$AFF))+
       labs(title="Most Relevant Affiliations", x = "Affiliations")+
@@ -532,12 +652,12 @@ server <- function(input, output, session) {
       guides(fill=FALSE)+
       coord_flip()
     
-    plot(g)
-  }, height = 500, width =900)
+    plot.ly(g)
+  })#, height = 500, width =900)
   
   output$MostRelAffiliationsTable <- DT::renderDT({
     
-    TAB <- values$TAB
+    TAB <- values$TABAff
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
@@ -549,9 +669,11 @@ server <- function(input, output, session) {
   })
   
       ### Countries ----
-  output$MostRelCountriesPlot <- renderPlot({
+  output$MostRelCountriesPlot <- renderPlotly({
     res <- descriptive(values,type="tab5")
     values <-res$values
+    values$TABCo <- values$TAB
+    
     k=input$MostRelCountriesK
     xx=values$results$CountryCollaboration[1:k,]
     xx=xx[order(-(xx$SCP+xx$MCP)),]
@@ -561,8 +683,8 @@ server <- function(input, output, session) {
     names(xx2)=c("Country","Freq","Collaboration")
     xx=rbind(xx2,xx1)
     xx$Country=factor(xx$Country,levels=xx$Country[1:dim(xx2)[1]])
-    g=suppressWarnings(ggplot2::ggplot(data=xx, aes(x=xx$Country, y=xx$Freq,fill=xx$Collaboration)) +
-                         geom_bar(stat="identity")+
+    g=suppressWarnings(ggplot2::ggplot(data=xx, aes(x=xx$Country, y=xx$Freq,fill=xx$Collaboration, text=paste("Country: ",xx$Country,"\nN.of Documents: ",xx$Freq))) +
+                         geom_bar(aes(group="NA"),stat="identity")+
                          scale_x_discrete(limits = rev(levels(xx$Country)))+
                          scale_fill_discrete(name="Collaboration",
                                              breaks=c("SCP","MCP"))+
@@ -573,12 +695,12 @@ server <- function(input, output, session) {
                                                            color = "blue", face = "italic"))+
                          coord_flip())
     
-    plot(g)
-  }, height = 500, width =900)
+    plot.ly(g)
+  })#, height = 500, width =900)
   
   output$MostRelCountriesTable <- DT::renderDT({
     
-    TAB <- values$TAB
+    TAB <- values$TABCo
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
@@ -589,10 +711,10 @@ server <- function(input, output, session) {
     
   })
   
-  output$countryProdPlot <- renderPlot({
+  output$countryProdPlot <- renderPlotly({
     values$mapworld<-mapworld(values$M)
-    plot(values$mapworld$g)
-  }, height = 500, width =900)
+    plot.ly(values$mapworld$g)
+  })#, height = 500, width =900)
   
   output$countryProdTable <- DT::renderDT({
     
@@ -607,9 +729,10 @@ server <- function(input, output, session) {
     
   })
   
-  output$MostCitCountriesPlot <- renderPlot({
+  output$MostCitCountriesPlot <- renderPlotly({
     res <- descriptive(values,type="tab6")
     values <-res$values
+    values$TABCitCo <- values$TAB
     
     xx=values$TAB
     xx[,2]=as.numeric(xx[,2])
@@ -626,8 +749,8 @@ server <- function(input, output, session) {
       laby="N. of Citations per Year"
     }
    
-    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,2], fill=-xx[,2])) +
-      geom_bar(stat="identity")+
+    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,2], fill=-xx[,2],text=paste("Country: ",xx[,1],"\n",laby,": ",xx[,2]))) +
+      geom_bar(aes(group="NA"),stat="identity")+
       scale_fill_continuous(type = "gradient")+
       scale_x_discrete(limits = rev(xx[,1]))+
       labs(title="Most Cited Countries", x = "Countries")+
@@ -636,12 +759,12 @@ server <- function(input, output, session) {
       guides(fill=FALSE)+
       coord_flip()
     
-    plot(g)
-  }, height = 500, width =900)
+    plot.ly(g)
+  })#, height = 500, width =900)
   
   output$MostCitCountriesTable <- DT::renderDT({
     
-    TAB <- values$TAB
+    TAB <- values$TABCitCo
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
@@ -655,9 +778,10 @@ server <- function(input, output, session) {
   ### DOCUMENTS MENU ####
   
       ### Documents ----
-  output$MostCitDocsPlot <- renderPlot({
+  output$MostCitDocsPlot <- renderPlotly({
     res <- descriptive(values,type="tab4")
     values <-res$values
+    values$TABGlobDoc <- values$TAB
     
     if (input$CitDocsMeasure=="TC"){
       xx=data.frame(values$results$MostCitedPapers[1],values$results$MostCitedPapers[2], stringsAsFactors = FALSE,row.names=NULL)
@@ -672,7 +796,7 @@ server <- function(input, output, session) {
     
     xx=xx[1:k,]
     
-    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,2], fill=-xx[,2])) +
+    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,2], fill=-xx[,2], text=paste("Document: ", xx[,1],"\nGlobal Citations: ",xx[,2]))) +
       geom_bar(stat="identity")+
       scale_fill_continuous(type = "gradient")+
       scale_x_discrete(limits = rev(xx[,1]))+
@@ -682,12 +806,12 @@ server <- function(input, output, session) {
       guides(fill=FALSE)+
       coord_flip()
     
-    plot(g)
-  }, height = 500, width =900)
+    plot.ly(g)
+  })#, height = 500, width =900)
   
   output$MostCitDocsTable <- DT::renderDT({
     
-    TAB <- values$TAB
+    TAB <- values$TABGlobDoc
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
@@ -698,13 +822,13 @@ server <- function(input, output, session) {
     
   })
   
-  output$MostLocCitDocsPlot <- renderPlot({
+  output$MostLocCitDocsPlot <- renderPlotly({
     
-    TAB <-localCitations(values$M, sep = input$LocCitSep)$Paper
+    TAB <-localCitations(values$M, fast.search=TRUE, sep = input$LocCitSep)$Paper
     
     xx=data.frame(Document=as.character(TAB[,1]), DOI=as.character(TAB[,2]), Year=TAB[,3], "Local Citations"=TAB[,4], "Global Citations"=TAB[,5],stringsAsFactors = FALSE)
     
-    values$TAB=xx
+    values$TABLocDoc=xx
     
     if (input$MostLocCitDocsK>dim(xx)[1]){
       k=dim(xx)[1]
@@ -712,8 +836,8 @@ server <- function(input, output, session) {
     
     xx=xx[1:k,]
     
-    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,4], fill=-xx[,4])) +
-      geom_bar(stat="identity")+
+    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,4], fill=-xx[,4], text=paste("Document: ",xx[,1],"\nLocal Citations: ",xx[,4]))) +
+      geom_bar(aes(group="NA"),stat="identity")+
       scale_fill_continuous(type = "gradient")+
       scale_x_discrete(limits = rev(xx[,1]))+
       labs(title="Most Local Cited Documents", x = "Documents")+
@@ -722,12 +846,12 @@ server <- function(input, output, session) {
       guides(fill=FALSE)+
       coord_flip()
     
-    plot(g)
-  }, height = 500, width =900)
+    plot.ly(g)
+  })#, height = 500, width =900)
   
   output$MostLocCitDocsTable <- DT::renderDT({
     
-    TAB <- values$TAB
+    TAB <- values$TABLocDoc
     TAB$DOI<- paste0('<a href=\"http://doi.org/',TAB$DOI,'\" target=\"_blank\">',TAB$DOI,'</a>')
     DT::datatable(TAB, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
@@ -741,13 +865,13 @@ server <- function(input, output, session) {
   
       ### Cited References ----
   
-  output$MostCitRefsPlot <- renderPlot({
+  output$MostCitRefsPlot <- renderPlotly({
     CR=citations(values$M,sep=input$CitRefsSep)$Cited
     TAB=data.frame(names(CR),as.numeric(CR),stringsAsFactors = FALSE)
     names(TAB)=c("Cited References", "Citations")
-    values$TAB=TAB
+    values$TABCitRef=TAB
     
-    xx=values$TAB
+    xx=values$TABCitRef
     if (input$MostCitRefsK>dim(xx)[1]){
       k=dim(xx)[1]
     } else {k=input$MostCitRefsK}
@@ -755,8 +879,8 @@ server <- function(input, output, session) {
     xx=xx[1:k,]
     #xx[,1]=substr(xx[,1],1,50)
     
-    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,2], fill=-xx[,2])) +
-      geom_bar(stat="identity")+
+    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,2], fill=-xx[,2], text=paste("Reference: ",xx[,1],"\nLocal Citations: ",xx[,2]))) +
+      geom_bar(aes(group="NA"),stat="identity")+
       scale_fill_continuous(type = "gradient")+
       scale_x_discrete(limits = rev(xx[,1]), labels=substr(rev(xx[,1]),1,50))+
       labs(title="Most Cited References", x = "Documents")+
@@ -765,13 +889,21 @@ server <- function(input, output, session) {
       guides(fill=FALSE)+
       coord_flip()
     
-    plot(g)
-  }, height = 500, width =900)
+    plot.ly(g)
+  })#, height = 500, width =900)
   
   output$MostCitRefsTable <- DT::renderDT({
     
-    TAB <- values$TAB
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
+   TAB <- values$TABCitRef
+   
+   TAB$link <- trimES(gsub("[[:punct:]]" , " ",reduceRefs(TAB[,1])))
+   
+
+   TAB$link <- paste0('<a href=\"https://scholar.google.it/scholar?hl=en&as_sdt=0%2C5&q=',TAB$link,'\" target=\"_blank\">','link','</a>')
+   
+   TAB=TAB[,c(3,1,2)]
+   names(TAB)[1]="Google Scholar"
+    DT::datatable(TAB, rownames = FALSE, escape=FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
@@ -781,12 +913,12 @@ server <- function(input, output, session) {
     
   })
   
-  output$rpysPlot <- renderPlot({
-    values$res <- rpys(values$M, sep=input$rpysSep, timespan=input$sliderYears ,graph=FALSE)
+  output$rpysPlot <- renderPlotly({
+    values$res <- rpys(values$M, sep=input$rpysSep, graph=FALSE)
     #values$res <- rpys(values$M, sep=input$rpysSep, timespan=input$sliderYears ,graph=FALSE)
-    plot(values$res$spectroscopy)
+    plot.ly(values$res$spectroscopy)
     
-  },height = 600, width = 900)
+  })#,height = 600, width = 900)
   
   output$rpysTable <- DT::renderDT({
     
@@ -819,14 +951,14 @@ server <- function(input, output, session) {
 
       ### Words ----
   
-  output$MostRelWordsPlot <- renderPlot({
+  output$MostRelWordsPlot <- renderPlotly({
     WR=wordlist(values$M,Field=input$MostRelWords,n=Inf,measure="identity")$v
     
     TAB=data.frame(names(WR),as.numeric(WR),stringsAsFactors = FALSE)
     names(TAB)=c("Words", "Occurrences")
-    values$TAB=TAB
+    values$TABWord=TAB
     
-    xx=values$TAB
+    xx=values$TABWord
     if (input$MostRelWordsN>dim(xx)[1]){
       k=dim(xx)[1]
     } else {k=input$MostRelWordsN}
@@ -838,8 +970,8 @@ server <- function(input, output, session) {
            TI={lab="Title's Words"},
            AB={lab="Abstract's Words"})
     
-    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,2], fill=-xx[,2])) +
-      geom_bar(stat="identity")+
+    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,2], fill=-xx[,2], text=paste(lab,": ",xx[,1],"\nOccurrences: ",xx[,2]))) +
+      geom_bar(aes(group="NA"),stat="identity")+
       scale_fill_continuous(type = "gradient")+
       scale_x_discrete(limits = rev(xx[,1]))+
       labs(title="Most Relevant Words", x = lab)+
@@ -848,13 +980,13 @@ server <- function(input, output, session) {
       guides(fill=FALSE)+
       coord_flip()
     
-    plot(g)
-  }, height = 500, width =900)
+    plot.ly(g)
+  })#, height = 500, width =900)
   
   output$MostRelWordsTable <- DT::renderDT({
     
     
-    TAB <- values$TAB
+    TAB <- values$TABWord
     
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
@@ -887,7 +1019,7 @@ server <- function(input, output, session) {
     resW=wordlist(M=values$M, Field=input$treeTerms, n=input$treen_words, measure=input$treemeasure)
     
     W=resW$W
-    values$Words=resW$Words
+    values$WordsT=resW$Words
     
     treemap::treemap(W, #Your data frame object
             index=c("Terms"),  #A list of your categorical variables
@@ -915,7 +1047,7 @@ server <- function(input, output, session) {
   
   output$treeTable <- DT::renderDT({
     
-    DT::datatable(values$Words, rownames = FALSE,
+    DT::datatable(values$WordsT, rownames = FALSE,
                   options = list(pageLength = 10, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy','excel', 'pdf', 'print'),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
@@ -1103,19 +1235,30 @@ server <- function(input, output, session) {
   }, height = 650, width = 800)
   
       ### Thematic Map ----
-  output$TMPlot <- renderPlot({
+  output$TMPlot <- renderPlotly({
     
     input$applyTM
     
-    values <- isolate(TMmap(input,values))
+    #values <- isolate(TMmap(input,values))
+    values$TM <- isolate(thematicMap(values$M, field=input$TMfield, n=input$TMn, minfreq=input$TMfreq, stemming=input$TMstemming, size=input$sizeTM, repel=FALSE))
     
     validate(
       need(values$TM$nclust > 0, "\n\nNo topics in one or more periods. Please select a different set of parameters.")
     )
     
-    plot(values$TM$map)
+    plot.ly(values$TM$map)
 
-  }, height = 650, width = 800)
+  })#, height = 650, width = 800)
+  
+  output$NetPlot <- renderVisNetwork({
+    
+    values$networkTM<-igraph2vis(g=values$TM$net$graph,curved=(input$coc.curved=="Yes"), 
+                                labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
+                                shape=input$coc.shape)
+    
+    values$networkTM$VIS
+    
+  })
   
   output$TMTable <- DT::renderDT({
     
@@ -1147,19 +1290,19 @@ server <- function(input, output, session) {
     
     input$applyTE
     
-    values$yearSlices=isolate(as.numeric())
+    values$yearSlices <- isolate(as.numeric())
     isolate(for (i in 1:as.integer(input$numSlices)){
       if (length(input[[paste0("Slice", i)]])>0){values$yearSlices=c(values$yearSlices,input[[paste0("Slice", i)]])}
     })
     
     if (length(values$yearSlices)>0){
-    values$nexus <- isolate(thematicEvolution(values$M, field=input$TEfield, values$yearSlices,n=input$nTE,minFreq=input$fTE))
+    values$nexus <- isolate(thematicEvolution(values$M, field=input$TEfield, values$yearSlices, n = input$nTE, minFreq = input$fTE, size = input$sizeTE, repel=FALSE))
     
     validate(
       need(values$nexus$check != FALSE, "\n\nNo topics in one or more periods. Please select a different set of parameters.")
     )
     
-    isolate(plotThematicEvolution(values$nexus$Nodes,values$nexus$Edges, input$TEmeasure))
+    isolate(plotThematicEvolution(Nodes = values$nexus$Nodes,Edges = values$nexus$Edges, measure = input$TEmeasure, min.flow = input$minFlowTE))
     }
       
     
@@ -1176,6 +1319,171 @@ server <- function(input, output, session) {
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TEData))-1))))) %>%
       formatStyle(names(TEData),  backgroundColor = 'white') 
+    #return(Data)
+    
+  })
+  
+  output$TMPlot1 <-  renderPlotly({
+    
+    #input$applyTM
+    if (length(values$nexus$TM)>=1){
+        plot.ly(values$nexus$TM[[1]]$map)
+    } else {emptyPlot("You have selected fewer periods!")}
+    
+  })#, height = 650, width = 800)
+  
+  output$TMPlot2 <-  renderPlotly({
+    
+    #input$applyTM
+    if (length(values$nexus$TM)>=2){
+      plot.ly(values$nexus$TM[[2]]$map)
+    } else {emptyPlot("You have selected fewer periods!")}
+    
+  })#, height = 650, width = 800)
+  
+  output$TMPlot3 <-  renderPlotly({
+    
+    #input$applyTM
+    if (length(values$nexus$TM)>=3){
+      plot.ly(values$nexus$TM[[3]]$map)
+    } else {emptyPlot("You have selected fewer periods!")}
+    
+  })#, height = 650, width = 800)
+  
+  output$TMPlot4 <-  renderPlotly({
+    
+    #input$applyTM
+    if (length(values$nexus$TM)>=4){
+      plot.ly(values$nexus$TM[[4]]$map)
+    } else (emptyPlot("You have selected fewer periods!"))
+    
+  })#, height = 650, width = 800)
+  
+  output$TMPlot5 <-  renderPlotly({
+    
+    #input$applyTM
+    if (length(values$nexus$TM)>=5){
+      plot.ly(values$nexus$TM[[5]]$map)
+    } else (emptyPlot("You have selected fewer periods!"))
+    
+  })#, height = 650, width = 800)
+  
+  output$NetPlot1 <- renderVisNetwork({
+    k=1
+    values$network1<-igraph2vis(g=values$nexus$Net[[k]]$graph,curved=(input$coc.curved=="Yes"), 
+                                labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
+                                shape=input$coc.shape)
+    
+    values$network1$VIS
+    
+  })
+  
+  output$NetPlot2 <- renderVisNetwork({
+    k=2
+    values$network2<-igraph2vis(g=values$nexus$Net[[k]]$graph,curved=(input$coc.curved=="Yes"), 
+                                labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
+                                shape=input$coc.shape)
+    
+    values$network2$VIS
+    
+  })
+  
+  output$NetPlot3 <- renderVisNetwork({
+    k=3
+    values$network3<-igraph2vis(g=values$nexus$Net[[k]]$graph,curved=(input$coc.curved=="Yes"), 
+                                labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
+                                shape=input$coc.shape)
+    
+    values$network3$VIS
+    
+  })
+  
+  output$NetPlot4 <- renderVisNetwork({
+    k=4
+    values$network4<-igraph2vis(g=values$nexus$Net[[k]]$graph,curved=(input$coc.curved=="Yes"), 
+                                labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
+                                shape=input$coc.shape)
+    
+    values$network4$VIS
+    
+  })
+  
+  output$NetPlot5 <- renderVisNetwork({
+    k=5
+    values$network5<-igraph2vis(g=values$nexus$Net[[k]]$graph,curved=(input$coc.curved=="Yes"), 
+                                labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
+                                shape=input$coc.shape)
+    
+    values$network5$VIS
+    
+  })
+  
+  output$TMTable1 <- DT::renderDT({
+    
+    tmData=values$nexus$TM[[1]]$words[,-4]
+    
+    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
+      formatStyle(names(tmData),  backgroundColor = 'white') 
+    #return(Data)
+    
+  })
+  
+  output$TMTable2 <- DT::renderDT({
+    
+    tmData=values$nexus$TM[[2]]$words[,-4]
+    
+    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
+      formatStyle(names(tmData),  backgroundColor = 'white') 
+    #return(Data)
+    
+  })
+ 
+  output$TMTable3 <- DT::renderDT({
+    
+    tmData=values$nexus$TM[[3]]$words[,-4]
+    
+    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
+      formatStyle(names(tmData),  backgroundColor = 'white') 
+    #return(Data)
+    
+  })
+  
+  output$TMTable4 <- DT::renderDT({
+    
+    tmData=values$nexus$TM[[4]]$words[,-4]
+    
+    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
+      formatStyle(names(tmData),  backgroundColor = 'white') 
+    #return(Data)
+    
+  })
+  
+  output$TMTable5 <- DT::renderDT({
+    
+    tmData=values$nexus$TM[[5]]$words[,-4]
+    
+    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
+      formatStyle(names(tmData),  backgroundColor = 'white') 
     #return(Data)
     
   })
@@ -1243,10 +1551,6 @@ server <- function(input, output, session) {
   
   output$histTable <- DT::renderDT({
     
-    if (values$Histfield=="NA"){
-      values$histResults <- histNetwork(values$M, min.citations=quantile(values$M$TC,0.75), sep = ";")
-      values$Histfield="done"
-    }
     LCS=values$histResults$LCS
     s=sort(LCS,decreasing = TRUE)[input$histNodes]
     ind=which(LCS>=s)
@@ -1355,11 +1659,24 @@ server <- function(input, output, session) {
   }) 
   
   ### COMMON FUNCTIONS ####
+  plot.ly <- function(g){
+    ggplotly(g, tooltip = "text") %>% 
+      config(displaylogo = FALSE,
+             modeBarButtonsToRemove = c(
+               'sendDataToCloud',
+               'pan2d', 
+               'select2d', 
+               'lasso2d',
+               'toggleSpikelines',
+               'hoverClosestCartesian',
+               'hoverCompareCartesian'
+             ))
+  }
   
   emptyPlot<-function(errortext){
     g=ggplot()+
       theme_void() + theme(legend.position="none")+
-      annotate("text", x = 4, y = 25, label = errortext)
+      annotate("text", x = 4, y = 25, label = errortext, size=10)
     plot(g)
   }
   
@@ -1370,6 +1687,16 @@ server <- function(input, output, session) {
     cbind(DF[ox[cumsum(rl$lengths)],,drop=FALSE],count = rl$lengths)
     
   }
+  
+  reduceRefs<- function(A){
+    
+    ind=unlist(regexec("*V[0-9]", A))
+    A[ind>-1]=substr(A[ind>-1],1,(ind[ind>-1]-1))
+    ind=unlist(regexec("*DOI ", A))
+    A[ind>-1]=substr(A[ind>-1],1,(ind[ind>-1]-1))
+    return(A)
+  }
+  
   
   initial <- function(values){
     values$results=list("NA")
@@ -1398,12 +1725,12 @@ server <- function(input, output, session) {
       
       switch(type,
              author={
-               AU=gsub(",","",names(tableTag(values$M,"AU")))
-               values$H=Hindex(values$M, field = "author", elements = AU, sep = ";", years=100)$H
+               AU=trim(gsub(",","",names(tableTag(values$M,"AU"))))
+               values$H=Hindex(values$M, field = "author", elements = AU, sep = ";", years=Inf)$H
              },
              source={
                SO=names(sort(table(values$M$SO),decreasing = TRUE))
-               values$H=Hindex(values$M, field = "source", elements = SO, sep = ";", years=100)$H
+               values$H=Hindex(values$M, field = "source", elements = SO, sep = ";", years=Inf)$H
              }
       )
       
@@ -1416,12 +1743,12 @@ server <- function(input, output, session) {
     if (type=="author"){
       K=input$Hkauthor
       measure=input$HmeasureAuthors
-      title="Authors' Impact"
+      title="Author Impact"
       xn="Authors"
     } else {
       K=input$Hksource
       measure=input$HmeasureSources
-      title="Sources' Impact"
+      title="Source Impact"
       xn="Sources"
     }
     if (K>dim(xx)[1]){
@@ -1437,9 +1764,9 @@ server <- function(input, output, session) {
     xx=xx[order(-xx[,m]),]
     xx=xx[1:k,c(1,m)]
     
-    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,2], fill=-xx[,2])) +
+    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,2], fill=-xx[,2], text=paste(xn,": ",xx[,1],"\n", names(values$H)[m],": ",xx[,2]))) +
       #geom_bar(stat="identity", fill="steelblue")+
-      geom_bar(stat="identity")+
+      geom_bar(aes(group="NA"),stat="identity")+
       scale_fill_continuous(type = "gradient")+
       scale_x_discrete(limits = rev((xx[,1])))+
       labs(title=title, x = xn)+
@@ -1561,8 +1888,8 @@ server <- function(input, output, session) {
     names(breaks)=breaks
     breaks=log(breaks)
    
-    g=ggplot(country.prod, aes( x = long, y = lat, group = group )) +
-      geom_polygon(aes(fill = log(Freq))) +
+    g=ggplot(country.prod, aes( x = long, y = lat, group=group, text=paste("Country: ",country.prod$region,"\nN.of Documents: ",country.prod$Freq))) +
+      geom_polygon(aes(fill = log(Freq), group=group)) +
       scale_fill_continuous(low='dodgerblue', high='dodgerblue4',breaks=breaks)+
       guides(fill = guide_legend(reverse = T)) +
       #geom_text(data=centroids, aes(label = centroids$Tab, x = centroids$long, y = centroids$lat, group=centroids$Tab)) +
@@ -1620,31 +1947,36 @@ server <- function(input, output, session) {
              
            },
            TI={
-             if(!("TI_TM" %in% names(values$M))){values$M=termExtraction(values$M,Field="TI",verbose=FALSE)}
+             #if(!("TI_TM" %in% names(values$M))){values$M=termExtraction(values$M,Field="TI",verbose=FALSE, stemming = input$stemming)}
+             values$M=termExtraction(values$M,Field="TI",verbose=FALSE, stemming = input$stemming)
              NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences", network = "titles", sep = ";")
              
            },
            AB={
-             if(!("AB_TM" %in% names(values$M))){values$M=termExtraction(values$M,Field="AB",verbose=FALSE)}
+             #if(!("AB_TM" %in% names(values$M))){values$M=termExtraction(values$M,Field="AB",verbose=FALSE, stemming = input$stemming)}
+             values$M=termExtraction(values$M,Field="AB",verbose=FALSE, stemming = input$stemming)
              NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences", network = "abstracts", sep = ";")
              
            })
     
     S <- normalizeSimilarity(NetMatrix, type = "association")
-    capture.output(net1 <- networkPlot(S, n=input$TMn, Title = "Keyword co-occurrences",type="auto",
+    t = tempfile();pdf(file=t) #### trick to hide igraph plot
+    net <- networkPlot(S, n=input$TMn, Title = "Keyword co-occurrences",type="auto",
                                        labelsize = 2, halo = F,cluster="louvain",remove.isolates=FALSE,
                                        remove.multiple=FALSE, noloops=TRUE, weighted=TRUE,label.cex=T,edgesize=5, 
-                                       size=1,edges.min = 2))
-    Map=thematicMap(net1, NetMatrix, S = S, minfreq=input$TMfreq)
+                                       size=1,edges.min = 1, label.n=input$TMn)
+    dev.off();file.remove(t) ### end of trick
+    Map=thematicMap(net, NetMatrix, S = S, minfreq=input$TMfreq, size=input$sizeTM, repel=FALSE)
     #plot(Map$map)
     values$TM=Map
+    values$TM$net=net
     return(values)
   }
   
   historiograph <- function(input,values){
     
     if (input$histsearch=="FAST"){
-      min.cit=quantile(values$M$TC,0.75)
+      min.cit=quantile(values$M$TC,0.75, na.rm = TRUE)
     }else{min.cit=1}
     
     if (values$Histfield=="NA" | values$histsearch!=input$histsearch){
@@ -1653,7 +1985,7 @@ server <- function(input, output, session) {
       values$histsearch=input$histsearch
     }
     
-    values$histlog<- capture.output(values$histPlot <- histPlot(values$histResults, n=input$histNodes, size.cex=TRUE , size =input$histsize, labelsize = input$histlabelsize, arrowsize = 0.5))
+    values$histlog<- capture.output(values$histPlot <- histPlot(values$histResults, n=input$histNodes, size.cex=TRUE , size =input$histsize, labelsize = input$histlabelsize, arrowsize = 0.5, color=FALSE))
   return(values)
   }
   
@@ -1701,7 +2033,7 @@ server <- function(input, output, session) {
       values$cocnet=networkPlot(values$NetWords, normalize=normalize,n = n, Title = values$Title, type = input$layout, 
                                 size.cex=TRUE, size=5 , remove.multiple=F, edgesize = input$edgesize, labelsize=input$labelsize,label.cex=label.cex,
                                 label.n=label.n,edges.min=input$edges.min,label.color = F, curved=curved,alpha=input$cocAlpha,
-                                cluster="louvain")
+                                cluster=input$cocCluster)
     }else{
       emptyPlot("Selected field is not included in your data collection")
     }
@@ -1746,7 +2078,7 @@ server <- function(input, output, session) {
                                 size.cex=TRUE, size=5 , remove.multiple=F, edgesize = input$citedgesize, 
                                 labelsize=input$citlabelsize,label.cex=label.cex, curved=curved,
                                 label.n=label.n,edges.min=input$citedges.min,label.color = F,remove.isolates = FALSE,
-                                alpha=input$cocitAlpha, cluster="louvain")
+                                alpha=input$cocitAlpha, cluster=input$cocitCluster)
     return(values)
   }
   
@@ -1793,7 +2125,7 @@ server <- function(input, output, session) {
                               size.cex=TRUE, size=5 , remove.multiple=F, edgesize = input$coledgesize, 
                               labelsize=input$collabelsize,label.cex=label.cex, curved=curved,
                               label.n=label.n,edges.min=input$coledges.min,label.color = F,alpha=input$colAlpha,
-                              remove.isolates = T, cluster="louvain")
+                              remove.isolates = T, cluster=input$colCluster)
     
     return(values)
     
