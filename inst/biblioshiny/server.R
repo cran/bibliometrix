@@ -6,7 +6,7 @@ server <- function(input, output, session) {
   ##
   
   ## file upload max size
-  options(shiny.maxRequestSize=30*1024^2) 
+  options(shiny.maxRequestSize=100*1024^2) 
   
   ### initial values ####
   values = reactiveValues()
@@ -36,6 +36,8 @@ server <- function(input, output, session) {
     # 'size', 'type', and 'datapath' columns. The 'datapath'
     # column will contain the local filenames where the data can
     # be found.
+    input$applyLoad
+    isolate({
     inFile <- input$file1
     
     if (is.null(inFile)) {return(NULL)}
@@ -68,6 +70,7 @@ server <- function(input, output, session) {
     }
     
     ### zip folder
+   
     if (grepl(".*\\.zip",inFile$name)) {
         files=unzip(inFile$datapath)
         #files = list.files(pattern = ".txt")
@@ -75,20 +78,32 @@ server <- function(input, output, session) {
           Dpar=readFiles(l)
           return(Dpar)
           }))
-        (M <- convert2df(D, dbsource=input$dbsource,format=input$format))
+        withProgress(message = 'Conversion in progress',
+                     value = 0, {
+        M <- convert2df(D, dbsource=input$dbsource,format=input$format)
+                     })
     }
     
+    
     ### txt or bib formats  
+    isolate(
     if (grepl(".*\\.txt",inFile$name) | grepl(".*\\.bib",inFile$name)){
         D=readFiles(inFile$datapath)
-        (M <- convert2df(D, dbsource=input$dbsource,format=input$format))
+        withProgress(message = 'Conversion in progress',
+                     value = 0, {
+                       M <- convert2df(D, dbsource=input$dbsource,format=input$format)
+                     })
     }
-      
+    ) 
     ### RData format
+    
     if (grepl(".*\\.RData",inFile$name)) {
       
       load(inFile$datapath)
     }
+   
+    
+    
     values=initial(values)
     values$M <- M
     values$Morig=M
@@ -108,7 +123,7 @@ server <- function(input, output, session) {
                   ,class = 'cell-border compact stripe')  %>% 
                   formatStyle(names(MData),  backgroundColor = 'white', textAlign = 'center',fontSize = '70%') 
     
-    
+    })
     })
 
   output$collection.save <- downloadHandler(
@@ -127,7 +142,9 @@ server <- function(input, output, session) {
   output$textLog <- renderUI({
     #log=gsub("  Art","\\\nArt",values$log)
     #log=gsub("Done!   ","Done!\\\n",log)
-    log=paste("Number of Documents ",dim(values$M)[1])
+    k=dim(values$M)[1]
+    if (k==1){k=0}
+    log=paste("Number of Documents ",k)
     textInput("textLog", "Conversion results", 
               value=log)
   })
@@ -135,12 +152,13 @@ server <- function(input, output, session) {
   ### FILTERS MENU ####
   ### Filters uiOutput
   output$textDim <- renderUI({
-    dimMatrix=paste("Number of Documents ",dim(values$M)[1])
-    textInput("textDim", "", 
+    dimMatrix=paste("Documents ",dim(values$M)[1]," of ",dim(values$Morig)[1])
+    textInput("textDim", "Number of Documents", 
               value=dimMatrix)
   })
   
   output$selectType <- renderUI({
+    
     artType=sort(unique(values$Morig$DT))
     selectInput("selectType", "Document Type", 
                 choices = artType,
@@ -149,6 +167,7 @@ server <- function(input, output, session) {
   })
   
   output$sliderPY <- renderUI({
+    
     sliderInput("sliderPY", "Publication Year", min = min(values$Morig$PY),sep="",
                 max = max(values$Morig$PY), value = c(min(values$Morig$PY),max(values$Morig$PY)))
   })
@@ -159,12 +178,14 @@ server <- function(input, output, session) {
                 choices = SO,
                 selected = SO,
                 multiple = TRUE)
+    
   })
   
   output$sliderTC <- renderUI({
+
     sliderInput("sliderTC", "Total Citation", min = min(values$Morig$TC),
                 max = max(values$Morig$TC), value = c(min(values$Morig$TC),max(values$Morig$TC)))
-  })
+    })
   ### End Filters uiOutput
   
   
@@ -184,22 +205,19 @@ server <- function(input, output, session) {
            },
            "all"={SO=B$SO})
     M=M[M$SO %in% SO,]
-    #indexDT=(ifelse(M$DT %in% input$selectType,TRUE,FALSE))
-    #M=(M[indexDT,])
-    #indexSO=(ifelse(M$SO %in% input$selectSource,TRUE,FALSE))
-    #M=((M[M$SO %in% input$selectSource,]))
-    values$M=M
-    #values$results=list("NA") ## to reset summary statistics
     values<-initial(values)
-    Mdisp=as.data.frame(apply(M,2,function(x){substring(x,1,150)}),stringsAsFactors = FALSE)
-    
+    values$M=M
+    Mdisp=as.data.frame(apply(values$M,2,function(x){substring(x,1,150)}),stringsAsFactors = FALSE)    
+    if (dim(Mdisp)[1]>0){
     DT::datatable(Mdisp, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 50, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(Mdisp))-1)))), 
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(Mdisp))-1)))),
                   class = 'cell-border compact stripe') %>%
       formatStyle(names(Mdisp),  backgroundColor = 'white',textAlign = 'center', fontSize = '70%')
+    }else{Mdisp=data.frame(Message="Empty collection",stringsAsFactors = FALSE, row.names = " ")}
+    
   })
   
   
@@ -329,19 +347,6 @@ server <- function(input, output, session) {
   
   ### SOURCES MENU ####
   
-  output$MostRelSourcesTable <- DT::renderDT({
-    
-    TAB <- values$TABSo
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
-    
-  })
-  
   output$MostRelSourcesPlot <- renderPlotly({
     res <- descriptive(values,type="tab7")
     values <-res$values
@@ -370,6 +375,62 @@ server <- function(input, output, session) {
     plot.ly(g)
   })#, height = 500, width =900)
   
+  output$MostRelSourcesTable <- DT::renderDT({
+    
+    TAB <- values$TABSo
+    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
+                  options = list(pageLength = 20, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
+                  class = 'cell-border compact stripe') %>%
+      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+    
+  })
+  
+  output$MostRelCitSourcesPlot <- renderPlotly({
+    
+    values$M=metaTagExtraction(values$M,"CR_SO")
+    TAB=tableTag(values$M,"CR_SO")
+    TAB=data.frame(Sources=names(TAB),Articles=as.numeric(TAB),stringsAsFactors = FALSE)
+    values$TABSoCit<-TAB
+    #xx=as.data.frame(values$results$Sources)
+    xx<- TAB
+    if (input$MostRelCitSourcesK>dim(xx)[1]){
+      k=dim(xx)[1]
+    } else {k=input$MostRelCitSourcesK}
+    #xx=xx[1:k,]
+    xx=subset(xx, row.names(xx) %in% row.names(xx)[1:k])
+    xx$Articles=as.numeric(xx$Articles)
+    xx$Sources=substr(xx$Sources,1,50)
+    
+    
+    g=ggplot2::ggplot(data=xx, aes(x=xx$Sources, y=xx$Articles, fill=-xx$Articles,text=paste("Source: ",xx$Sources,"\nN. of Documents: ",xx$Articles))) +
+      geom_bar(aes(group="NA"),stat="identity")+
+      scale_fill_continuous(type = "gradient")+
+      scale_x_discrete(limits = rev(xx$Sources))+
+      labs(title="Most Cited Sources", x = "Sources")+
+      labs(y = "N. of Documents")+
+      theme_minimal()+
+      guides(fill=FALSE)+
+      coord_flip()
+    
+    plot.ly(g)
+  })#, height = 500, width =900)
+  
+  output$MostRelCitSourcesTable <- DT::renderDT({
+    
+    TAB <- values$TABSoCit
+    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
+                  options = list(pageLength = 20, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
+                  class = 'cell-border compact stripe') %>%
+      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+    
+  })
+  
   output$bradfordPlot <- renderPlotly({
     
     values$bradford=bradford(values$M)
@@ -392,7 +453,11 @@ server <- function(input, output, session) {
     
     input$applyHsource
     
-    isolate(res <- Hindex_plot(values,type="source"))
+    withProgress(message = 'Calculation in progress',
+                 value = 0, {
+                   isolate(res <- Hindex_plot(values,type="source"))
+                 })
+    
     
     isolate(plot.ly(res$g))
    
@@ -476,7 +541,6 @@ server <- function(input, output, session) {
   })
   
   ### AUTHORS MENU ####
-  
       ### Authors ----
   output$MostRelAuthorsPlot <- renderPlotly({
     res <- descriptive(values,type="tab3")
@@ -537,7 +601,10 @@ server <- function(input, output, session) {
     
     input$applyHauthor
     
-    isolate(res <- Hindex_plot(values,type="author"))
+    withProgress(message = 'Calculation in progress',
+                 value = 0, {
+                   isolate(res <- Hindex_plot(values,type="author"))
+                 })
     
     isolate(plot.ly(res$g))
     
@@ -633,14 +700,24 @@ server <- function(input, output, session) {
       ### Affiliations ----
   
   output$MostRelAffiliationsPlot <- renderPlotly({
-    res <- descriptive(values,type="tab11")
+    
+    if (input$disAff=="Y"){
+      res <- descriptive(values,type="tab11")
+      xx=as.data.frame(values$results$Affiliations, stringsAsFactors = FALSE)
+    }else{
+      res <- descriptive(values,type="tab12")
+        xx=values$TAB
+        names(xx)=c("AFF","Freq")
+        }
+    
     values <-res$values
     values$TABAff <- values$TAB
     
-    xx=as.data.frame(values$results$Affiliations, stringsAsFactors = FALSE)
+    
     if (input$MostRelAffiliationsK>dim(xx)[1]){
       k=dim(xx)[1]
     } else {k=input$MostRelAffiliationsK}
+    
     xx=xx[1:k,]
     g=ggplot2::ggplot(data=xx, aes(x=xx$AFF, y=xx$Freq, fill=-xx$Freq, text=paste("Affiliation: ",xx$AFF,"\nN.of Documents: ",xx$Freq))) +
       geom_bar(aes(group="NA"),stat="identity")+
@@ -823,8 +900,10 @@ server <- function(input, output, session) {
   })
   
   output$MostLocCitDocsPlot <- renderPlotly({
-    
-    TAB <-localCitations(values$M, fast.search=TRUE, sep = input$LocCitSep)$Paper
+    withProgress(message = 'Calculation in progress',
+                 value = 0, {
+                   TAB <-localCitations(values$M, fast.search=TRUE, sep = input$LocCitSep)$Paper
+                 })
     
     xx=data.frame(Document=as.character(TAB[,1]), DOI=as.character(TAB[,2]), Year=TAB[,3], "Local Citations"=TAB[,4], "Global Citations"=TAB[,5],stringsAsFactors = FALSE)
     
@@ -1234,6 +1313,17 @@ server <- function(input, output, session) {
     
   }, height = 650, width = 800)
   
+  output$CSPlot4 <- renderPlot({
+    
+    
+      if (values$CS[[1]][1]!="NA"){
+        plot(values$CS$graph_dendogram)
+      }else{
+        emptyPlot("Selected field is not included in your data collection")
+        }
+
+  }, height = 650, width = 1000)
+  
       ### Thematic Map ----
   output$TMPlot <- renderPlotly({
     
@@ -1544,7 +1634,12 @@ server <- function(input, output, session) {
     ## Historiograph
     input$applyHist
     
-    values <- isolate(historiograph(input,values))
+    
+      withProgress(message = 'Calculation in progress',
+                   value = 0, {
+                     values <- isolate(historiograph(input,values))
+                   })
+      
     
 
     }, height = 500, width = 900)
@@ -1634,9 +1729,11 @@ server <- function(input, output, session) {
       ### WPPlot ----
   output$WMPlot<- renderPlot({
       
-      #input$applyWM
-      values$WMmap=countrycollaboration(values$M,label=FALSE,edgesize=input$WMedgesize/2,min.edges=input$WMedges.min)
-      plot(values$WMmap$g)
+      input$applyWM
+      isolate({
+        values$WMmap=countrycollaboration(values$M,label=FALSE,edgesize=input$WMedgesize/2,min.edges=input$WMedges.min)
+        plot(values$WMmap$g)
+      })
       #isolate(values$WMmap=countrycollaboration(values$M,label=FALSE,edgesize=input$WMedgesize/2,min.edges=input$WMedges.min))
       #isolate(plot(values$WMmap$g))
       
@@ -1828,6 +1925,13 @@ server <- function(input, output, session) {
            "tab11"={
              TAB=as.data.frame(values$results$Affiliations,stringsAsFactors = FALSE)
              names(TAB)=c("Affiliations", "Articles")
+           },
+           "tab12"={
+             TAB=tableTag(values$M,"C1")
+             TAB=data.frame(Affiliations=names(TAB), Articles=as.numeric(TAB),stringsAsFactors = FALSE)
+             TAB=TAB[nchar(TAB[,1])>4,]
+             #names(TAB)=c("Affiliations", "Articles")
+             
            }
     )
     values$TAB=TAB
@@ -1913,7 +2017,7 @@ server <- function(input, output, session) {
     return(results)
   }
       
-      ### Strucutre fuctions ----
+      ### Structure fuctions ----
   CAmap <- function(input, values){
     if ((input$CSfield %in% names(values$M))){
       
@@ -1922,7 +2026,7 @@ server <- function(input, output, session) {
         
         minDegree=as.numeric(tab[input$CSn])
         
-        values$CS <- conceptualStructure(values$M, method=input$method , field=input$CSfield, minDegree=minDegree, k.max = 8, stemming=F, labelsize=input$CSlabelsize,documents=input$CSdoc,graph=FALSE)
+        values$CS <- conceptualStructure(values$M, method=input$method , field=input$CSfield, minDegree=minDegree, clust=input$nClustersCS, k.max = 8, stemming=F, labelsize=input$CSlabelsize,documents=input$CSdoc,graph=FALSE)
         plot(values$CS$graph_terms)
         
       }else{emptyPlot("Selected field is not included in your data collection")

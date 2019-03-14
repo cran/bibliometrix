@@ -19,7 +19,9 @@
 #' \tabular{lll}{
 #' \code{map}\tab   \tab The thematic map as ggplot2 object\cr
 #' \code{clusters}\tab   \tab Centrality and Density values for each cluster. \cr
-#' \code{words}\tab   \tab A list of words following in each cluster}
+#' \code{words}\tab   \tab A list of words following in each cluster\cr
+#' \code{nclust}\tab   \tab The number of clusters\cr
+#' \code{net}\tab    \tab A list containing the network output (as provided from the networkPlot function)}
 #' 
 #'
 #' @examples
@@ -59,6 +61,7 @@ thematicMap <- function(M, field="ID", n=250, minfreq=5, stemming=FALSE, size=0.
          })
   
   S <- normalizeSimilarity(NetMatrix, type = "association")
+  #S=NetMatrix
   t = tempfile();pdf(file=t) #### trick to hide igraph plot
   Net <- networkPlot(S, n=n, Title = "Keyword co-occurrences",type="auto",
                      labelsize = 2, halo = F,cluster="louvain",remove.isolates=FALSE,

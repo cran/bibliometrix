@@ -93,6 +93,8 @@
 #' @importFrom factoextra get_ca_col
 #' @importFrom factoextra fviz_nbclust
 #' @importFrom factoextra fviz_cluster
+#' @importFrom factoextra fviz_dend
+#' @importFrom factoextra hcut
 #' @importFrom igraph get.edgelist
 #' @importFrom igraph graph.adjacency
 #' @importFrom igraph degree
@@ -308,6 +310,11 @@ convert2df<-function(file,dbsource="isi",format="plaintext"){
   ### SR field creation
   suppressWarnings(M <- metaTagExtraction(M, Field="SR"))
   
+  ## AU normalization
+  M$AU=unlist(lapply(strsplit(M$AU,";"), function(x){
+    x=trimws(trimES(gsub("[[:punct:]]"," ",x)))
+    x=paste(x,collapse=";")
+  }))
   
   ### identify duplicated SRs 
     SR=M$SR

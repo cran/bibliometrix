@@ -10,6 +10,7 @@ if (!(require(wordcloud2))){install.packages("wordcloud2")}
 if (!require(colourpicker)){install.packages("colourpicker")}
 if (!require(treemap)){install.packages("treemap")}
 if (!require(ggmap)){install.packages("ggmap"); require(ggmap, quietly=TRUE)}
+if (!require(maps)){install.packages("maps"); require(maps, quietly=TRUE)}
 if (!require(visNetwork)){install.packages("visNetwork"); require(visNetwork, quietly=TRUE)}
 if (!require(plotly)){install.packages("plotly"); require(plotly, quietly=TRUE)}
 require(Matrix, quietly = TRUE)
@@ -105,7 +106,8 @@ tabPanel(
                   ".xls",
                   ".zip")
       ),
-      p("Here accept single .txt/.bib/.xslx/.RData files, or multiple .txt/.bib files compressed in a single .zip archive."),
+      h6("Here accept single .txt/.bib/.xslx/.RData files, or multiple .txt/.bib files compressed in a single .zip archive."),
+      actionButton("applyLoad", "Start Conversion"),
       tags$hr(),
       
       uiOutput("textLog"),
@@ -151,7 +153,6 @@ tabPanel(
                                                            "Core + Zone 2 Sources"="zone2",
                                                            "All Sources"="all"),
                                                selected = "all")
-                                   
                       ),
                       mainPanel(DT::DTOutput("dataFiltered"))
                     )
@@ -239,6 +240,29 @@ navbarMenu("Sources",
                       )
                       )
                     ),
+           #### MOST RELEVANT CITED SOURCES ----
+           tabPanel("Most Cited Sources",
+                    sidebarLayout(
+                      sidebarPanel(width=3,
+                                   h3(em(strong("Most Cited Sources (from Reference Lists)"))),
+                                   br(),
+                                   h4(em(strong("Graphical Parameters: "))),
+                                   "  ",
+                                   numericInput("MostRelCitSourcesK", 
+                                                label=("Number of Sources"), 
+                                                value = 20)
+                      ),
+                      mainPanel(
+                        tabsetPanel(type = "tabs",
+                                    tabPanel("Plot",
+                                             shinycssloaders::withSpinner(plotlyOutput(outputId = "MostRelCitSourcesPlot",height = 700))
+                                    ),
+                                    tabPanel("Table",
+                                             shinycssloaders::withSpinner(DT::DTOutput("MostRelCitSourcesTable"))
+                                    ))
+                      )
+                    )
+           ),
            ### BRADFORD LAW ----
            tabPanel("Bradford's law",
                     
@@ -461,6 +485,13 @@ navbarMenu("Authors",
                       sidebarPanel(width=3,
                                    h3(em(strong("Most Relevant Affiliations"))),
                                    br(),
+                                   "  ",
+                                   selectInput("disAff", 
+                                               label = "Affiliation Name Disambiguation",
+                                               choices = c("Yes"="Y", 
+                                                           "No"="N"),
+                                               selected = "Y"),
+                                   "  ",
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
                                    numericInput("MostRelAffiliationsK", 
@@ -1214,6 +1245,18 @@ navbarMenu("Conceptual Structure",
                         numericInput("CSn", 
                                      label=("Number of terms"), 
                                      value = 50),
+                        selectInput("nClustersCS", 
+                                    label = "N. of Clusters",
+                                    choices = c("Auto" = "0", 
+                                                "1" = "1",
+                                                "2" = "2",
+                                                "3" = "3",
+                                                "4" = "4",
+                                                "5" = "5",
+                                                "6" = "6",
+                                                "7" = "7",
+                                                "8" = "8"),
+                                    selected = "0"),
                         
                         "  ",
                         "  ",
@@ -1238,6 +1281,9 @@ navbarMenu("Conceptual Structure",
                                   tabPanel("Word Map", 
                                            shinycssloaders::withSpinner(plotOutput(
                                     outputId = "CSPlot1"))),
+                                  tabPanel("Topic Dendrogram", 
+                                           shinycssloaders::withSpinner(plotOutput(
+                                             outputId = "CSPlot4"))),
                                   tabPanel("Most Contributing Papers", 
                                            shinycssloaders::withSpinner(plotOutput(
                                     outputId = "CSPlot2"))),
