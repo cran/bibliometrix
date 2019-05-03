@@ -24,6 +24,7 @@ server <- function(input, output, session) {
   values$histsearch="NA"
   values$citShortlabel="NA"
   values$S=list("NA")
+  values$GR="NA"
 
   
   
@@ -239,6 +240,13 @@ server <- function(input, output, session) {
     
   })
   
+  output$CAGR <- renderText({
+    Y=table(values$M$PY)
+    ny=dim(Y)[1]
+    values$GR<-round(((Y[ny]/Y[1])^(1/(ny-1))-1)*100,2)
+    paste("Annual Growth Rate: ",values$GR,"%",collapse="",sep="")
+  })
+  
   output$AnnualProdPlot <- renderPlotly({
     res <- descriptive(values,type="tab2")
     values <-res$values
@@ -342,6 +350,17 @@ server <- function(input, output, session) {
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
       formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+    
+  })
+  
+  output$ThreeFielsPlot <- networkD3::renderSankeyNetwork({
+    
+    input$apply3F
+    
+    isolate({
+    fields=c(input$LeftField, input$CentralField, input$RightField)
+    threeFieldsPlot(values$M, fields=fields,n=c(20,20,20), width=1200,height=600)
+    })
     
   })
   
@@ -662,6 +681,7 @@ server <- function(input, output, session) {
     values$lotka=lotka(biblioAnalysis(values$M))
     AuProd=values$lotka$AuthorProd
     AuProd$Theoretical=10^(log10(values$lotka$C)-2*log10(AuProd[,1]))
+    AuProd$Theoretical=AuProd$Theoretical/sum(AuProd$Theoretical)
     
     g=ggplot2::ggplot(AuProd, aes(x = AuProd$N.Articles, y = AuProd$Freq*100, text=paste("N.Articles: ",AuProd$N.Articles,"\n% of production: ",round(AuProd$Freq*100,1)))) +
       geom_line(aes(group="NA")) +
@@ -962,7 +982,7 @@ server <- function(input, output, session) {
       geom_bar(aes(group="NA"),stat="identity")+
       scale_fill_continuous(type = "gradient")+
       scale_x_discrete(limits = rev(xx[,1]), labels=substr(rev(xx[,1]),1,50))+
-      labs(title="Most Cited References", x = "Documents")+
+      labs(title="Most Cited References", x = "References")+
       labs(y = "Local Citations")+
       theme_minimal() +
       guides(fill=FALSE)+
@@ -1274,6 +1294,7 @@ server <- function(input, output, session) {
   })
   
       ### Correspondence Analysis ----
+
   output$CSPlot1 <- renderPlot({
     
     input$applyCA
@@ -1324,6 +1345,39 @@ server <- function(input, output, session) {
 
   }, height = 650, width = 1000)
   
+  output$CSTableW <- DT::renderDT({
+    
+    WData=data.frame(word=row.names(values$CS$res$col$coord), values$CS$res$col$coord, 
+                      cluster=values$CS$km.res$cluster,stringsAsFactors = FALSE)
+    WData$Dim.1=round(WData$Dim.1,2)
+    WData$Dim.2=round(WData$Dim.2,2)
+
+    DT::datatable(WData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(WData))-1))))) %>%
+      formatStyle(names(WData),  backgroundColor = 'white')
+    #return(Data)
+    
+  })
+  
+  output$CSTableD <- DT::renderDT({
+    
+    CSData=values$CS$docCoord
+    CSData=data.frame(Documents=row.names(CSData),CSData,stringsAsFactors = FALSE)
+    CSData$dim1=round(CSData$dim1,2)
+    CSData$dim2=round(CSData$dim2,2)
+    CSData$contrib=round(CSData$contrib,2)
+    DT::datatable(CSData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
+                  options = list(pageLength = 50, dom = 'Bfrtip',
+                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(CSData))-1))))) %>%
+      formatStyle(names(CSData),  backgroundColor = 'white') 
+    
+  })
+  
       ### Thematic Map ----
   output$TMPlot <- renderPlotly({
     
@@ -1369,10 +1423,14 @@ server <- function(input, output, session) {
       ### Thematic Evolution ----
   output$sliders <- renderUI({
     numSlices <- as.integer(input$numSlices)
+    v=quantile(values$M$PY, seq(0,1,by=(1/(numSlices+1))))
+    v=round(v[-c(1,length(v))],0)
     lapply(1:numSlices, function(i) {
-      # sliderInput(inputId = paste0("Slice", i), label = paste("Slice", i),
+      # sliderInput(inputId = paste0("Slice", i), label = paste("Cutting Year", i),
       #             min=1990,max=2018,value=1990)
-      numericInput(inputId = paste0("Slice", i), label = paste("Slice", i),value=median(values$M$PY),min=min(values$M$PY)+1,max=max(values$M$PY)-1, step=1)
+      
+      numericInput(inputId = paste0("Slice", i), label = paste("Cutting Year", i),value=v[i],min=min(values$M$PY)+1,max=max(values$M$PY)-1, step=1)
+      #numericInput(inputId = paste0("Slice", i), label = paste("Cutting Year", i),value=median(values$M$PY),min=min(values$M$PY)+1,max=max(values$M$PY)-1, step=1)
     })
   })
   
@@ -1809,6 +1867,7 @@ server <- function(input, output, session) {
     values$histsearch="NA"
     values$citShortlabel="NA"
     values$S=list("NA")
+    values$GR="NA"
     
     return(values)
   }
@@ -2135,7 +2194,7 @@ server <- function(input, output, session) {
       
       #par(bg="grey92", mar=c(0,0,0,0))
       values$cocnet=networkPlot(values$NetWords, normalize=normalize,n = n, Title = values$Title, type = input$layout, 
-                                size.cex=TRUE, size=5 , remove.multiple=F, edgesize = input$edgesize, labelsize=input$labelsize,label.cex=label.cex,
+                                size.cex=TRUE, size=5 , remove.multiple=F, edgesize = input$edgesize*3, labelsize=input$labelsize,label.cex=label.cex,
                                 label.n=label.n,edges.min=input$edges.min,label.color = F, curved=curved,alpha=input$cocAlpha,
                                 cluster=input$cocCluster)
     }else{
@@ -2179,7 +2238,7 @@ server <- function(input, output, session) {
     if (input$cocit.curved=="Yes"){curved=TRUE}else{curved=FALSE}
     
     values$cocitnet=networkPlot(values$NetRefs, normalize=NULL, n = n, Title = values$Title, type = input$citlayout, 
-                                size.cex=TRUE, size=5 , remove.multiple=F, edgesize = input$citedgesize, 
+                                size.cex=TRUE, size=5 , remove.multiple=F, edgesize = input$citedgesize*3, 
                                 labelsize=input$citlabelsize,label.cex=label.cex, curved=curved,
                                 label.n=label.n,edges.min=input$citedges.min,label.color = F,remove.isolates = FALSE,
                                 alpha=input$cocitAlpha, cluster=input$cocitCluster)
@@ -2226,7 +2285,7 @@ server <- function(input, output, session) {
     if (input$collayout=="worldmap"){type="auto"}
     
     values$colnet=networkPlot(values$ColNetRefs, normalize=normalize, n = n, Title = values$Title, type = type, 
-                              size.cex=TRUE, size=5 , remove.multiple=F, edgesize = input$coledgesize, 
+                              size.cex=TRUE, size=5 , remove.multiple=F, edgesize = input$coledgesize*3, 
                               labelsize=input$collabelsize,label.cex=label.cex, curved=curved,
                               label.n=label.n,edges.min=input$coledges.min,label.color = F,alpha=input$colAlpha,
                               remove.isolates = T, cluster=input$colCluster)
@@ -2332,7 +2391,9 @@ server <- function(input, output, session) {
     
     vn$nodes$label=LABEL
     vn$edges$num=1
-
+    vn$edges$dashes=FALSE
+    vn$edges$dashes[vn$edges$lty==2]=TRUE
+  
     ## opacity
     vn$nodes$color=adjustcolor(vn$nodes$color,alpha=min(c(opacity+0.2,1)))
     vn$edges$color=adjustcolor(vn$edges$color,alpha=opacity)

@@ -1,5 +1,5 @@
 ## BIBLIOSHINY: A SHINY APP FOR BIBLIOMETRIX R-PACKAGE
-
+if (!(require(bibliometrix))){install.packages("bibliometrix"); require(bibliometrix, quietly=TRUE)}
 if (!(require(shiny))){install.packages("shiny"); require(shiny, quietly=TRUE)} 
 if (!(require(rio))){install.packages("rio")} 
 if (!(require(DT))){install.packages("DT")} 
@@ -63,7 +63,7 @@ ui <-  navbarPage("biblioshiny for bibliometrix",
                                
                                h2("Example"),
                                br(),
-                               p("Step 1 - Download an example at the following", a("link",href = "http://www.bibliometrix.org/datasets/joi.zip"),
+                               p("Step 1 - Download an example at the following", a("link",href = "http://www.bibliometrix.org/datasets/joi.zip", target="_blank"),
                                ". It includes all articles published by the", em("Journal of Informetrics"), "from 2007 to 2017."),  
                                p("Step 2 - In the ",strong("Load ") ,"menu, select ",strong("'Web of Knowledge'")," as database and ",strong("'Plaintext'")," as file format."),
                                p("Step 3 - Choose and load the file", strong("joi.zip")," using the ",strong("browse")," button."),
@@ -85,7 +85,7 @@ tabPanel(
                  br(),
       selectInput("dbsource", 
                   label = "Database",
-                  choices = c("Web of Knowledge"="isi", 
+                  choices = c("Web of Science (WoS/WoK)"="isi", 
                               "Scopus"="scopus"),
                   selected = "isi"),
       conditionalPanel(condition = "input.dbsource == 'isi'",
@@ -179,7 +179,10 @@ navbarMenu("Dataset",
                                    "  ",
                                    "  ",
                                    h3(em(strong("Annual Scientific Production "))),
-                                   "  "
+                                   "  ",
+                                   br(),
+                                   verbatimTextOutput("CAGR")
+                                   #uiOutput("textCAGR")
                                    ),
                       mainPanel(
                         tabsetPanel(type = "tabs",
@@ -208,6 +211,62 @@ navbarMenu("Dataset",
                                     tabPanel("Table",
                                              shinycssloaders::withSpinner(DT::DTOutput("AnnualTotCitperYearTable"))
                                     ))
+                      )
+                    )
+           ),
+           tabPanel("Three-Fields Plot",
+                    sidebarLayout(
+                      sidebarPanel(width=3,
+                                   "  ",
+                                   "  ",
+                                   h3(em(strong("Three-Fields Plot "))),
+                                   "  ",
+                                   actionButton("apply3F", "Apply!"),
+                                   br(),
+                                   selectInput("CentralField",
+                                               label = "Middle Field",
+                                               choices = c("Authors" = "AU",
+                                                           "Affiliations" = "AU_UN",
+                                                           "Countries"="AU_CO",
+                                                           "Keywords" = "DE",
+                                                           "Keywords Plus" = "ID",
+                                                           "Titles" = "TI_TM",
+                                                           "Abstract" = "AB_TM",
+                                                           "Sources" = "SO",
+                                                           "References" = "CR",
+                                                           "Cited Sources" = "CR_SO"),
+                                               selected = "DE"),
+                                   selectInput("LeftField",
+                                               label = "Left Field",
+                                               choices = c("Authors" = "AU",
+                                                           "Affiliations" = "AU_UN",
+                                                           "Countries"="AU_CO",
+                                                           "Keywords" = "DE",
+                                                           "Keywords Plus" = "ID",
+                                                           "Titles" = "TI_TM",
+                                                           "Abstract" = "AB_TM",
+                                                           "Sources" = "SO",
+                                                           "References" = "CR",
+                                                           "Cited Sources" = "CR_SO"),
+                                                           selected = "AU"),
+                                   selectInput("RightField",
+                                               label = "Right Field",
+                                               choices = c("Authors" = "AU",
+                                                           "Affiliations" = "AU_UN",
+                                                           "Countries"="AU_CO",
+                                                           "Keywords" = "DE",
+                                                           "Keywords Plus" = "ID",
+                                                           "Titles" = "TI_TM",
+                                                           "Abstract" = "AB_TM",
+                                                           "Sources" = "SO",
+                                                           "References" = "CR",
+                                                           "Cited Sources" = "CR_SO"),
+                                                           selected = "SO")
+                                   ),
+                      mainPanel(
+                        #tabPanel("Plot",
+                                 shinycssloaders::withSpinner(networkD3::sankeyNetworkOutput(outputId = "ThreeFielsPlot",height = "600px"))
+                        #            )
                       )
                     )
            )
@@ -241,10 +300,10 @@ navbarMenu("Sources",
                       )
                     ),
            #### MOST RELEVANT CITED SOURCES ----
-           tabPanel("Most Cited Sources",
+           tabPanel("Most Local Cited Sources",
                     sidebarLayout(
                       sidebarPanel(width=3,
-                                   h3(em(strong("Most Cited Sources (from Reference Lists)"))),
+                                   h3(em(strong("Most Local Cited Sources (from Reference Lists)"))),
                                    br(),
                                    h4(em(strong("Graphical Parameters: "))),
                                    "  ",
@@ -377,7 +436,7 @@ navbarMenu("Authors",
                                                label = "Frequency measure",
                                                choices = c("N. of Documents "="t", 
                                                            "Percentage"="p",
-                                                           "Frequency Fractionalized"="f"),
+                                                           "Fractionalized Frequency"="f"),
                                                selected = "t")
                       ),
                       mainPanel(
@@ -1012,8 +1071,8 @@ navbarMenu("Conceptual Structure",
                         sliderInput(inputId = "labelsize",
                                     label = "Label size",
                                     min = 0.0,
-                                    max = 10,
-                                    value = 2,
+                                    max = 20,
+                                    value = 6,
                                     step = 0.10),
                         
                         selectInput(inputId ="coc.shape",
@@ -1242,6 +1301,7 @@ navbarMenu("Conceptual Structure",
                                                 "Titles" = "TI",
                                                 "Abstracts" = "AB"),
                                     selected = "ID"),
+                        
                         numericInput("CSn", 
                                      label=("Number of terms"), 
                                      value = 50),
@@ -1289,7 +1349,12 @@ navbarMenu("Conceptual Structure",
                                     outputId = "CSPlot2"))),
                                   tabPanel("Most Cited Papers", 
                                            shinycssloaders::withSpinner(plotOutput(
-                                    outputId = "CSPlot3")))
+                                    outputId = "CSPlot3"))),
+                                  tabPanel("Words by Cluster",
+                                           shinycssloaders::withSpinner(DT::DTOutput(outputId = "CSTableW"))),
+                                  tabPanel("Articles by Cluster",
+                                           shinycssloaders::withSpinner(DT::DTOutput(outputId = "CSTableD")))
+                                  
                           )
                       )
                     )
@@ -1307,7 +1372,7 @@ navbarMenu("Intellectual Structure",
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
-                                   h3(em(strong("Co-cocitation Network"))),
+                                   h3(em(strong("Co-citation Network"))),
                                    br(),
                                    actionButton("applyCocit", "Apply!"),
                                    downloadButton("network.cocit", "Save Pajek"),
@@ -1393,8 +1458,8 @@ navbarMenu("Intellectual Structure",
                         sliderInput(inputId = "citlabelsize",
                                     label = "Label size",
                                     min = 0.0,
-                                    max = 10,
-                                    value = 2,
+                                    max = 20,
+                                    value = 6,
                                     step = 0.10),
                         
                         selectInput(inputId ="cocit.shape",
@@ -1504,7 +1569,7 @@ navbarMenu("Social Structure",
                                    h3(em(strong("Collaboration Network"))),
                                    br(),
                                    actionButton("applyCol", "Apply!"),
-                                   downloadButton("network.col", "Save Pakek"),
+                                   downloadButton("network.col", "Save Pajek"),
                                    downloadButton("networkCol.fig", "Save Fig"),
                                                 
                                    "  ",
@@ -1585,8 +1650,8 @@ navbarMenu("Social Structure",
                                    sliderInput(inputId = "collabelsize",
                                                label = "Label size",
                                                min = 0.0,
-                                               max = 10,
-                                               value = 2,
+                                               max = 20,
+                                               value = 6,
                                                step = 0.10),
                                    
                                    selectInput(inputId ="col.shape",
