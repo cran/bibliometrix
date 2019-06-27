@@ -9,7 +9,7 @@
 #'   articles and variables to Field Tag in the original ISI or SCOPUS file.
 #' @param field is a character object. It indicates one of the field tags of the
 #'   standard ISI WoS Field Tag codify. 
-#'   field can be equal to one of this tags:
+#'   field can be equal to one of these tags:
 #'   \tabular{lll}{ 
 #'   \code{ID}\tab   \tab Keywords Plus associated by ISI or SCOPUS database\cr 
 #'   \code{DE}\tab   \tab Author's keywords\cr 
@@ -19,14 +19,14 @@
 #'   \code{AB}\tab   \tab Terms extracted from abstracts}
 #' @param method is a character object. It indicates the factorial method used to create the factorial map. Use \code{method="CA"} for Correspondence Analysis,
 #'  \code{method="MCA"} for Multiple Correspondence Analysis or \code{method="MDS"} for Metric Multidimensional Scaling. The default is \code{method="MCA"}
-#' @param minDegree is an integer. It indicates the minimun occurrences of terms to analize and plot. The default value is 2.
-#' @param clust is an integer or a character. If clust="auto", the numebr of cluster is chosen automatically, otherwise clust can be an integer between 2 and 8.
-#' @param k.max is an integer. It indicates the maximum numebr of cluster to keep. The default value is 5. The max value is 20.
+#' @param minDegree is an integer. It indicates the minimum occurrences of terms to analize and plot. The default value is 2.
+#' @param clust is an integer or a character. If clust="auto", the number of cluster is chosen automatically, otherwise clust can be an integer between 2 and 8.
+#' @param k.max is an integer. It indicates the maximum number of cluster to keep. The default value is 5. The max value is 20.
 #' @param stemming is logical. If TRUE the Porter's Stemming algorithm is applied to all extracted terms. The default is \code{stemming = FALSE}.
 #' @param labelsize is an integer. It indicates the label size in the plot. Default is \code{labelsize=10}
 #' @param quali.supp is a vector indicating the indexes of the categorical supplementary variables. It is used only for CA and MCA.
 #' @param quanti.supp is a vector indicating the indexes of the quantitative supplementary variables. It is used only for CA and MCA.
-#' @param documents is an integer. It indicates the numer of documents to plot in the factorial map. The default value is 10. It is used only for CA and MCA.
+#' @param documents is an integer. It indicates the number of documents to plot in the factorial map. The default value is 10. It is used only for CA and MCA.
 #' @param graph is logical. If TRUE the function plots the maps otherwise they are saved in the output object. Default value is TRUE
 #' @return It is an object of the class \code{list} containing the following components:
 #'
@@ -61,13 +61,13 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
   if (!is.null(quali.supp)){
     QSUPP=data.frame(M[,quali.supp])
     names(QSUPP)=names(M)[quali.supp]
-    row.names(QSUPP)=row.names(M)
+    row.names(QSUPP)=tolower(row.names(M))
   }
   
   if (!is.null(quanti.supp)){
     SUPP=data.frame(M[,quanti.supp])
     names(SUPP)=names(M)[quanti.supp]
-    row.names(SUPP)=row.names(M)
+    row.names(SUPP)=tolower(row.names(M))
   }
   binary=FALSE
   if (method=="MCA"){binary=TRUE}
@@ -203,6 +203,10 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
     geom_point() +
     theme(text = element_text(size=labelsize),axis.title=element_text(size=labelsize,face="bold"),
           plot.title=element_text(size=labelsize+1,face="bold"))
+   if (method!="MDS"){
+     b=b+xlab(paste("Dim 1 (",round(res.mca$eigCorr$perc[1],2),"%)",sep=""))+
+       ylab(paste("Dim 2 (",round(res.mca$eigCorr$perc[2],2),"%)",sep=""))
+   }else{b=b+xlab("Dim 1")+ylab("Dim 2")}
   
   if (!is.null(quali.supp)){
     s_df_quali=df_quali[(abs(df_quali[,1]) >= quantile(abs(df_quali[,1]),0.75) | abs(df_quali[,2]) >= quantile(abs(df_quali[,2]),0.75)),]
@@ -278,7 +282,6 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
                        fill=adjustcolor(A$color,alpha.f=0.6), color = "white", segment.alpha=0.5, segment.color="gray")+
       scale_x_continuous(limits = rangex, breaks=seq(round(rangex[1]), round(rangex[2]), 1))+
       scale_y_continuous(limits = rangey, breaks=seq(round(rangey[1]), round(rangey[2]), 1))+
-      xlab("dim1")+ ylab("dim2")+
       geom_hline(yintercept=0, linetype="dashed", color = adjustcolor("grey60",alpha.f = 0.7))+
       geom_vline(xintercept=0, linetype="dashed", color = adjustcolor("grey60",alpha.f = 0.7))+
       theme(plot.title=element_text(size=labelsize+1,face="bold"), 
@@ -288,6 +291,11 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
             #size = 1, linetype = "solid"),
             panel.grid.major = element_line(size = 1, linetype = 'solid', colour = "white"),
             panel.grid.minor = element_blank())
+    
+    if (method!="MDS"){
+      b_doc=b_doc+xlab(paste("Dim 1 (",round(res.mca$eigCorr$perc[1],2),"%)",sep=""))+
+        ylab(paste("Dim 2 (",round(res.mca$eigCorr$perc[2],2),"%)",sep=""))
+    }else{b_doc=b_doc+xlab("Dim 1")+ylab("Dim 2")}
       
     if (isTRUE(graph)){plot(b_doc)}
     
@@ -312,7 +320,8 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
                        fill=adjustcolor(B$color,alpha.f=0.6), color = "white", segment.alpha=0.5, segment.color="gray")+
       scale_x_continuous(limits = rangex, breaks=seq(round(rangex[1]), round(rangex[2]), 1))+
       scale_y_continuous(limits = rangey, breaks=seq(round(rangey[1]), round(rangey[2]), 1))+
-      xlab("dim1")+ ylab("dim2")+
+      xlab(paste("Dim 1 (",round(res.mca$eigCorr$perc[1],2),"%)",sep=""))+
+      ylab(paste("Dim 2 (",round(res.mca$eigCorr$perc[2],2),"%)",sep=""))+
       geom_hline(yintercept=0, linetype="dashed", color = adjustcolor("grey60",alpha.f = 0.7))+
       geom_vline(xintercept=0, linetype="dashed", color = adjustcolor("grey60",alpha.f = 0.7))+
       theme(plot.title=element_text(size=labelsize+1,face="bold"), 
@@ -402,7 +411,12 @@ factorial<-function(X,method,quanti,quali){
     names(docCoord)=c("dim1","dim2","contrib")
     docCoord=docCoord[order(-docCoord$contrib),]
     
+    # Benzecrì eigenvalue correction
+    res.mca <- eigCorrection(res.mca)
+    
     results=list(res.mca=res.mca,df=df,df_doc=df_doc,df_quali=df_quali,df_quanti=df_quanti,docCoord=docCoord)
+    
+    
   }else{
     results=list(res.mca=res.mca,df=df,df_doc=NA,df_quali=NA,df_quanti=NA,docCoord=NA)
   }
@@ -421,4 +435,19 @@ euclDist<-function(x,y){
   }
   x$color=apply(df,1,function(m){which(m==min(m))})
   return(x)
+}
+
+eigCorrection <- function(res) {
+  # Benzecri correction calculation
+  
+  n <- nrow(res$eig)
+  
+  
+  e <- res$eig[,1]
+  eigBenz <- ((n / (n - 1)) ^ 2) * ((e - (1 / n)) ^ 2)
+  eigBenz[e< 1/n] <- 0
+  perc <- eigBenz / sum(eigBenz) * 100
+  cumPerc = cumsum(perc)
+  res$eigCorr <- data.frame(eig=e, eigBenz=eigBenz, perc=perc, cumPerc=cumPerc)
+  return(res)
 }

@@ -169,8 +169,8 @@ server <- function(input, output, session) {
   
   output$sliderPY <- renderUI({
     
-    sliderInput("sliderPY", "Publication Year", min = min(values$Morig$PY),sep="",
-                max = max(values$Morig$PY), value = c(min(values$Morig$PY),max(values$Morig$PY)))
+    sliderInput("sliderPY", "Publication Year", min = min(values$Morig$PY,na.rm=T),sep="",
+                max = max(values$Morig$PY,na.rm=T), value = c(min(values$Morig$PY,na.rm=T),max(values$Morig$PY,na.rm=T)))
   })
   
   output$selectSource <- renderUI({
@@ -184,8 +184,8 @@ server <- function(input, output, session) {
   
   output$sliderTC <- renderUI({
 
-    sliderInput("sliderTC", "Total Citation", min = min(values$Morig$TC),
-                max = max(values$Morig$TC), value = c(min(values$Morig$TC),max(values$Morig$TC)))
+    sliderInput("sliderTC", "Total Citation", min = min(values$Morig$TC, na.rm=T),
+                max = max(values$Morig$TC, na.rm=T), value = c(min(values$Morig$TC, na.rm=T),max(values$Morig$TC,na.rm=T)))
     })
   ### End Filters uiOutput
   
@@ -359,7 +359,7 @@ server <- function(input, output, session) {
     
     isolate({
     fields=c(input$LeftField, input$CentralField, input$RightField)
-    threeFieldsPlot(values$M, fields=fields,n=c(20,20,20), width=1200,height=600)
+    threeFieldsPlot(values$M, fields=fields,n=c(input$LeftFieldn, input$CentralFieldn,input$RightFieldn), width=1200,height=600)
     })
     
   })
@@ -1347,8 +1347,22 @@ server <- function(input, output, session) {
   
   output$CSTableW <- DT::renderDT({
     
-    WData=data.frame(word=row.names(values$CS$res$col$coord), values$CS$res$col$coord, 
-                      cluster=values$CS$km.res$cluster,stringsAsFactors = FALSE)
+    switch(input$method,
+           CA={
+             WData=data.frame(word=row.names(values$CS$km.res$data.clust), values$CS$km.res$data.clust, 
+                              stringsAsFactors = FALSE)
+             names(WData)[4]="cluster"
+           },
+           MCA={
+             WData=data.frame(word=row.names(values$CS$km.res$data.clust), values$CS$km.res$data.clust, 
+                              stringsAsFactors = FALSE)
+             names(WData)[4]="cluster"
+           },
+           MDS={
+             WData=data.frame(word=row.names(values$CS$res), values$CS$res, 
+                              cluster=values$CS$km.res$cluster,stringsAsFactors = FALSE)
+           })
+    
     WData$Dim.1=round(WData$Dim.1,2)
     WData$Dim.2=round(WData$Dim.2,2)
 
@@ -1384,7 +1398,7 @@ server <- function(input, output, session) {
     input$applyTM
     
     #values <- isolate(TMmap(input,values))
-    values$TM <- isolate(thematicMap(values$M, field=input$TMfield, n=input$TMn, minfreq=input$TMfreq, stemming=input$TMstemming, size=input$sizeTM, repel=FALSE))
+    values$TM <- isolate(thematicMap(values$M, field=input$TMfield, n=input$TMn, minfreq=input$TMfreq, stemming=input$TMstemming, size=input$sizeTM, n.labels=input$TMn.labels, repel=FALSE))
     
     validate(
       need(values$TM$nclust > 0, "\n\nNo topics in one or more periods. Please select a different set of parameters.")
@@ -1444,7 +1458,7 @@ server <- function(input, output, session) {
     })
     
     if (length(values$yearSlices)>0){
-    values$nexus <- isolate(thematicEvolution(values$M, field=input$TEfield, values$yearSlices, n = input$nTE, minFreq = input$fTE, size = input$sizeTE, repel=FALSE))
+    values$nexus <- isolate(thematicEvolution(values$M, field=input$TEfield, values$yearSlices, n = input$nTE, minFreq = input$fTE, size = input$sizeTE, n.labels=input$TEn.labels, repel=FALSE))
     
     validate(
       need(values$nexus$check != FALSE, "\n\nNo topics in one or more periods. Please select a different set of parameters.")
@@ -1459,14 +1473,17 @@ server <- function(input, output, session) {
   output$TETable <- DT::renderDT({
     
     TEData=values$nexus$Data
-    TEData=TEData[TEData$Inc_index>0,]
-    names(TEData)=c("From", "To", "Inclusion Index", "Words", "Occurrences", "Total", "Weighted Inclusion Index", "Total Occ From", "Total Occ To", "Stability Index")
+    TEData=TEData[TEData$Inc_index>0,-c(4,8)]
+    names(TEData)=c("From", "To", "Words", "Weighted Inclusion Index", "Inclusion Index", "Occurrences", "Stability Index")
     DT::datatable(TEData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
                                  buttons = c('pageLength','copy','excel', 'pdf', 'print'),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TEData))-1))))) %>%
-      formatStyle(names(TEData),  backgroundColor = 'white') 
+      formatStyle(names(TEData),  backgroundColor = 'white') %>%
+      formatRound(names(TEData)[4], 2) %>%
+      formatRound(names(TEData)[5], 2) %>%
+      formatRound(names(TEData)[7], 2) 
     #return(Data)
     
   })
@@ -2098,45 +2115,7 @@ server <- function(input, output, session) {
     }
   }
   
-  TMmap <- function(input,values){
-    
-    switch(input$TMfield,
-           ID={
-             NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences", network = "keywords", sep = ";")
-             
-           },
-           DE={
-             NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences", network = "author_keywords", sep = ";")
-             
-           },
-           TI={
-             #if(!("TI_TM" %in% names(values$M))){values$M=termExtraction(values$M,Field="TI",verbose=FALSE, stemming = input$stemming)}
-             values$M=termExtraction(values$M,Field="TI",verbose=FALSE, stemming = input$stemming)
-             NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences", network = "titles", sep = ";")
-             
-           },
-           AB={
-             #if(!("AB_TM" %in% names(values$M))){values$M=termExtraction(values$M,Field="AB",verbose=FALSE, stemming = input$stemming)}
-             values$M=termExtraction(values$M,Field="AB",verbose=FALSE, stemming = input$stemming)
-             NetMatrix <- biblioNetwork(values$M, analysis = "co-occurrences", network = "abstracts", sep = ";")
-             
-           })
-    
-    S <- normalizeSimilarity(NetMatrix, type = "association")
-    t = tempfile();pdf(file=t) #### trick to hide igraph plot
-    net <- networkPlot(S, n=input$TMn, Title = "Keyword co-occurrences",type="auto",
-                                       labelsize = 2, halo = F,cluster="louvain",remove.isolates=FALSE,
-                                       remove.multiple=FALSE, noloops=TRUE, weighted=TRUE,label.cex=T,edgesize=5, 
-                                       size=1,edges.min = 1, label.n=input$TMn)
-    dev.off();file.remove(t) ### end of trick
-    Map=thematicMap(net, NetMatrix, S = S, minfreq=input$TMfreq, size=input$sizeTM, repel=FALSE)
-    #plot(Map$map)
-    values$TM=Map
-    values$TM$net=net
-    return(values)
-  }
-  
-  historiograph <- function(input,values){
+ historiograph <- function(input,values){
     
     if (input$histsearch=="FAST"){
       min.cit=quantile(values$M$TC,0.75, na.rm = TRUE)
@@ -2148,7 +2127,7 @@ server <- function(input, output, session) {
       values$histsearch=input$histsearch
     }
     
-    values$histlog<- capture.output(values$histPlot <- histPlot(values$histResults, n=input$histNodes, size.cex=TRUE , size =input$histsize, labelsize = input$histlabelsize, arrowsize = 0.5, color=FALSE))
+    values$histlog<- capture.output(values$histPlot <- histPlot(values$histResults, n=input$histNodes, size =input$histsize, labelsize = input$histlabelsize))
   return(values)
   }
   

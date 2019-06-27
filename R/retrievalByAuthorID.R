@@ -6,7 +6,7 @@
 #' SCOPUS IDs con be obtained using the function \code{\link{idByAuthor}}.
 #' @param api_key is a character. It contains the Elsvier API key. Information about how to obtain an API Key \href{https://dev.elsevier.com/sc_apis.html}{Elsevier API website}
 #' @param remove.duplicated is logical. If TRUE duplicated documents will be deleted from the bibliographic collection.
-#' @param country is logical. If TRUE authors' country information will be dowloaded from SCOPUS.
+#' @param country is logical. If TRUE authors' country information will be downloaded from SCOPUS.
 #' @return a list containing two objects: (i) M which is a data frame with cases corresponding to articles and variables to main Field Tags named using the standard ISI WoS Field Tag codify. 
 #' M includes the entire bibliographic collection downloaded from SCOPUS.
 #' The main field tags are:
@@ -57,7 +57,7 @@
 #' # M <- res$M  # the entire bibliographic data frame
 #' # M <- res$authorDocuments # the list containing a bibliographic data frame for each author
 #' 
-#' @seealso \code{\link{idByAuthor}} for downloading auhtor information and SCOPUS ID.
+#' @seealso \code{\link{idByAuthor}} for downloading author information and SCOPUS ID.
 #' 
 #' @export
 #' 
@@ -73,27 +73,38 @@ retrievalByAuthorID<-function(id, api_key, remove.duplicated=TRUE, country=TRUE)
   M=data.frame(matrix(NA,1,length(nomi)))
   names(M)=nomi
   
-  for (j in 1:n){
-    AU_ID=id[j]
-    cat("\n Query n. ",j,"   Author ID: ",AU_ID)
+  for (j in 1:n) {
+    AU_ID = id[j]
+    cat("\n Query n. ", j, "   Author ID: ", AU_ID)
     ### documents of an author
-    AU_S=author_df_orig(au_id = AU_ID, api_key=api_key, all_author_info=TRUE,verbose=FALSE)
-    AU_S$cover_date=substr(as.character(AU_S$cover_date),1,4)
     
-    for (i in 1:dim(AU_S)[2]){
-      if (is.factor(AU_S[[i]])){
-        AU_S[[i]]=as.character(AU_S[[i]])
+    AU_S <- tryCatch(
+      author_df_orig(
+        au_id = AU_ID,
+        api_key = api_key,
+        all_author_info = TRUE,
+        verbose = FALSE
+      ), error = function(e) err = 1)
+    
+    if (class(AU_S)!="numeric") {
+      AU_S$cover_date = substr(as.character(AU_S$cover_date), 1, 4)
+      
+      for (i in 1:dim(AU_S)[2]) {
+        if (is.factor(AU_S[[i]])) {
+          AU_S[[i]] = as.character(AU_S[[i]])
+        }
       }
-    }
+      
+      M_AU = data.frame(AU_S, stringsAsFactors = FALSE)
+      
+      if (dim(M_AU)[2] <= dim(M)[2]) {
+        M_AU[setdiff(names(M), names(M_AU))] = NA
+      }
+      M = rbind(M, M_AU[names(M)])
+      M_list[[j]] = M_AU
+      names(M_list)[j] = id[j]
+    } else {cat("\n Error in id:",AU_ID, "retrieval\n")}
     
-    M_AU=data.frame(AU_S,stringsAsFactors = FALSE)
-    
-    if (dim(M_AU)[2]<=dim(M)[2]){
-      M_AU[setdiff(names(M),names(M_AU))]=NA
-    }
-    M=rbind(M,M_AU[names(M)])
-    M_list[[j]]=M_AU
-    names(M_list)[j]=id[j]
   }
   M=M[-1,]  ### remove first empty row
   names(M)=c("AU_ID","AU","C1_ID","C1","nAU","nC1","TC","SO","DT","TI","PII","DI","EID","PY","CDD", "URL","UT","AU1","ISSN","EISSN","PAG","AB","PT","SUBTYPE","DE","SO_ID")
@@ -146,14 +157,29 @@ retrievalByAuthorID<-function(id, api_key, remove.duplicated=TRUE, country=TRUE)
   M$RP=unlist(lapply(strsplit(M$C1,";"), function(l){
     l=l[1]
   }))
-  M$CR=NA
+  M$CR<-NA
+  M$J9<-M$JI<-M$SO
+  ### SR field creation
+  suppressWarnings(M <- metaTagExtraction(M, Field="SR"))
+  ### identify duplicated SRs 
+  SR=M$SR
+  tab=table(SR)
+  tab2=table(tab)
+  ind=as.numeric(names(tab2))
+  ind=ind[which(ind>1)]
+  if (length(ind)>0){
+    for (i in ind){
+      indice=names(which(tab==i))
+      for (j in indice){
+        indice2=which(SR==j)
+        SR[indice2]=paste(SR[indice2],as.character(1:length(indice2)),sep=" ")
+      }
+    }
+  }
   
+  row.names(M) <- SR
   
-  
-  
-  
-  
-  results=list(M=M,authorDocuments=M_list)
+  results <- list(M=M,authorDocuments=M_list)
   return(results)
 }
 
