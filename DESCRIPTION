@@ -1,13 +1,13 @@
 Package: bibliometrix
 Type: Package
 Title: An R-Tool for Comprehensive Science Mapping Analysis
-Version: 2.2.1
-Date: 2019-06-26
+Version: 2.3.0
+Date: 2019-10-15
 Authors@R: c(person("Massimo", "Aria", email = "aria@unina.it", role=c("cre","aut")),
              person("Corrado", "Cuccurullo", email = "cuccurullocorrado@gmail.com", role="aut"))
 Description: Tool for quantitative research in scientometrics and bibliometrics.
     It provides various routines for importing bibliographic data from SCOPUS (<http://scopus.com>),
-    Clarivate Analytics Web of Science (<http://www.webofknowledge.com/>), Cochrane Library (<http://www.cochranelibrary.com/>) 
+    Clarivate Analytics Web of Science (<http://www.webofknowledge.com/>), Dimensions (<https://www.dimensions.ai/>), Cochrane Library (<http://www.cochranelibrary.com/>) 
 	and PubMed (<https://www.ncbi.nlm.nih.gov/pubmed/>) databases, performing bibliometric analysis 
     and building networks for co-citation, coupling, scientific collaboration and co-word analysis.
 License: GPL-3
@@ -17,15 +17,15 @@ Encoding: UTF-8
 Depends: R (>= 3.3.0)
 Imports: stats, dplyr, DT, factoextra, FactoMineR, ggraph, ggplot2,
         ggrepel, igraph, Matrix, networkD3, reshape2, RColorBrewer,
-        RISmed, rscopus, shiny, shinycssloaders, shinythemes,
+        rio, RISmed, rscopus, shiny, shinycssloaders, shinythemes,
         SnowballC, stringdist, stringr
-Suggests: knitr, rmarkdown,
+Suggests: knitr, rmarkdown, testthat (>= 2.1.0)
 RoxygenNote: 6.1.1
 NeedsCompilation: no
-Packaged: 2019-06-27 11:25:14 UTC; massi
+Packaged: 2019-10-17 11:26:59 UTC; massi
 Author: Massimo Aria [cre, aut],
   Corrado Cuccurullo [aut]
 Maintainer: Massimo Aria <aria@unina.it>
 VignetteBuilder: knitr,
 Repository: CRAN
-Date/Publication: 2019-06-27 11:50:03 UTC
+Date/Publication: 2019-10-17 18:10:02 UTC

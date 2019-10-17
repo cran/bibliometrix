@@ -107,8 +107,9 @@ summary.bibliometrix<-function(object, ...){
   Y=data.frame(table(object$Years))
   names(Y)=c("Year   ", "Articles")
   if (isTRUE(verbose)) {print(Y,row.names=FALSE);cat("\n")}
-  ny=dim(Y)[1]
-  GR=((Y[ny,2]/Y[1,2])^(1/(ny-1))-1)*100
+  #  ny=dim(Y)[1]
+  ny=max(as.numeric(levels(Y[,1])),na.rm=TRUE)-min(as.numeric(levels(Y[,1])),na.rm=TRUE)
+  GR=((Y[nrow(Y),2]/Y[1,2])^(1/(ny))-1)*100
   if (isTRUE(verbose)){cat("Annual Percentage Growth Rate",GR,"\n\n")}
 
 
@@ -227,7 +228,7 @@ summary.bibliometrix<-function(object, ...){
   AAA=format(AAA,justify="left",digits=3)
   row.names(AAA)=1:k
   if (isTRUE(verbose)){print(AAA,row.names=TRUE);cat("\n")}
-  }
+  } else (AAA=NULL)
 
   summaryresults=list(MainInformation=MainInfo,MainInformationDF=MainInfoDF, AnnualProduction=Y,AnnualGrowthRate=GR,MostProdAuthors=A,MostCitedPapers=MostCitedPapers,MostProdCountries=Co,TCperCountries=AC,MostRelSources=AA,MostRelKeywords=AAA)
 

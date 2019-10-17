@@ -46,7 +46,7 @@ ui <-  navbarPage("biblioshiny for bibliometrix",
                                  Its development can address a large and active community of developers formed by prominent researchers."),
                                br(),
                                p(em("bibliometrix"),"provides various routines for importing bibliographic data from SCOPUS, 
-                                 Clarivate Analytics' Web of Science, PubMed and Cochrane databases, performing bibliometric 
+                                 Clarivate Analytics' Web of Science, Dimensions, PubMed and Cochrane databases, performing bibliometric 
                                  analysis and building data matrices for co-citation, coupling, scientific collaboration analysis and co-word analysis."),
                                br(),
                                p("For an introduction and live examples, visit the ",
@@ -78,46 +78,73 @@ ui <-  navbarPage("biblioshiny for bibliometrix",
 ### Loading page ----
 
 tabPanel(
-  "Load", 
+  "Data", 
   sidebarLayout(
     sidebarPanel(width=3,
-                 h3(em(strong("Loading and Converting "))),
+                 h3(em(strong("Import or Load "))),
                  br(),
-      selectInput("dbsource", 
+                 selectInput("load", 
+                             label = "Please, choose what to do",
+                             choices = c(" "="null",
+                                         "Import raw file(s)"="import", 
+                                         "Load bibliometrix file(s)"="load"),
+                             selected = "null"),
+                 #br(),
+     conditionalPanel(condition = "input.load == 'import'",
+                  selectInput("dbsource", 
                   label = "Database",
                   choices = c("Web of Science (WoS/WoK)"="isi", 
-                              "Scopus"="scopus"),
-                  selected = "isi"),
-      conditionalPanel(condition = "input.dbsource == 'isi'",
+                              "Scopus"="scopus",
+                              "Dimensions"="dimensions"),
+                  selected = "isi")),
+      conditionalPanel(condition = "input.dbsource == 'isi' & input.load == 'import'",
                        selectInput("format", 
                                    label = "File format",
                                    choices = c("Plain Text"="plaintext", 
                                                "BibTeX"="bibtex"),
                                    selected = "plaintext")),
-      fileInput("file1", "Choose a file",
+      conditionalPanel(condition = "input.dbsource == 'dimensions' & input.load == 'import'",
+                       selectInput("format", 
+                                   label = "File format",
+                                   choices = c("Excel (Topic Analysis)"="excel",
+                                               "CSV (bibliometric mapping)"="csv"),
+                                   selected = "excel")),
+      
+     
+     conditionalPanel(condition = "input.load != 'null'",
+     fileInput("file1", "Choose a file",
                 multiple = FALSE,
                 accept = c(
-                  "text/csv",
-                  "text/comma-separated-values,text/plain",
+                  ".csv",
                   ".txt",
                   ".bib",
-                  ".RData",
                   ".xlsx",
+                  ".zip",
                   ".xls",
-                  ".zip")
-      ),
-      h6("Here accept single .txt/.bib/.xslx/.RData files, or multiple .txt/.bib files compressed in a single .zip archive."),
-      actionButton("applyLoad", "Start Conversion"),
+                  ".rdata",
+                  ".rda",
+                  ".rds")
+      )),
+      #h6("Here accept single .txt/.bib/.csv/.xslx/.RData files, or multiple .txt/.bib/.csv files compressed in a single .zip archive."),
+     conditionalPanel(condition = "input.load != 'null'",
+                      actionButton("applyLoad", "Start ")),
       tags$hr(),
       
       uiOutput("textLog"),
       #shinycssloaders::withSpinner(verbatimTextOutput("log")),
       
+      tags$hr(),
       
+      h3(em(strong("Export a bibliometrix file "))),
+      br(),
       ### download xlsx
-      selectInput('save_file', 'Save as:', choices = c('No, thanks!' = 'no_thanks', 'Excel' = 'xlsx')),
-      conditionalPanel(condition = "input.save_file == 'xlsx'",
-              downloadButton("collection.save", "Save"))
+      selectInput('save_file', 'Save as:', choices = c(' ' ='null',
+                                                       'Excel' = 'xlsx',
+                                                       'R Data Format' = 'RData'),
+                  selected = 'null'),
+      #downloadButton("collection.save", "Export")
+      conditionalPanel(condition = "input.save_file != 'null'",
+              downloadButton("collection.save", "Export"))
     ),
     mainPanel(
       ## color of datatable
@@ -140,7 +167,7 @@ tabPanel(
                     sidebarLayout(
                       
                       sidebarPanel(width=3,
-                                   h3(em(strong("Filtering "))),
+                                   h3(em(strong("Filter "))),
                                    br(),
                                    uiOutput("textDim"),
                                    uiOutput("selectType"),
@@ -980,6 +1007,54 @@ navbarMenu("Documents",
                                     ))
                         
                       )
+                    )),
+           ### TREND TOPICS ----
+           tabPanel("Trend Topics",
+                    
+                    sidebarLayout(
+                      # Sidebar with a slider and selection inputs
+                      sidebarPanel(width=3,
+                                   h3(em(strong("Trend Topics"))),
+                                   br(),
+                                   
+                                   actionButton("applyTrendTopics", "Apply!"),
+                                   h4(em(strong("Method Parameters:"))),
+                                   " ",
+                                   selectInput("trendTerms", "Field",
+                                               choices = c("Keywords Plus" = "ID",
+                                                           "Author's keywords" = "DE",
+                                                           "Titles" = "TI",
+                                                           "Abstracts" = "AB"),
+                                               selected = "ID"),
+                                   conditionalPanel(
+                                     condition = "input.trendTerms == 'TI' | input.trendTerms == 'AB'",
+                                     selectInput("trendStemming", label="Word Stemming",
+                                                 choices = c("Yes" = TRUE,
+                                                             "No" = FALSE),
+                                                 selected = FALSE)),
+                                   uiOutput("trendSliderPY"),
+                                   hr(),
+                                   h4(em(strong("Graphical Parameters:"))),
+                                   " ",
+                                   #uiOutput("trendMinFreq"),
+                                   sliderInput("trendMinFreq", label = "Word Minimum Frequency", min = 0, max = 100, value = 5, step = 1),
+                                   sliderInput("trendNItems", label = "N. of Words per Year", min = 1, max = 20, step = 1, value = 5),
+                                   sliderInput("trendSize", label = "Word label size", min = 0, max = 20, step = 1, value = 5)
+                                   
+                                   
+                      ),
+                      
+                      # 
+                      mainPanel(
+                        tabsetPanel(type = "tabs",
+                                    tabPanel("Plot",
+                                             shinycssloaders::withSpinner(plotOutput(outputId = "trendTopicsPlot"))
+                                    ),
+                                    tabPanel("Table",
+                                             shinycssloaders::withSpinner(DT::DTOutput(outputId = "trendTopicsTable"))
+                                    ))
+                        
+                      )
                     ))
 ),
 
@@ -1034,17 +1109,21 @@ navbarMenu("Conceptual Structure",
                                                 "inclusion",
                                                 "equivalence"),
                                     selected = "association"),
-                        
+                        selectInput("cocyears",
+                                    label = "Node Color by Year",
+                                    choices = c("No" = "No",
+                                                "Yes"= "Yes"),
+                                    selected = "No"),
                         selectInput("cocCluster", 
                                     label = "Clustering Algorithm",
-                                    choices = c("None" = "none", 
+                                    choices = c("None" = "none",
                                                 "Edge Betweenness" = "edge_betweenness",
                                                 "InfoMap" = "infomap",
                                                 "Leading Eigenvalues" = "leading_eigen",
                                                 "Louvain" = "louvain",
                                                 "Spinglass" = "spinglass",
                                                 "Walktrap" = "walktrap"),
-                                    selected = "walktrap"),
+                                    selected = "louvain"),
                         
                         sliderInput(inputId = "Nodes",
                                     label = "Number of Nodes",
@@ -1052,10 +1131,17 @@ navbarMenu("Conceptual Structure",
                                     max = 1000,
                                     value = 50),
                         
+                        selectInput(inputId ="coc.isolates",
+                                    label = "Remove Isolated Nodes",
+                                    choices = c("Yes" = "yes",
+                                                "No" = "no"),
+                                    selected = "no"),
+                        
                         numericInput("edges.min", 
                                      label=("Min edges"),
                                      value = 2,
-                                     step = 1),
+                                     step = 1,
+                                     min = 0),
                         #uiOutput("Focus"),
                         "  ",
                         h4(em(strong("Graphical Parameters: "))),
@@ -1152,7 +1238,7 @@ navbarMenu("Conceptual Structure",
                                    sliderInput("TMn", label="Number of Words",value=250,min=50,max=500,step=10),
                                    sliderInput("TMfreq", label="Min Cluster Frequency",value=5,min=1,max=100,step=1),
                                    sliderInput("TMn.labels", label="Number of Labels (for each cluster)",value=1,min=1,max=5,step=1),
-                                   sliderInput("sizeTM", label="Label size",value=0.3,min=0.1,max=1,step=0.05)
+                                   sliderInput("sizeTM", label="Label size",value=0.3,min=0.0,max=1,step=0.05)
                       ),
                       mainPanel("Thematic Map",
                                 tabsetPanel(type = "tabs",
@@ -1199,7 +1285,7 @@ navbarMenu("Conceptual Structure",
                                                ),
                                                selected = "weighted"),
                                    sliderInput("minFlowTE", label="Min Weigth Index",value=0.1,min=0.02,max=1,step=0.02),
-                                   sliderInput("sizeTE", label="Label size",value=0.3,min=0.1,max=1,step=0.05),
+                                   sliderInput("sizeTE", label="Label size",value=0.3,min=0.0,max=1,step=0.05),
                                    sliderInput("TEn.labels", label="Number of Labels (for each cluster)",value=1,min=1,max=5,step=1),
                                    br(),
                                    h4(em(strong("Time Slices: "))),
@@ -1428,13 +1514,20 @@ navbarMenu("Intellectual Structure",
                                                 "Louvain" = "louvain",
                                                 "Spinglass" = "spinglass",
                                                 "Walktrap" = "walktrap"),
-                                    selected = "walktrap"),
+                                    selected = "louvain"),
                         
                         sliderInput(inputId = "citNodes",
                                     label = "Number of Nodes",
                                     min = 5,
                                     max = 1000,
                                     value = 50),
+                        
+                        selectInput(inputId ="cit.isolates",
+                                    label = "Remove Isolated Nodes",
+                                    choices = c("Yes" = "yes",
+                                                "No" = "no"),
+                                    selected = "no"),
+                        
                         numericInput("citedges.min", 
                                      label=("Min edges"),
                                      value = 2,
@@ -1626,13 +1719,20 @@ navbarMenu("Social Structure",
                                                            "Louvain" = "louvain",
                                                            "Spinglass" = "spinglass",
                                                            "Walktrap" = "walktrap"),
-                                               selected = "walktrap"),
+                                               selected = "louvain"),
                                    
                                    sliderInput(inputId = "colNodes",
                                                label = "Number of Nodes",
                                                min = 5,
                                                max = 1000,
                                                value = 50),
+                                   
+                                   selectInput(inputId ="col.isolates",
+                                               label = "Remove Isolated Nodes",
+                                               choices = c("Yes" = "yes",
+                                                           "No" = "no"),
+                                               selected = "no"),
+                                   
                                    numericInput("coledges.min", 
                                                 label=("Min edges"),
                                                 value = 2,
