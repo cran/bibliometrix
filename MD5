@@ -1,5 +1,5 @@
 9768293a52649775264a3c6cefdf74f7 *COPYING
-66f60d3faed64282c56070c75884927f *DESCRIPTION
+7260ba990e14ae5aeb6e3f553f288474 *DESCRIPTION
 c572c1179d7df510c09add34c26aabdb *NAMESPACE
 e2d36607169f554115caf202c7b7582e *NEWS
 12df798e5926d138b487374741e62fda *R/Hindex.R
@@ -16,7 +16,7 @@ d2757b0dab19b9765a53b295939d7e12 *R/citations.R
 1c1113df895c3df4712443835d206613 *R/cocMatrix.R
 eae73552705fa28cf9b4a0d3c6ec58a7 *R/cochrane2df.R
 c756ddcd0947678788ee8d35c974bc63 *R/conceptualStructure.R
-a82be934370c874dbb59e58b404672c0 *R/convert2df.R
+7583d1b7a0cdda09f3dabf2340610528 *R/convert2df.R
 c3198e7b3e0ddbd504001c9da9a8c781 *R/countries.R
 a0606b03c33c89475ff583b11af05c1d *R/dimensions2df.R
 e3b44a8ad7e8222cc1f5e6af1b1212b0 *R/dominance.R
@@ -64,7 +64,7 @@ a21cc4d633d891371c9ce7e5e21f3487 *R/trim.R
 1172598d538f1cb090fe36332c6dbc01 *R/trim.leading.R
 226792e5207550f81ba22d403af1ff1f *R/trimES.R
 ca1cfeb3b18e266b6603a5d6bc392515 *R/zzz.R
-e8ef81f4dcc52570578194b14b7b542c *build/partial.rdb
+bca7bcbdc7e735baeb76dbe925a78e4a *build/partial.rdb
 53c4eac2f21f0aa67b7e50b55f64c5e3 *build/vignette.rds
 135ffa7f624b2c5edc31f940e7dd0cde *data/biblio.rda
 abfd0b960c4d51427fff4e4070e50ede *data/biblio_df.rda
@@ -79,14 +79,14 @@ c804d50c6aa8908ab8e9e6efcd77cdf6 *data/scientometrics.rda
 d61d13d69c87e7b601aadd59cd383fe3 *data/scopusCollection.rda
 76c8a44eead00fcaca4145385a4b4a6c *data/stopwords.rda
 97983dbec64fbcbb1e22580f14e00549 *inst/CITATION
-54b586ec632da95067c9e295cf35d21b *inst/biblioshiny/rsconnect/shinyapps.io/massimoaria/biblioshiny.dcf
+876688d88bc77bab3124c52428abcc95 *inst/biblioshiny/rsconnect/shinyapps.io/massimoaria/biblioshiny.dcf
 22d3d808217e8fc5d2127ad9ff5ca97e *inst/biblioshiny/server.R
 179d84fb05c0503e2784fa15e54cd442 *inst/biblioshiny/ui.R
 c420c5e5fbfece971eda775461076301 *inst/biblioshiny/www/logo.jpg
 aebc3bc0a6fe338aa5e4f8486f28bd50 *inst/biblioshiny/www/workflow.jpg
 c6e6037555481031ae087ed46e6c437a *inst/doc/bibliometrix-vignette.R
 3cc169e9fd655f4485ea377c4a3555cb *inst/doc/bibliometrix-vignette.Rmd
-48ba081d13909fc52c41b23f2c14e26d *inst/doc/bibliometrix-vignette.html
+c7e320780ef42698bc4255dab5adce17 *inst/doc/bibliometrix-vignette.html
 425d286a613b9526f5693162ad47ee52 *inst/logo/logo.png
 bca9173ea66e2fe23544152618064bed *man/Hindex.Rd
 d7cc50645388c59859552e78a947e299 *man/KeywordGrowth.Rd
