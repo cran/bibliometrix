@@ -251,7 +251,7 @@ The export file can be read by R using the function *readFiles*:
 
 ```{r Data loading}
 
-D <- readFiles("http://www.bibliometrix.org/datasets/savedrecs.bib")
+D <- readFiles("https://www.bibliometrix.org/datasets/savedrecs.bib")
 ```
 
 D is a large character vector. 

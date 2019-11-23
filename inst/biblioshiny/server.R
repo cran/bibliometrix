@@ -31,6 +31,27 @@ server <- function(input, output, session) {
   
   
   ### LOAD MENU ####
+  
+  # observe({
+  #   volumes <- c(Home = fs::path_home(), getVolumes()())
+  #   shinyFileSave(input, "save", roots=volumes, session=session)
+  #   fileinfo <- parseSavePath(volumes, input$save)
+  #   #data <- data.frame(a=c(1,2))
+  #   if (nrow(fileinfo) > 0) {
+  #     ext <- tolower(getFileNameExtension(fileinfo$datapath))
+  #     #print(ext)
+  #     switch(ext,
+  #            xlsx={
+  #              rio::export(values$M, file=as.character(fileinfo$datapath))
+  #              },
+  #            rdata={
+  #              M=values$M
+  #              save(M, file=as.character(fileinfo$datapath))
+  #            })
+  #   }
+  # })
+  
+  
   output$contents <- DT::renderDT({
     # input$file1 will be NULL initially. After the user selects
     # and uploads a file, it will be a data frame with 'name',
@@ -145,7 +166,7 @@ server <- function(input, output, session) {
             
           } else if (!is.null(inFile) & input$load=="load") {
         ext <- tolower(getFileNameExtension(inFile$datapath))
-        print(ext)
+        #print(ext)
         switch(ext,
                ### excel format
                xlsx={
@@ -200,24 +221,18 @@ server <- function(input, output, session) {
         )
       nome = c("DOI", names(MData)[-length(names(MData))])
       MData = MData[nome]
-      DT::datatable(
-        MData,
-        escape = FALSE,
-        rownames = FALSE,
-        extensions = c("Buttons"),
+      DT::datatable(MData,escape = FALSE,rownames = FALSE, extensions = c("Buttons"),
         options = list(
           pageLength = 50,
           dom = 'Bfrtip',
-          buttons = c('pageLength', 'copy', 'pdf', 'print'),
-          lengthMenu = list(
-            c(10, 25, 50, -1),
-            c('10 rows', '25 rows', '50 rows', 'Show all')
-          ),
+          buttons = list(list(extend = 'pageLength'),
+                        list(extend = 'print')),
+          lengthMenu = list(c(10, 25, 50, -1),
+            c('10 rows', '25 rows', '50 rows', 'Show all')),
           columnDefs = list(list(
             className = 'dt-center', targets = 0:(length(names(MData)) - 1)
           ))
-        )
-        ,
+        ),
         class = 'cell-border compact stripe'
       )  %>%
         formatStyle(
@@ -231,13 +246,9 @@ server <- function(input, output, session) {
    
 })
 
-  
-
-  
-  
-  output$collection.save <- downloadHandler(
+ output$collection.save <- downloadHandler(
     filename = function() {
-      
+
       paste("Bibliometrix-Export-File-", Sys.Date(), ".",input$save_file, sep="")
     },
     content <- function(file) {
@@ -247,7 +258,7 @@ server <- function(input, output, session) {
                M=values$M
                save(M, file=file)
              })
-      
+
     },
     contentType = input$save_file
   )
@@ -324,7 +335,17 @@ server <- function(input, output, session) {
     if (dim(Mdisp)[1]>0){
     DT::datatable(Mdisp, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                             list(extend = 'copy'),
+                                             list(extend = 'csv',
+                                                  filename = 'Filtered_DataTable',
+                                                  title = "My Title",
+                                                  header = TRUE),
+                                             list(extend = 'excel',
+                                                  filename = 'Filtered_DataTable',
+                                                  title = "My Title",
+                                                  header = TRUE),
+                                             list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(Mdisp))-1)))),
                   class = 'cell-border compact stripe') %>%
@@ -344,7 +365,21 @@ server <- function(input, output, session) {
     
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 30, dom = 'Bfrtip',ordering=F,
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Main_Information',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Main_Information',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Main_Information',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')), 
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -394,7 +429,21 @@ server <- function(input, output, session) {
     TAB <- values$TAB
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Annual_Production',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Annual_Production',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Annual_Production',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')), 
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -453,16 +502,30 @@ server <- function(input, output, session) {
   })
   
   output$AnnualTotCitperYearTable <- DT::renderDT({
-    
+
     TAB <- values$AnnualTotCitperYear
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                               list(extend = 'copy'),
+                                                               list(extend = 'csv',
+                                                                    filename = 'Annual_Total_Citation_per_Year',
+                                                                    title = " ",
+                                                                    header = TRUE),
+                                                               list(extend = 'excel',
+                                                                    filename = 'Annual_Total_Citation_per_Year',
+                                                                    title = " ",
+                                                                    header = TRUE),
+                                                               list(extend = 'pdf',
+                                                                    filename = 'Annual_Total_Citation_per_Year',
+                                                                    title = " ",
+                                                                    header = TRUE),
+                                                               list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))),
                   class = 'cell-border compact stripe') %>%
       formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
-    
+
   })
   
   output$ThreeFielsPlot <- networkD3::renderSankeyNetwork({
@@ -511,7 +574,21 @@ server <- function(input, output, session) {
     TAB <- values$TABSo
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Relevant_Sources',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Relevant_Sources',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Most_Relevant_Sources',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -554,7 +631,21 @@ server <- function(input, output, session) {
     TAB <- values$TABSoCit
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Cited_Sources',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Cited_Sources',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Most_Cited_Sources',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -573,7 +664,21 @@ server <- function(input, output, session) {
     
     DT::datatable(values$bradford$table, rownames = FALSE,
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Bradford_Law',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Bradford_Law',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Bradford_Law',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$bradford$table))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -598,7 +703,21 @@ server <- function(input, output, session) {
     
    DT::datatable(values$H, rownames = FALSE, extensions = c("Buttons"),
                           options = list(pageLength = 20, dom = 'Bfrtip',
-                                         buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                         buttons = list('pageLength',
+                                                        list(extend = 'copy'),
+                                                        list(extend = 'csv',
+                                                             filename = 'Source_Impact',
+                                                             title = " ",
+                                                             header = TRUE),
+                                                        list(extend = 'excel',
+                                                             filename = 'Source_Impact',
+                                                             title = " ",
+                                                             header = TRUE),
+                                                        list(extend = 'pdf',
+                                                             filename = 'Source_Impact',
+                                                             title = " ",
+                                                             header = TRUE),
+                                                        list(extend = 'print')),
                                          lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                          columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$H))-1)))), 
                           class = 'cell-border compact stripe') %>%
@@ -663,7 +782,21 @@ server <- function(input, output, session) {
     
     DT::datatable(soData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Source_Dynamics',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Source_Dynamics',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Source_Dynamics',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(soData))-1))))) %>%
       formatStyle(names(soData),  backgroundColor = 'white') 
@@ -720,7 +853,21 @@ server <- function(input, output, session) {
     TAB <- values$TABAu
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Relevant_Authors',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Relevant_Authors',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Most_Relevant_Authors',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -745,7 +892,21 @@ server <- function(input, output, session) {
     
     DT::datatable(values$H, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Author_Impact',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Author_Impact',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Author_Impact',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$H))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -765,7 +926,21 @@ server <- function(input, output, session) {
     TAB <- values$AUProdOverTime$dfAU
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Author_Production_Over_Time',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Author_Production_Over_Time',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Author_Production_Over_Time',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -779,7 +954,21 @@ server <- function(input, output, session) {
     TAB$DOI=paste0('<a href=\"http://doi.org/',TAB$DOI,'\" target=\"_blank\">',TAB$DOI,'</a>')
     DT::datatable(TAB, rownames = FALSE, escape = FALSE,extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Author_Production_Over_Time_Documents',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Author_Production_Over_Time_Documents',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Author_Production_Over_Time_Documents',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -821,7 +1010,21 @@ server <- function(input, output, session) {
     names(values$lotka$AuthorProd)=c("Documents written","N. of Authors","Proportion of Authors")
     DT::datatable(values$lotka$AuthorProd, rownames = FALSE,
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Lotka_Law',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Lotka_Law',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Lotka_Law',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$lotka$AuthorProd))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -869,7 +1072,21 @@ server <- function(input, output, session) {
     TAB <- values$TABAff
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Relevant_Affiliations',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Relevant_Affiliations',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Most_Relevant_Affiliations',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -912,7 +1129,21 @@ server <- function(input, output, session) {
     TAB <- values$TABCo
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Relevant_Countries_By_Corresponding_Author',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Relevant_Countries_By_Corresponding_Author',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Most_Relevant_Countries_By_Corresponding_Author',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -930,7 +1161,21 @@ server <- function(input, output, session) {
     TAB <- values$mapworld$tab
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Country_Production',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Country_Production',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Country_Production',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -976,7 +1221,21 @@ server <- function(input, output, session) {
     TAB <- values$TABCitCo
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Cited_Countries',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Cited_Countries',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Most_Cited_Countries',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -1023,7 +1282,21 @@ server <- function(input, output, session) {
     TAB <- values$TABGlobDoc
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Global_Cited_Documents',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Global_Cited_Documents',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Most_Global_Cited_Documents',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -1066,7 +1339,21 @@ server <- function(input, output, session) {
     TAB$DOI<- paste0('<a href=\"http://doi.org/',TAB$DOI,'\" target=\"_blank\">',TAB$DOI,'</a>')
     DT::datatable(TAB, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Local_Cited_Documents',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Local_Cited_Documents',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Most_Local_Cited_Documents',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -1116,7 +1403,21 @@ server <- function(input, output, session) {
    names(TAB)[1]="Google Scholar"
     DT::datatable(TAB, rownames = FALSE, escape=FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Local_Cited_References',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Local_Cited_References',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Most_Local_Cited_References',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -1137,7 +1438,21 @@ server <- function(input, output, session) {
     
     DT::datatable(rpysData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'RPYS',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'RPYS',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'RPYS',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(rpysData))-1))))) %>%
       formatStyle(names(rpysData),  backgroundColor = 'white') 
@@ -1152,7 +1467,21 @@ server <- function(input, output, session) {
     names(crData)=c("Year", "Reference", "Local Citations")
     DT::datatable(crData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'RPYS_Documents',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'RPYS_Documents',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'RPYS_Documents',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(crData))-1))))) %>%
       formatStyle(names(crData),  backgroundColor = 'white') 
@@ -1201,7 +1530,21 @@ server <- function(input, output, session) {
     
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'csv', 'excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Frequent_Words',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Frequent_Words',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Most_Frequent_Words',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -1249,7 +1592,21 @@ server <- function(input, output, session) {
 
     DT::datatable(values$Words, rownames = FALSE,
                   options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Frequent_Words',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Frequent_Words',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Most_Frequent_Words',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$Words))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -1260,7 +1617,21 @@ server <- function(input, output, session) {
     
     DT::datatable(values$WordsT, rownames = FALSE,
                   options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Frequent_Words',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Frequent_Words',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Most_Frequent_Words',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$Words))-1)))), 
                   class = 'cell-border compact stripe') %>%
@@ -1344,7 +1715,21 @@ server <- function(input, output, session) {
     
     DT::datatable(kwData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Word_Dynamics',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Word_Dynamics',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Word_Dynamics',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(kwData))-1))))) %>%
       formatStyle(names(kwData),  backgroundColor = 'white') 
@@ -1381,7 +1766,21 @@ server <- function(input, output, session) {
     
     DT::datatable(tpData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Trend_Topics',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Trend_Topics',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Trend_Topics',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tpData))-1))))) %>%
       formatStyle(names(tpData),  backgroundColor = 'white') 
@@ -1396,9 +1795,9 @@ server <- function(input, output, session) {
   
     input$applyCoc
     
-    t = tempfile();pdf(file=t) #### trick to hide igraph plot
+    #t = tempfile();pdf(file=t) #### trick to hide igraph plot
     values <- isolate(cocNetwork(input,values))
-    dev.off();file.remove(t) ### end of trick
+    #dev.off();file.remove(t) ### end of trick
     
     isolate(values$network<-igraph2vis(g=values$cocnet$graph,curved=(input$coc.curved=="Yes"), 
                        labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
@@ -1432,7 +1831,21 @@ server <- function(input, output, session) {
     names(cocData)=c("Term", "Cluster", "Btw Centrality")
     DT::datatable(cocData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"), filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'CoWord_Network_Analysis',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'CoWord_Network_Analysis',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'CoWord_Network_Analysis',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(cocData))-1))))) %>%
       formatStyle(names(cocData),  backgroundColor = 'white') 
@@ -1515,7 +1928,21 @@ server <- function(input, output, session) {
 
     DT::datatable(WData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'CoWord_Factorial_Analysis_Words_By_Cluster',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'CoWord_Factorial_Analysis_Words_By_Cluster',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'CoWord_Factorial_Analysis_Words_By_Cluster',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(WData))-1))))) %>%
       formatStyle(names(WData),  backgroundColor = 'white')
@@ -1532,7 +1959,21 @@ server <- function(input, output, session) {
     CSData$contrib=round(CSData$contrib,2)
     DT::datatable(CSData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'CoWord_Factorial_Analysis_Articles_By_Cluster',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'CoWord_Factorial_Analysis_Articles_By_Cluster',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'CoWord_Factorial_Analysis_Articles_By_Cluster',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(CSData))-1))))) %>%
       formatStyle(names(CSData),  backgroundColor = 'white') 
@@ -1573,7 +2014,21 @@ server <- function(input, output, session) {
     
     DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Thematic_Map',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Thematic_Map',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Thematic_Map',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
       formatStyle(names(tmData),  backgroundColor = 'white') 
@@ -1624,7 +2079,21 @@ server <- function(input, output, session) {
     names(TEData)=c("From", "To", "Words", "Weighted Inclusion Index", "Inclusion Index", "Occurrences", "Stability Index")
     DT::datatable(TEData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Thematic_Evolution',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Thematic_Evolution',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Thematic_Evolution',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TEData))-1))))) %>%
       formatStyle(names(TEData),  backgroundColor = 'white') %>%
@@ -1736,7 +2205,21 @@ server <- function(input, output, session) {
     
     DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Thematic_Map_Period_1',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Thematic_Map_Period_1',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Thematic_Map_Period_1',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
       formatStyle(names(tmData),  backgroundColor = 'white') 
@@ -1750,7 +2233,21 @@ server <- function(input, output, session) {
     
     DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Thematic_Map_Period_2',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Thematic_Map_Period_2',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Thematic_Map_Period_2',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
       formatStyle(names(tmData),  backgroundColor = 'white') 
@@ -1764,7 +2261,21 @@ server <- function(input, output, session) {
     
     DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Thematic_Map_Period_3',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Thematic_Map_Period_3',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Thematic_Map_Period_3',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
       formatStyle(names(tmData),  backgroundColor = 'white') 
@@ -1778,7 +2289,21 @@ server <- function(input, output, session) {
     
     DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Thematic_Map_Period_4',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Thematic_Map_Period_4',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Thematic_Map_Period_4',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
       formatStyle(names(tmData),  backgroundColor = 'white') 
@@ -1792,7 +2317,21 @@ server <- function(input, output, session) {
     
     DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Thematic_Map_Period_5',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Thematic_Map_Period_5',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Thematic_Map_Period_5',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
       formatStyle(names(tmData),  backgroundColor = 'white') 
@@ -1807,9 +2346,9 @@ server <- function(input, output, session) {
     
     input$applyCocit
     
-    t = tempfile();pdf(file=t) #### trick to hide igraph plot
+    #t = tempfile();pdf(file=t) #### trick to hide igraph plot
     values <- isolate(intellectualStructure(input,values))
-    dev.off();file.remove(t) ### end of trick
+    #dev.off();file.remove(t) ### end of trick
     
     isolate(values$network<-igraph2vis(g=values$cocitnet$graph,curved=(input$cocit.curved=="Yes"), 
                                        labelsize=input$citlabelsize, opacity=input$cocitAlpha,type=input$citlayout,
@@ -1834,7 +2373,21 @@ server <- function(input, output, session) {
     names(cocitData)=c("Node", "Cluster", "Btw Centrality")
     DT::datatable(cocitData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'CoCitation_Network',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'CoCitation_Network',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'CoCitation_Network',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(cocitData))-1))))) %>%
       formatStyle(names(cocitData),  backgroundColor = 'white') 
@@ -1876,7 +2429,21 @@ server <- function(input, output, session) {
     Data$DOI<- paste0('<a href=\"http://doi.org/',Data$DOI,'\" target=\"_blank\">',Data$DOI,'</a>')
     DT::datatable(Data, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Historiograph_Network',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Historiograph_Network',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Historiograph_Network',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(Data))-1))))) %>%
       formatStyle(names(Data),  backgroundColor = 'white') %>%
@@ -1904,9 +2471,9 @@ server <- function(input, output, session) {
     
     input$applyCol
     
-    t = tempfile();pdf(file=t) #### trick to hide igraph plot
+    #t = tempfile();pdf(file=t) #### trick to hide igraph plot
     values <- isolate(socialStructure(input,values))
-    dev.off();file.remove(t) ### end of trick
+    #dev.off();file.remove(t) ### end of trick
     
     isolate(values$network<-igraph2vis(g=values$colnet$graph,curved=(input$soc.curved=="Yes"), 
                                        labelsize=input$collabelsize, opacity=input$colAlpha,type=input$collayout,
@@ -1932,7 +2499,21 @@ server <- function(input, output, session) {
     
     DT::datatable(colData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"), filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Collaboration_Network',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Collaboration_Network',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'Collaboration_Network',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(colData))-1))))) %>%
       formatStyle(names(colData),  backgroundColor = 'white') 
@@ -1969,7 +2550,21 @@ server <- function(input, output, session) {
     
     DT::datatable(colData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"), filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
-                                 buttons = c('pageLength','copy','excel', 'pdf', 'print'),
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'World_Collaboration_Map',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'World_Collaboration_Map',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
+                                                     filename = 'World_Collaboration_Map',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(colData))-1))))) %>%
       formatStyle(names(colData),  backgroundColor = 'white') 
@@ -2336,7 +2931,7 @@ server <- function(input, output, session) {
       values$cocnet=networkPlot(values$NetWords, normalize=normalize,n = n, Title = values$Title, type = input$layout, 
                                 size.cex=TRUE, size=5 , remove.multiple=F, edgesize = input$edgesize*3, labelsize=input$labelsize,label.cex=label.cex,
                                 label.n=label.n,edges.min=input$edges.min,label.color = F, curved=curved,alpha=input$cocAlpha,
-                                cluster=input$cocCluster, remove.isolates = (input$coc.isolates=="yes"))
+                                cluster=input$cocCluster, remove.isolates = (input$coc.isolates=="yes"), verbose = FALSE)
       if (input$cocyears=="Yes"){
         Y=fieldByYear(values$M, field = input$field, graph=FALSE)
         g=values$cocnet$graph
@@ -2396,7 +2991,7 @@ server <- function(input, output, session) {
                                 size.cex=TRUE, size=5 , remove.multiple=F, edgesize = input$citedgesize*3, 
                                 labelsize=input$citlabelsize,label.cex=label.cex, curved=curved,
                                 label.n=label.n,edges.min=input$citedges.min,label.color = F,remove.isolates = (input$cit.isolates=="yes"),
-                                alpha=input$cocitAlpha, cluster=input$cocitCluster)
+                                alpha=input$cocitAlpha, cluster=input$cocitCluster, verbose = FALSE)
     return(values)
   }
   
@@ -2443,7 +3038,7 @@ server <- function(input, output, session) {
                               size.cex=TRUE, size=5 , remove.multiple=F, edgesize = input$coledgesize*3, 
                               labelsize=input$collabelsize,label.cex=label.cex, curved=curved,
                               label.n=label.n,edges.min=input$coledges.min,label.color = F,alpha=input$colAlpha,
-                              remove.isolates = (input$col.isolates=="yes"), cluster=input$colCluster)
+                              remove.isolates = (input$col.isolates=="yes"), cluster=input$colCluster, verbose = FALSE)
     
     return(values)
     

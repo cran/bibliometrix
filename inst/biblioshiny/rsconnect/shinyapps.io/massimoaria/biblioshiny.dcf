@@ -5,6 +5,6 @@ account: massimoaria
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 940296
-bundleId: 2546907
+bundleId: 2609481
 url: https://massimoaria.shinyapps.io/biblioshiny/
-when: 1572338937.96467
+when: 1574423964.36957
