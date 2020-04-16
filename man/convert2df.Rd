@@ -2,20 +2,29 @@
 % Please edit documentation in R/convert2df.R
 \name{convert2df}
 \alias{convert2df}
-\title{Convert a Clarivate Analytics WoS, SCOPUS, Dimensions and COCHRANE Database Export files or RISmed PubMed/MedLine object into a data frame}
+\title{Import and Convert bibliographic export files and API objects.}
 \usage{
 convert2df(file, dbsource = "wos", format = "plaintext")
 }
 \arguments{
-\item{file}{can be: a) a character array containing data read from a Clarivate Analytics WoS Export file (in plain text or bibtex format) or SCOPUS Export file (exclusively in bibtex format);
-b) an object of the class \code{pubmed (package RISmed)} containing a collection obtained from a query performed with RISmed package.}
+\item{file}{a character array containing a sequence of object names coming from: 
+\tabular{lll}{
+a)\tab \tab Clarivate Analytics WoS (in plaintext '.txt', Endnote Desktop '.ciw', or bibtex formats '.bib');\cr
+b)\tab \tab SCOPUS (exclusively in bibtex format '.bib');\cr
+c)\tab \tab Digital Science Dimensions (in csv '.csv' or excel '.xlsx' formats);\cr
+d)\tab \tab an object of the class \code{pubmedR (package pubmedR)} containing a collection obtained from a query performed with pubmedR package;\cr
+e)\tab \tab an object of the class \code{dimensionsR (package dimensionsR)} containing a collection obtained from a query performed with dimensionsR package.}}
 
 \item{dbsource}{is a character indicating the bibliographic database. \code{dbsource} can be \code{"isi"}, \code{"wos"}, \code{"scopus"}, \code{"dimensions"} or \code{"pubmed"}. Default is \code{dbsource = "isi"}.}
 
-\item{format}{is a character indicating the format of the SCOPUS and Clarivate Analytics WoS export file. \code{format} can be \code{"bibtex"}, \code{"plaintext"}, \code{"csv"} or \code{"excel"}. Default is \code{format = "plaintext"}.}
+\item{format}{is a character indicating the format of the SCOPUS and Clarivate Analytics WoS export file. \code{format} can be \code{"api"}, \code{"bibtex"}, \code{"plaintext"}, \code{"endnote"}, \code{"csv"} or \code{"excel"}. Default is \code{format = "plaintext"}.}
 }
 \value{
 a data frame with cases corresponding to articles and variables to Field Tags in the original export file.
+
+I.e We have three files downlaod from Web of Science in plaintext format, file will be:
+
+file <- c("filename1.txt", "filename2.txt", "filename3.txt") 
 
 data frame columns are named using the standard Clarivate Analytics WoS Field Tag codify. The main field tags are:
 
@@ -40,38 +49,19 @@ data frame columns are named using the standard Clarivate Analytics WoS Field Ta
 for a complete list of field tags see: \href{http://www.bibliometrix.org/documents/Field_Tags_bibliometrix.pdf}{Field Tags used in bibliometrix}
 }
 \description{
-It converts a SCOPUS, Clarivate Analytics WoS, Dimensions and COCHRANE Database export files or RISmed PubMed/MedLine object into a data frame, with cases corresponding to articles and variables to Field Tags as used in WoS.
-}
-\details{
-Actually the function allows to convert both SCOPUS/WoS files in bibtex format and just WoS files in plain text format.
+It converts a SCOPUS, Clarivate Analytics WoS, Dimensions, PubMed and COCHRANE Database export files or pubmedR and dimensionsR JSON/XML 
+objects into a data frame, with cases corresponding to articles and variables to Field Tags as used in WoS.
 }
 \examples{
-# An ISI or SCOPUS Export file can be read using \\code{\\link{readLines}} function:
 
-# D <- readFiles('filename1.txt','filename2.txt','filename3.txt')
+# Example:
+# Import and convert a Web of Science collection form an export file in plaintext format:
 
-# filename1.txt, filename2.txt and filename3.txt are WoS or SCOPUS Export file 
-# in plain text or bibtex format.
+\dontrun{
+files <- 'https://www.bibliometrix.org/datasets/wos_plaintext.txt'
 
-#  biblio <- readFiles('http://www.bibliometrix.org/datasets/bibliometrics_articles.txt')
+M <- convert2df(file = files, dbsource = 'wos', format = "plaintext")
+}
 
-data(biblio)
-
-biblio_df <- convert2df(file = biblio, dbsource = "isi", format = "bibtex")
 
 }
-\seealso{
-\code{\link{scopus2df}} for converting SCOPUS Export file (in bibtex format)
-
-\code{\link{isibib2df}} for converting ISI Export file (in bibtex format)
-
-\code{\link{isi2df}} for converting ISI Export file (in plain text format)
-
-\code{\link{pubmed2df}} for converting an object of the class pubmed (RISmed package)
-
-Other converting functions: \code{\link{bib2df}},
-  \code{\link{cochrane2df}}, \code{\link{dimensions2df}},
-  \code{\link{isi2df}}, \code{\link{isibib2df}},
-  \code{\link{pubmed2df}}, \code{\link{scopus2df}}
-}
-\concept{converting functions}

@@ -1,20 +1,18 @@
-## ----echo=FALSE----------------------------------------------------------
+## ----echo=FALSE---------------------------------------------------------------
 cat(paste("bibliometrix ",packageVersion("bibliometrix")))
 
-## ----Package citation, eval=FALSE, include=FALSE-------------------------
+## ----Package citation, eval=FALSE, include=FALSE------------------------------
 #  citation("bibliometrix")
 
-## ----bibliometrix loading------------------------------------------------
+## ----bibliometrix loading-----------------------------------------------------
 library(bibliometrix)   ### load bibliometrix package
 
-## ----Data loading--------------------------------------------------------
+## ----Data converting----------------------------------------------------------
+file <- "https://www.bibliometrix.org/datasets/savedrecs.bib"
 
-D <- readFiles("https://www.bibliometrix.org/datasets/savedrecs.bib")
+M <- convert2df(file = file, dbsource = "isi", format = "bibtex")
 
-## ----Data converting-----------------------------------------------------
-M <- convert2df(D, dbsource = "isi", format = "bibtex")
-
-## ----biblioAnalysis------------------------------------------------------
+## ----biblioAnalysis-----------------------------------------------------------
 results <- biblioAnalysis(M, sep = ";")
 
 ## ----summary generic function-----------------------------------------------------------------------------------------
@@ -36,9 +34,9 @@ CR <- citations(M, field = "author", sep = ";")
 cbind(CR$Cited[1:10])
 
 ## ----Local Author citation--------------------------------------------------------------------------------------------
-#CR <- localCitations(M, sep = ";")
-#CR$Authors[1:10,]
-#CR$Papers[1:10,]
+CR <- localCitations(M, sep = ";")
+CR$Authors[1:10,]
+CR$Papers[1:10,]
 
 ## ----Dominance Ranking------------------------------------------------------------------------------------------------
 DF <- dominance(results, k = 10)
@@ -110,23 +108,23 @@ A <- cocMatrix(M, Field = "SO", sep = ";")
 sort(Matrix::colSums(A), decreasing = TRUE)[1:5]
 
 ## ---------------------------------------------------------------------------------------------------------------------
-# A <- cocMatrix(M, Field = "CR", sep = ".  ")
+A <- cocMatrix(M, Field = "CR", sep = ".  ")
 
 ## ---------------------------------------------------------------------------------------------------------------------
-# A <- cocMatrix(M, Field = "AU", sep = ";")
+ A <- cocMatrix(M, Field = "AU", sep = ";")
 
 ## ---------------------------------------------------------------------------------------------------------------------
 M <- metaTagExtraction(M, Field = "AU_CO", sep = ";")
 # A <- cocMatrix(M, Field = "AU_CO", sep = ";")
 
 ## ---------------------------------------------------------------------------------------------------------------------
-# A <- cocMatrix(M, Field = "DE", sep = ";")
+A <- cocMatrix(M, Field = "DE", sep = ";")
 
 ## ---------------------------------------------------------------------------------------------------------------------
-# A <- cocMatrix(M, Field = "ID", sep = ";")
+A <- cocMatrix(M, Field = "ID", sep = ";")
 
 ## ---------------------------------------------------------------------------------------------------------------------
-# NetMatrix <- biblioNetwork(M, analysis = "coupling", network = "references", sep = ".  ")
+NetMatrix <- biblioNetwork(M, analysis = "coupling", network = "references", sep = ".  ")
 
 ## ----similarity, fig.height=9, fig.width=9, warning=FALSE-------------------------------------------------------------
 NetMatrix <- biblioNetwork(M, analysis = "coupling", network = "authors", sep = ";")
@@ -138,10 +136,10 @@ net=networkPlot(NetMatrix,  normalize = "salton", weighted=NULL, n = 100, Title 
 # NetMatrix <- biblioNetwork(M, analysis = "co-citation", network = "references", sep = ".  ")
 
 ## ---------------------------------------------------------------------------------------------------------------------
-# NetMatrix <- biblioNetwork(M, analysis = "collaboration", network = "authors", sep = ";")
+NetMatrix <- biblioNetwork(M, analysis = "collaboration", network = "authors", sep = ";")
 
 ## ---------------------------------------------------------------------------------------------------------------------
-# NetMatrix <- biblioNetwork(M, analysis = "collaboration", network = "countries", sep = ";")
+NetMatrix <- biblioNetwork(M, analysis = "collaboration", network = "countries", sep = ";")
 
 ## ---------------------------------------------------------------------------------------------------------------------
 # An example of a classical keyword co-occurrences network
@@ -196,7 +194,7 @@ CS <- conceptualStructure(M,field="ID", method="CA", minDegree=4, clust=5, stemm
 ## ----Historical Co-citation network, fig.height=7, fig.width=10, warning=FALSE--------------------------------------------------
 # Create a historical citation network
 options(width=130)
-histResults <- histNetwork(M, min.citations = 10, sep = ";")
+histResults <- histNetwork(M, min.citations = 1, sep = ";")
 
 # Plot a historical co-citation network
 net <- histPlot(histResults, n=15, size = 10, labelsize=5)

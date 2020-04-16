@@ -4,7 +4,7 @@
 \alias{histNetwork}
 \title{Historical co-citation network}
 \usage{
-histNetwork(M, min.citations = 1, sep = ";", verbose = TRUE)
+histNetwork(M, min.citations = 1, sep = ";", network = TRUE, verbose = TRUE)
 }
 \arguments{
 \item{M}{is a bibliographic data frame obtained by the converting function
@@ -17,6 +17,9 @@ for the documents included in the analysis. It can be greater than or equal to 1
 
 \item{sep}{is the field separator character. This character separates strings
 in CR column of the data frame. The default is \code{sep = ";"}.}
+
+\item{network}{is logical. If TRUE, fuction calculates and returns also the direct citation network. If FALSE,
+the function returns only the local citation table.}
 
 \item{verbose}{is logical. If TRUE, results are printed on screen.}
 }
@@ -33,9 +36,9 @@ in CR column of the data frame. The default is \code{sep = ";"}.}
 data frame.
 }
 \examples{
-data(scientometrics)
+data(management)
 
-histResults <- histNetwork(scientometrics, min.citations = 10, sep = ";")
+histResults <- histNetwork(management, min.citations = 0, sep = ";")
 
 
 }

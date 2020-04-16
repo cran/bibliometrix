@@ -40,7 +40,7 @@
 #' scientometrics <- metaTagExtraction(scientometrics, Field = "AU_CO", sep = ";")
 #' scientometrics$AU_CO[1:10]
 #'
-#' @seealso \code{\link{scopus2df}} for converting ISO or SCPUS Export file into a data frame.
+#' @seealso \code{\link{convert2df}} for importing and converting bibliographic files into a data frame.
 #' @seealso \code{\link{biblioAnalysis}} function for bibliometric analysis
 #' 
 #' @export
@@ -50,7 +50,7 @@ metaTagExtraction<-function(M, Field = "CR_AU", sep = ";", aff.disamb=TRUE){
 
 ### data cleaning
   if ("CR" %in% names(M)){
-    M$CR=str_replace_all(as.character(M$CR),"DOI;","DOI ")
+    M$CR=gsub("DOI;","DOI ",as.character(M$CR))
   }
   
   
@@ -155,7 +155,7 @@ CR_AU<-function(M,sep){
   
   # vector of cited authors
   for (i in 1:size[1]){
-    FCAU[[i]]=str_replace_all(trim.leading(sub(",.*", "", listCAU[[i]])), "[[:punct:]]", "")
+    FCAU[[i]]=gsub("[[:punct:]]", "",trim.leading(sub(",.*", "", listCAU[[i]])))
     CCR[i]=paste(FCAU[[i]],collapse=";")}
   
   M$CR_AU=CCR
@@ -210,7 +210,7 @@ AU_CO<-function(M){
   size=dim(M)[1]
   data("countries",envir=environment())
   countries=as.character(countries[[1]])
-  if (M$DB[1]=="ISI"){
+  if (M$DB[1] %in% c("ISI", "PUBMED")){
     countries=as.character(sapply(countries,function(s) paste0(s,".",collapse="")))
   } else if (M$DB[1]=="SCOPUS"){
     countries=as.character(sapply(countries,function(s) paste0(s,";",collapse="")))}
@@ -221,7 +221,7 @@ AU_CO<-function(M){
   ## remove reprint information from C1
   C1=unlist(lapply(C1,function(l){
     l=unlist(strsplit(l,";"))
-    l=l[regexpr("REPRINT AUTHOR",l)==-1]
+    #l=l[regexpr("REPRINT AUTHOR",l)==-1]
     l=paste0(l,collapse=";")
   }))
   ###
@@ -318,11 +318,11 @@ AU_UN<-function(M,sep){
   
   ## remove reprint information from C1
   C1=M$C1
-  C1=unlist(lapply(C1,function(l){
-    l=unlist(strsplit(l,";"))
-    l=l[regexpr("REPRINT AUTHOR",l)==-1]
-    l=paste0(l,collapse=";")
-  }))
+  # C1=unlist(lapply(C1,function(l){
+  #   l=unlist(strsplit(l,";"))
+  #   #l=l[regexpr("REPRINT AUTHOR",l)==-1]
+  #   l=paste0(l,collapse=";")
+  # }))
   ###
   AFF=gsub("\\[.*?\\] ", "", C1)
   indna=which(is.na(AFF))

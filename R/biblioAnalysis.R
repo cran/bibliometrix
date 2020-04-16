@@ -49,7 +49,6 @@
 #' @export
 
 biblioAnalysis<-function(M,sep=";"){
-
   # initialize variables
   Authors=NULL
   Authors_frac=NULL
@@ -86,7 +85,7 @@ if ("AU" %in% Tags){
   listAU=strsplit(as.character(M$AU),sep)
   listAU=lapply(listAU, function(l) trim(l))
   nAU=unlist(lapply(listAU,length))  # num. of authors per paper
-  fracAU=unlist(sapply(nAU,function(x){rep(1/x,x)}))  # fractional frequencies
+  fracAU=unlist(lapply(nAU,function(x){rep(1/x,x)}))  # fractional frequencies
   AU=unlist(listAU)
 
   Authors=sort(table(AU),decreasing=TRUE)
@@ -114,10 +113,14 @@ if ("TC" %in% Tags){
 }
 
 # References
-#if ("CR" %in% Tags){CR=tableTag(M,"CR",sep)}
+nReferences <- 0
+if ("CR" %in% Tags){
+  CR <- tableTag(M,"CR",sep)
+  nReferences <- length(CR)
+  }
 
 # ID Keywords
-if ("ID" %in% Tags){ID=tableTag(M,"ID",sep)}
+if ("ID" %in% Tags){ID <- tableTag(M,"ID",sep)}
 
 # DE Keywords
 if ("DE" %in% Tags){DE=tableTag(M,"DE",sep)}
@@ -194,13 +197,14 @@ results=list(Articles=dim(M)[1],             # Articles
              DE=DE,                          # Keywords
              ID=ID,                          # Authors' keywords
              Documents=Documents,
+             nReferences = nReferences,      # N. of References
              DB=M$DB[1])
   class(results)<-"bibliometrix"
 
   return(results)
 }
 countryCollaboration<-function(M,Country,k,sep){
-  M=metaTagExtraction(M,Field="AU_CO",sep)
+  if (!("AU_CO" %in% names(M))){M=metaTagExtraction(M,Field="AU_CO",sep)}
   M$SCP=0
   M$SCP_CO=NA
   for (i in 1:dim(M)[1]){

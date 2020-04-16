@@ -4,8 +4,7 @@
 \alias{histPlot}
 \title{Plotting historical co-citation network}
 \usage{
-histPlot(histResults, n = 20, size = 5, labelsize = 5,
-  verbose = TRUE)
+histPlot(histResults, n = 20, size = 5, labelsize = 5, verbose = TRUE)
 }
 \arguments{
 \item{histResults}{is an object of \code{class} "list" containing the following components:
@@ -38,9 +37,9 @@ The function \code{\link{histPlot}} can plot a historical co-citation network pr
 \examples{
 # EXAMPLE Citation network
 
-data(scientometrics)
+data(management)
 
-histResults <- histNetwork(scientometrics, sep = ";")
+histResults <- histNetwork(management, sep = ";")
 
 net <- histPlot(histResults, n=20, labelsize = 5)
 

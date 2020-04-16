@@ -36,7 +36,7 @@
 rpys <- function(M, sep=";", timespan=NULL, graph=T){
 
   
-  M$CR<-stringr::str_replace_all(as.character(M$CR),"DOI;","DOI ")
+  M$CR<-gsub("DOI;","DOI ", as.character(M$CR))
   
   Fi<-strsplit(M[,"CR"],sep)
   Fi<-lapply(Fi,trim.leading)
@@ -85,7 +85,15 @@ X=seq(min(yearSeq),max(yearSeq))
 Y=rep(0,length(X))
 names(Y)=X
 Y[names(Y) %in% names(RPYS)]=RPYS
-Median=runmed(Y,5)
+
+
+YY=c(rep(0,4),Y)
+Median=rep(0,length(Y))
+for (i in 5:length(YY)){
+  Median[i-4]=median(YY[(i-4):i])
+}
+####
+#Median=runmed(Y,5)
 diffMedian=Y-Median
 
 

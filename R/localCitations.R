@@ -29,11 +29,12 @@
 
 localCitations <- function(M, fast.search=FALSE, sep = ";"){
   
+  M$TC[is.na(M$TC)] <- 0
   if (isTRUE(fast.search)){
-    loccit=quantile(as.numeric(M$TC),0.75)
+    loccit=quantile(as.numeric(M$TC),0.75, na.rm = TRUE)
   } else {loccit=1}
   
-  H=histNetwork(M,min.citations = loccit, sep=sep)
+  H=histNetwork(M,min.citations = loccit, sep=sep, network=FALSE)
   LCS=H$histData
   M=H$M
   rm(H)

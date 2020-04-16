@@ -8,10 +8,11 @@ vignette: >
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
-
+<center>
 <div style="width:450px; height=300px">
 ![bibliometrix](figures/logo.jpg)
 </div>
+</center>
 
 #### http://www.bibliometrix.org
 
@@ -83,7 +84,7 @@ citation("bibliometrix")
 
 #### Dr. Massimo Aria
 
-Associate Professor in Social Statistics 
+Full Professor in Social Statistics 
 
 PhD in Computational Statistics
 
@@ -247,25 +248,18 @@ library(bibliometrix)   ### load bibliometrix package
 
 ## Data loading and converting
 
-The export file can be read by R using the function *readFiles*:
+The export file can be read and converted using by R using the function *convert2df*:
 
-```{r Data loading}
+**convert2df**(*file*, *dbsource*, *format*)
 
-D <- readFiles("https://www.bibliometrix.org/datasets/savedrecs.bib")
-```
+The argument *file* is a character vector containing the name of export files downloaded from SCOPUS, Clarivate Analytics WOS, Digital Science Dimenions, PubMed or Cochrane CDSR website. *file* can also contains the name of a json/xlm object download using  Digital Science Dimenions or PubMed APIs (through the packages *dimensionsR* and *pubmedR*.
 
-D is a large character vector. 
-*readFiles* argument contains the name of files downloaded from SCOPUS, Clarivate Analytics WOS, or Cochrane CDSR website.
+es. file <- c("file1.txt","file2.txt", ...)
 
-The function *readFiles* combines all the text files onto a single large character vector. Furthermore, the format is converted into UTF-8.
-
-es. D <- readFiles("file1.txt","file2.txt", ...)
-
-
-
-The object D can be converted in a data frame using the function *convert2df*:
 ```{r Data converting}
-M <- convert2df(D, dbsource = "isi", format = "bibtex")
+file <- "https://www.bibliometrix.org/datasets/savedrecs.bib"
+
+M <- convert2df(file = file, dbsource = "isi", format = "bibtex")
 ```
 
 *convert2df* creates a bibliographic data frame with cases corresponding to manuscripts and variables to Field Tag in the original export file.
@@ -276,13 +270,15 @@ The argument *dbsource* indicates from which database the collection has been do
 
 It can be: 
 
-- "isi" (for Clarivate Analytics Web of Science database), 
+- "isi" or "wos" (for Clarivate Analytics Web of Science database), 
 
 - "scopus" (for SCOPUS database), 
 
+- "dimensions" (for DS Dimensions database)
+
 - "pubmed" (for PubMed/Medline database),  
 
-- "cochrane" (for Cochrane database of systematic reviews).
+- "cochrane" (for Cochrane Library database of systematic reviews).
 
 The argument *format* indicates the file format of the imported collection. It can be "plaintext" or "bibtex" for WOS collection and mandatorily "bibtext" for SCOPUS collection. The argument is ignored if the collection comes from Pubmed or Cochrane.
 
@@ -359,8 +355,8 @@ It displays main information about the bibliographic data frame and several tabl
 
 Main information table describes the collection size in terms of number of documents, number of authors, number of sources, number of keywords, timespan, and average number of citations. 
 
-Furthermore, many different co-authorship indices are shown. In particular, the **Authors per Article index** is calculated as the ratio between the total number of articles and the total number of authors. The **Co-Authors per Articles index** is calculated as the average number of co-authors per article. In this case, the index takes into account the author appearances while for the "authors per article" an author, even if he has published more than one article, is counted only once.
-For that reasons,  *Authors per Article index $\ge$ Co-authors per Article index*.
+Furthermore, many different co-authorship indices are shown. In particular, the **Authors per Article index** is calculated as the ratio between the total number of authors and the total number of articles. The **Co-Authors per Articles index** is calculated as the average number of co-authors per article. In this case, the index takes into account the author appearances while for the "authors per article" an author, even if he has published more than one article, is counted only once.
+For that reasons,  *Authors per Article index $\le$ Co-authors per Article index*.
 
 The **Collaboration Index** (CI) is calculated as Total Authors of Multi-Authored Articles/Total Multi-Authored Articles (Elango and Rajendran, 2012; Koseoglu, 2016). In other word, the Collaboration Index is a Co-authors per Article index calculated only using the multi-authored article set.
 
@@ -417,9 +413,9 @@ Local citations measure how many times an author (or a document) included in thi
 
 To obtain the most frequent local cited authors:
 ```{r Local Author citation}
-#CR <- localCitations(M, sep = ";")
-#CR$Authors[1:10,]
-#CR$Papers[1:10,]
+CR <- localCitations(M, sep = ";")
+CR$Authors[1:10,]
+CR$Papers[1:10,]
 ```
 
 
@@ -581,12 +577,12 @@ Following this approach, you can compute several bipartite networks:
 
 * Citation network
 ```{r}
-# A <- cocMatrix(M, Field = "CR", sep = ".  ")
+A <- cocMatrix(M, Field = "CR", sep = ".  ")
 ```
 
 * Author network
 ```{r}
-# A <- cocMatrix(M, Field = "AU", sep = ";")
+ A <- cocMatrix(M, Field = "AU", sep = ";")
 ```
 
 * Country network
@@ -602,12 +598,12 @@ M <- metaTagExtraction(M, Field = "AU_CO", sep = ";")
 
 * Author keyword network
 ```{r}
-# A <- cocMatrix(M, Field = "DE", sep = ";")
+A <- cocMatrix(M, Field = "DE", sep = ";")
 ```
 
 * Keyword Plus network
 ```{r}
-# A <- cocMatrix(M, Field = "ID", sep = ";")
+A <- cocMatrix(M, Field = "ID", sep = ";")
 ```
 
 * Etc.
@@ -640,7 +636,7 @@ The function *biblioNetwork* calculates, starting from a bibliographic  data fra
 
 The following code calculates a classical article coupling network:
 ```{r}
-# NetMatrix <- biblioNetwork(M, analysis = "coupling", network = "references", sep = ".  ")
+NetMatrix <- biblioNetwork(M, analysis = "coupling", network = "references", sep = ".  ")
 ```
 
 Articles with only a few references, therefore, would tend to be more weakly bibliographically coupled, if coupling strength is measured simply according to the number of references that articles contain in common. 
@@ -694,12 +690,12 @@ The diagonal element $ac_{i}$ is the number of manuscripts authored or co-author
 
 Using the function *biblioNetwork*, you can calculate an authors' collaboration network:
 ```{r}
-# NetMatrix <- biblioNetwork(M, analysis = "collaboration", network = "authors", sep = ";")
+NetMatrix <- biblioNetwork(M, analysis = "collaboration", network = "authors", sep = ";")
 ```
 
 or a country collaboration network:
 ```{r}
-# NetMatrix <- biblioNetwork(M, analysis = "collaboration", network = "countries", sep = ";")
+NetMatrix <- biblioNetwork(M, analysis = "collaboration", network = "countries", sep = ";")
 ```
 
 ## Descriptive analysis of network graph characteristics
@@ -866,7 +862,7 @@ The function \code{histNetwork} generates a chronological direct citation networ
 ```{r Historical Co-citation network, fig.height=7, fig.width=10, warning=FALSE}
 # Create a historical citation network
 options(width=130)
-histResults <- histNetwork(M, min.citations = 10, sep = ";")
+histResults <- histNetwork(M, min.citations = 1, sep = ";")
 
 # Plot a historical co-citation network
 net <- histPlot(histResults, n=15, size = 10, labelsize=5)

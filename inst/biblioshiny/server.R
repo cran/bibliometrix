@@ -6,7 +6,7 @@ server <- function(input, output, session) {
   ##
   
   ## file upload max size
-  options(shiny.maxRequestSize=100*1024^2) 
+  options(shiny.maxRequestSize=200*1024^2) 
   
   ### initial values ####
   values = reactiveValues()
@@ -25,6 +25,12 @@ server <- function(input, output, session) {
   values$citShortlabel="NA"
   values$S=list("NA")
   values$GR="NA"
+  values$dsToken <- "Wrong account or password"
+  values$dsSample <- 0
+  values$dsQuery <- ""
+  values$pmQuery <- " "
+  values$pmSample <- 0
+  values$ApiOk=0
 
   
   
@@ -32,27 +38,7 @@ server <- function(input, output, session) {
   
   ### LOAD MENU ####
   
-  # observe({
-  #   volumes <- c(Home = fs::path_home(), getVolumes()())
-  #   shinyFileSave(input, "save", roots=volumes, session=session)
-  #   fileinfo <- parseSavePath(volumes, input$save)
-  #   #data <- data.frame(a=c(1,2))
-  #   if (nrow(fileinfo) > 0) {
-  #     ext <- tolower(getFileNameExtension(fileinfo$datapath))
-  #     #print(ext)
-  #     switch(ext,
-  #            xlsx={
-  #              rio::export(values$M, file=as.character(fileinfo$datapath))
-  #              },
-  #            rdata={
-  #              M=values$M
-  #              save(M, file=as.character(fileinfo$datapath))
-  #            })
-  #   }
-  # })
-  
-  
-  output$contents <- DT::renderDT({
+ output$contents <- DT::renderDT({
     # input$file1 will be NULL initially. After the user selects
     # and uploads a file, it will be a data frame with 'name',
     # 'size', 'type', and 'datapath' columns. The 'datapath'
@@ -72,11 +58,7 @@ server <- function(input, output, session) {
                 switch(ext,
                        ###  WoS ZIP Files
                        zip = {
-                         files = unzip(inFile$datapath)
-                         D = unlist(lapply(files, function(l) {
-                           Dpar = readFiles(l)
-                           return(Dpar)
-                         }))
+                         D = unzip(inFile$datapath)
                          withProgress(message = 'Conversion in progress',
                                       value = 0, {
                                         M <- convert2df(D,
@@ -85,11 +67,10 @@ server <- function(input, output, session) {
                                       })
                        },
                        ### WoS Txt/Bib Files
-                       {
-                         D = readFiles(inFile$datapath)
+                      {
                          withProgress(message = 'Conversion in progress',
                                       value = 0, {
-                                        M <- convert2df(D,
+                                        M <- convert2df(inFile$datapath,
                                                         dbsource = input$dbsource,
                                                         format = input$format)
                                       })
@@ -99,11 +80,7 @@ server <- function(input, output, session) {
                 switch(ext,
                        ###  Scopus ZIP Files
                        zip = {
-                         files = unzip(inFile$datapath)
-                         D = unlist(lapply(files, function(l) {
-                           Dpar = readFiles(l)
-                           return(Dpar)
-                         }))
+                         D <- unzip(inFile$datapath)
                          withProgress(message = 'Conversion in progress',
                                       value = 0, {
                                         M <- convert2df(D,
@@ -111,14 +88,72 @@ server <- function(input, output, session) {
                                                         format = input$format)
                                       })
                        },
-                       ### WoS Txt/Bib Files
-                       {
-                         D = readFiles(inFile$datapath)
+                       ### Scopus CSV/Bib Files
+                       csv = {
+                         
+                         #D = readFiles(inFile$datapath)
+                         withProgress(message = 'Conversion in progress',
+                                      value = 0, {
+                                        M <- convert2df(inFile$datapath,
+                                                        dbsource = input$dbsource,
+                                                        format = "csv")
+                                      })
+                        },
+                       bib = {
+                         
+                         #D = readFiles(inFile$datapath)
+                         withProgress(message = 'Conversion in progress',
+                                      value = 0, {
+                                        M <- convert2df(inFile$datapath,
+                                                        dbsource = input$dbsource,
+                                                        format = "bibtex")
+                                      })
+                       })
+                
+              },
+              cochrane = {
+                switch(ext,
+                       ###  Cochrane ZIP Files
+                       zip = {
+                         D <- unzip(inFile$datapath)
                          withProgress(message = 'Conversion in progress',
                                       value = 0, {
                                         M <- convert2df(D,
                                                         dbsource = input$dbsource,
-                                                        format = "bibtex")
+                                                        format = "plaintext")
+                                      })
+                       },
+                       ### Cochrane txt files
+                       {
+                         
+                         withProgress(message = 'Conversion in progress',
+                                      value = 0, {
+                                        M <- convert2df(inFile$datapath,
+                                                        dbsource = input$dbsource,
+                                                        format = "plaintext")
+                                      })
+                       })
+                
+              },
+              pubmed = {
+                switch(ext,
+                       ###  Pubmed ZIP Files
+                       zip = {
+                         D <- unzip(inFile$datapath)
+                         withProgress(message = 'Conversion in progress',
+                                      value = 0, {
+                                        M <- convert2df(D,
+                                                        dbsource = input$dbsource,
+                                                        format = "pubmed")
+                                      })
+                       },
+                       ### Pubmed txt Files
+                       txt = {
+                         withProgress(message = 'Conversion in progress',
+                                      value = 0, {
+                                        M <- convert2df(inFile$datapath,
+                                                        dbsource = input$dbsource,
+                                                        format = "pubmed")
                                       })
                        })
               },
@@ -262,16 +297,366 @@ server <- function(input, output, session) {
     },
     contentType = input$save_file
   )
+ 
+ output$collection.save_api <- downloadHandler(
+   filename = function() {
+     
+     paste("Bibliometrix-Export-File-", Sys.Date(), ".",input$save_file_api, sep="")
+   },
+   content <- function(file) {
+     switch(input$save_file_api,
+            xlsx={suppressWarnings(rio::export(values$M, file=file))},
+            RData={
+              M=values$M
+              save(M, file=file)
+            })
+     
+   },
+   contentType = input$save_file_api
+ )
   
   output$textLog <- renderUI({
-    #log=gsub("  Art","\\\nArt",values$log)
-    #log=gsub("Done!   ","Done!\\\n",log)
     k=dim(values$M)[1]
     if (k==1){k=0}
     log=paste("Number of Documents ",k)
     textInput("textLog", "Conversion results", 
               value=log)
   })
+  
+  ### API MENU ####
+  ### API MENU: Dimensions ####
+  
+  ### Dimensions modal ####
+  dsModal <- function(failed = FALSE) {
+    modalDialog(
+      title = "Dimensions API",
+      size = "l",
+      
+      h4(em(
+        strong("1) Get a token using your Dimensions credentials")
+      )),
+      textInput(
+        "dsAccount",
+        "Account",
+        "",
+        width = NULL,
+        placeholder = NULL
+      ),
+      passwordInput("dsPassword",
+                    "Password",
+                    "",
+                    width = NULL,
+                    placeholder = NULL),
+      
+      actionButton("dsToken", "Get a token "),
+      h5(tags$b("Token")),
+      verbatimTextOutput("tokenLog", placeholder = FALSE),
+      tags$hr(),
+      h4(em(strong("2) Create a query"))),
+      textInput(
+        "dsWords",
+        "Words",
+        "",
+        width = NULL,
+        placeholder = NULL
+      ),
+      selectInput(
+        "dsFullsearch",
+        label = "search field",
+        choices = c("Title and Abstract only" = FALSE,
+                    "Full text" = TRUE),
+        selected = FALSE
+      ),
+      textInput(
+        "dsCategories",
+        "Science Categories",
+        "",
+        width = NULL,
+        placeholder = NULL
+      ),
+      numericInput("dsStartYear", "Start Year", value = 1990),
+      numericInput("dsEndYear", "Start Year", value = as.numeric(substr(Sys.time(), 1, 4))),
+      
+      
+      actionButton("dsQuery", "Create the query "),
+      
+      h5(tags$b("Your query")),
+      verbatimTextOutput("queryLog", placeholder = FALSE),
+      h5(tags$b("Documents returned using your query")),
+      verbatimTextOutput("sampleLog", placeholder = FALSE),
+      
+      
+      uiOutput("sliderLimit"),
+      
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("dsok", "OK")
+      )
+    )
+  }
+  
+  # Show modal when button is clicked.
+  observeEvent(input$dsShow, {
+    showModal(dsModal())
+  })
+  
+  observeEvent(input$dsok, {
+    removeModal()
+    values$M <- data.frame(Message="Waiting for data")
+  })
+
+  output$tokenLog <- renderText({ 
+    input$dsToken 
+    isolate({
+      capture.output(Token <- dsAuth(username = input$dsAccount, password = input$dsPassword))
+      #Token <- dsAuth(username = input$dsAccount, password = input$dsPassword)
+      if (Token==1){
+        values$dsToken <- "Wrong account or password"
+      }else{
+        values$dsToken <- Token
+      }
+      values$dsToken
+     
+    })
+  })
+  
+  output$queryLog <- renderText({ 
+    input$dsQuery
+    isolate({
+      values$dsQuery <- dsQueryBuild(item = "publications", 
+                                   words = input$dsWords, 
+                                   full.search = input$dsFullsearch,
+                                   type = "article", 
+                                   categories = input$dsCategories, 
+                                   start_year = input$dsStartYear, end_year = input$dsEndYear)
+      values$dsQuery
+     #textInput("queryLog", "Defined query ", value=values$dsQuery)
+    })
+    
+  })
+  
+  output$queryLog2 <- renderText({ 
+    values$dsQuery
+  })
+ 
+  output$sampleLog <- renderText({ 
+    input$dsQuery
+    isolate({
+      dsSample <- 0
+      capture.output(dsSample <- dsApiRequest(token = values$dsToken, query = values$dsQuery, limit = 0))
+      if (class(dsSample)=="numeric"){
+        values$dsSample <- 0
+      }else{values$dsSample <- dsSample$total_count}
+      mes <- paste("Dimensions returns ",values$dsSample, " documents", collapse="",sep="")
+      mes
+    })
+  }) 
+  
+  output$sampleLog2 <- renderText({ 
+    if (values$ApiOk==1) {n <- nrow(values$M)}else{n <- 0}
+    mes <- paste("Dimensions API returns ",n, " documents", collapse="",sep="")
+    values$ApiOk=0
+    return(mes)
+  }) 
+  
+  output$sliderLimit <- renderUI({
+    
+    sliderInput("sliderLimit", "Total document to downalod", min = 1,
+                max = values$dsSample, value = values$dsSample, step = 1)
+  })
+  
+  ### API MENU: PubMed ####
+  ### PubMed modal ####
+  pmModal <- function(failed = FALSE) {
+    modalDialog(
+      title = "PubMed API",
+      size = "l",
+      h4(em(strong(
+        "1) Generate a valid query"
+      ))),
+      textInput(
+        "pmQueryText",
+        "Search terms",
+        " ",
+        width = NULL,
+        placeholder = NULL
+      ),
+      numericInput("pmStartYear", "Start Year", value = 1990),
+      numericInput("pmEndYear", "Start Year", value = as.numeric(substr(Sys.time(
+      ), 1, 4))),
+      actionButton("pmQuery", "Try the query "),
+      h5(tags$b("Query Translation")),
+      verbatimTextOutput("pmQueryLog", placeholder = FALSE),
+      #h5(tags$b("Generated query")),
+      h5(tags$b("Documents returned using your query")),
+      verbatimTextOutput("pmSampleLog", placeholder = FALSE),
+      tags$hr(),
+      h4(em(
+        strong("2) Choose how many documents to download")
+      )),
+      
+      uiOutput("pmSliderLimit"),
+      
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("pmok", "OK")
+      )
+    )
+  }
+  
+  # Show modal when button is clicked.
+  observeEvent(input$pmShow, {
+    showModal(pmModal())
+  })
+  
+  observeEvent(input$pmok, {
+    removeModal()
+  })
+  
+  output$pmQueryLog <- renderText({ 
+    input$pmQuery
+    isolate({
+      query = paste(input$pmQueryText,"[Title/Abstract] AND english[LA] AND Journal Article[PT] AND "
+                    ,input$pmStartYear,":",input$pmEndYear,"[DP]", sep="")
+      res <- pmQueryTotalCount(query = query, api_key = NULL)
+      if (class(res)=="list"){
+      values$pmSample <- res$total_count
+      values$pmQuery <- res$query_translation}
+      values$pmQuery <- res$query_translation
+    })
+  })
+  
+  output$pmQueryLog2 <- renderText({ 
+    values$pmQuery
+  })
+  
+  output$pmSampleLog <- renderText({ 
+    input$pmQuery
+    isolate({
+      mes <- paste("PubMed returns ",values$pmSample, " documents", collapse="",sep="")
+      mes
+    })
+  }) 
+  output$pmSampleLog2 <- renderText({ 
+    if (values$ApiOk==1) {n <- nrow(values$M)}else{n <- 0}
+    
+      mes <- paste("PubMed API returns ",n, " documents", collapse="",sep="")
+      values$ApiOk <- 0
+      return(mes)
+  }) 
+  
+  output$pmSliderLimit <- renderUI({
+    sliderInput("pmSliderLimit", "Total document to downalod", min = 1,
+                max = values$pmSample, value = values$pmSample, step = 1)
+  })
+  ### API MENU: Content Download ####
+  observe({
+    if (input$apiApply==0) return()
+    
+    isolate({
+      values = initial(values)
+      values$M <- data.frame(Message="Waiting for data")
+      
+      switch(input$dbapi,
+             ds={
+               if (input$dsWords!="") {
+                   #capture.output(
+                   D <-
+                     dsApiRequest(
+                       token = values$dsToken,
+                       query = values$dsQuery,
+                       limit = input$sliderLimit
+                     )
+                   #)
+                   M <- convert2df(D, "dimensions", "api")
+                   values$ApiOk <- 1
+                   values$M <- M
+                   values$Morig = M
+                   
+                   values$Histfield = "NA"
+                   values$results = list("NA")
+                   
+                   contentTable(values)
+                 }
+             },
+             pubmed={
+               #if (exists("input$pmQueryText")){
+               if (input$pmQueryText !=" ") {
+                 #capture.output(
+                 D <-
+                   pmApiRequest(
+                     query = values$pmQuery,
+                     limit = input$pmSliderLimit,
+                     api_key = NULL
+                   )
+                   #)
+                 M <- convert2df(D, "pubmed", "api")
+                 values$ApiOk <- 1
+                 values$M <- M
+                 values$Morig = M
+                 
+                 values$Histfield = "NA"
+                 values$results = list("NA")
+                 
+                 #contentTable(values)
+               }
+               
+             })
+    })
+  })
+  
+  
+  output$apiContents <- DT::renderDT({
+    observe({
+      if (input$apiApply==0) return()
+    })
+      
+    
+        if (nrow(values$M) == 1 & ncol(values$M) == 1) {
+      M <- data.frame(Message="Waiting for data")
+    }else{
+      contentTable(values)
+    }
+    
+  })
+  
+  ### function returns a formatted data.table
+  contentTable <- function(values){
+    MData = as.data.frame(apply(values$M, 2, function(x) {
+      substring(x, 1, 150)
+    }), stringsAsFactors = FALSE)
+    MData$DOI <-
+      paste0(
+        '<a href=\"http://doi.org/',
+        MData$DI,
+        '\" target=\"_blank\">',
+        MData$DI,
+        '</a>'
+      )
+    nome = c("DOI", names(MData)[-length(names(MData))])
+    MData = MData[nome]
+    DT::datatable(MData,escape = FALSE,rownames = FALSE, extensions = c("Buttons"),
+                  options = list(
+                    pageLength = 50,
+                    dom = 'Bfrtip',
+                    buttons = list(list(extend = 'pageLength'),
+                                   list(extend = 'print')),
+                    lengthMenu = list(c(10, 25, 50, -1),
+                                      c('10 rows', '25 rows', '50 rows', 'Show all')),
+                    columnDefs = list(list(
+                      className = 'dt-center', targets = 0:(length(names(MData)) - 1)
+                    ))
+                  ),
+                  class = 'cell-border compact stripe'
+    )  %>%
+      formatStyle(
+        names(MData),
+        backgroundColor = 'white',
+        textAlign = 'center',
+        fontSize = '70%'
+      )
+  }
+  
   
   ### FILTERS MENU ####
   ### Filters uiOutput
@@ -364,7 +749,7 @@ server <- function(input, output, session) {
     values <-res$values
     
     DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 30, dom = 'Bfrtip',ordering=F,
+                  options = list(pageLength = 50, dom = 'Bfrtip',ordering=F,
                                  buttons = list('pageLength',
                                                 list(extend = 'copy'),
                                                 list(extend = 'csv',
@@ -380,11 +765,14 @@ server <- function(input, output, session) {
                                                      title = " ",
                                                      header = TRUE),
                                                 list(extend = 'print')), 
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
+                                 #lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 #columnDefs = list(list(className = 'dt-center', targets = "_all"),
+                                #              list(width = '50px', targets = 0)), 
+                                columnDefs = list(list(className = 'dt-center', targets = "_all"),
+                                                  list(width = '350px', targets = 0))),
                   class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
-    
+      formatStyle(names(TAB)[1],  backgroundColor = 'white',textAlign = 'left', fontSize = '110%') %>%
+      formatStyle(names(TAB)[2],  backgroundColor = 'white',textAlign = 'right', fontSize = '110%')
   })
   
   output$CAGR <- renderText({
@@ -856,11 +1244,67 @@ server <- function(input, output, session) {
                                  buttons = list('pageLength',
                                                 list(extend = 'copy'),
                                                 list(extend = 'csv',
-                                                     filename = 'Most_Relevant_Authors',
+                                                     filename = 'Most_Local_Cited_Authors',
                                                      title = " ",
                                                      header = TRUE),
                                                 list(extend = 'excel',
+                                                     filename = 'Most_Local_Cited_Authors',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'pdf',
                                                      filename = 'Most_Relevant_Authors',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'print')),
+                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
+                  class = 'cell-border compact stripe') %>%
+      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+    
+  })
+  
+  output$MostCitAuthorsPlot <- renderPlotly({
+    res <- descriptive(values,type="tab13")
+    values <-res$values
+    values$TABAuCit<-values$TAB
+    
+    #xx=as.data.frame(values$results$Authors, stringsAsFactors = FALSE)
+    xx <- values$TABAuCit
+    lab <- "Citations"
+    xx[,2]=as.numeric(xx[,2])
+    
+    if (input$MostCitAuthorsK>dim(xx)[1]){
+      k=dim(xx)[1]
+    } else {k=input$MostCitAuthorsK}
+    
+    xx=xx[1:k,]
+    xx[,2]=round(xx[,2],1)
+    g=ggplot2::ggplot(data=xx, aes(x=xx[,1], y=xx[,2], fill=-xx[,2], text=paste("Author: ",xx[,1],"\n",lab,": ",xx[,2]))) +
+      geom_bar(aes(group="NA"),stat="identity")+
+      scale_fill_continuous(type = "gradient")+
+      scale_x_discrete(limits = rev(xx[,1]))+
+      labs(title="Most Local Cited Authors", x = "Authors")+
+      labs(y = lab)+
+      theme_minimal() +
+      guides(fill=FALSE)+
+      coord_flip()
+    
+    plot.ly(g)
+  })#, height = 500, width =900)
+  
+  output$MostCitAuthorsTable <- DT::renderDT({
+    
+    TAB <- values$TABAuCit
+    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
+                  options = list(pageLength = 20, dom = 'Bfrtip',
+                                 buttons = list('pageLength',
+                                                list(extend = 'copy'),
+                                                list(extend = 'csv',
+                                                     filename = 'Most_Local_Cited_Authors',
+                                                     title = " ",
+                                                     header = TRUE),
+                                                list(extend = 'excel',
+                                                     filename = 'Most_Local_Cited_Authors',
                                                      title = " ",
                                                      header = TRUE),
                                                 list(extend = 'pdf',
@@ -1307,7 +1751,7 @@ server <- function(input, output, session) {
   output$MostLocCitDocsPlot <- renderPlotly({
     withProgress(message = 'Calculation in progress',
                  value = 0, {
-                   TAB <-localCitations(values$M, fast.search=TRUE, sep = input$LocCitSep)$Paper
+                   TAB <-localCitations(values$M, fast.search=FALSE, sep = input$LocCitSep)$Paper
                  })
     
     xx=data.frame(Document=as.character(TAB[,1]), DOI=as.character(TAB[,2]), Year=TAB[,3], "Local Citations"=TAB[,4], "Global Citations"=TAB[,5],stringsAsFactors = FALSE)
@@ -2654,12 +3098,12 @@ server <- function(input, output, session) {
       
       switch(type,
              author={
-               AU=trim(gsub(",","",names(tableTag(values$M,"AU"))))
-               values$H=Hindex(values$M, field = "author", elements = AU, sep = ";", years=Inf)$H
+               AU <- trim(gsub(",","",names(tableTag(values$M,"AU"))))
+               values$H <- Hindex(values$M, field = "author", elements = AU, sep = ";", years=Inf)$H
              },
              source={
-               SO=names(sort(table(values$M$SO),decreasing = TRUE))
-               values$H=Hindex(values$M, field = "source", elements = SO, sep = ";", years=Inf)$H
+               SO <- names(sort(table(values$M$SO),decreasing = TRUE))
+               values$H <- Hindex(values$M, field = "source", elements = SO, sep = ";", years=Inf)$H
              }
       )
       
@@ -2764,6 +3208,10 @@ server <- function(input, output, session) {
              TAB=TAB[nchar(TAB[,1])>4,]
              #names(TAB)=c("Affiliations", "Articles")
              
+           },
+           "tab13"={
+             CR<-citations(values$M,field="author")
+             TAB=data.frame(Authors=names(CR$Cited), Citations=as.numeric(CR$Cited),stringsAsFactors = FALSE)
            }
     )
     values$TAB=TAB
