@@ -12,48 +12,34 @@
 
 <meta name="author" content="Massimo Aria" />
 
-<meta name="date" content="2020-04-16" />
+<meta name="date" content="2020-05-25" />
 
 <title>Bibliometrix: Data Importing and Converting</title>
 
-<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
-// be compatible with the behavior of Pandoc < 2.8).
-document.addEventListener('DOMContentLoaded', function(e) {
-  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
-  var i, h, a;
-  for (i = 0; i < hs.length; i++) {
-    h = hs[i];
-    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
-    a = h.attributes;
-    while (a.length > 0) h.removeAttribute(a[0].name);
-  }
-});
-</script>
 
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
-pre > code.sourceCode > span:empty { height: 1.2em; }
-code.sourceCode > span { color: inherit; text-decoration: inherit; }
+a.sourceLine { display: inline-block; line-height: 1.25; }
+a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
+a.sourceLine:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
 pre.sourceCode { margin: 0; }
 @media screen {
 div.sourceCode { overflow: auto; }
 }
 @media print {
-pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+code.sourceCode { white-space: pre-wrap; }
+a.sourceLine { text-indent: -1em; padding-left: 1em; }
 }
-pre.numberSource code
-  { counter-reset: source-line 0; }
-pre.numberSource code > span
-  { position: relative; left: -4em; counter-increment: source-line; }
-pre.numberSource code > span > a:first-child::before
-  { content: counter(source-line);
+pre.numberSource a.sourceLine
+  { position: relative; left: -4em; }
+pre.numberSource a.sourceLine::before
+  { content: attr(data-line-number);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; display: inline-block;
+    border: none; pointer-events: all; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -62,9 +48,9 @@ pre.numberSource code > span > a:first-child::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {   }
+  {  }
 @media screen {
-pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+a.sourceLine::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -315,7 +301,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">Bibliometrix: Data Importing and Converting</h1>
 <h4 class="author">Massimo Aria</h4>
-<h4 class="date">2020-04-16</h4>
+<h4 class="date">2020-05-25</h4>
 
 
 
@@ -344,7 +330,7 @@ i.e. selecting Document Type = ‘Journal Article’ AND Language = ‘English�
 </h3>
 <p>In this step, the user must choose which metadata he wants to download and the export file format to save the results.<br />
 </p>
-<pre><code>To be able to work, *bibliometrix* requires a minimum set of mandatory metadata  (i.e. Authors&#39; name, Title, Journal title, Affiliation, Publication year, etc.).
+<pre><code>To be able to work, *bibliometrix* requires a minimum set of mandatory metadata  (i.e. Authors' name, Title, Journal title, Affiliation, Publication year, etc.).
 
 Our advice is to always select all the metadata fields to be sure you can perform all the analyses implemented in bibliometrix.</code></pre>
 <p>Many databases support a variety of different export formats, some commercial (i.e. EndNote, Mendeley, etc.) and some standard (i.e. html, plaintext, BibTeX, etc.). The choice of a suitable export file will have to consider Table 1.<br />
@@ -675,25 +661,25 @@ By a key (10 requests/s)</td>
 <p><em>bibliometrix</em> supports three WoS export file formats: BibTeX, plaintext and EndNote Desktop.</p>
 <p>To access Web of Science services, a subscription is required. When downloading data from Web of Science, make sure that the Web of Science Core Collection database is selected. Choose the <strong>Export option</strong> followed by <strong>EndNote Desktop</strong> file format, or <strong>Other File Formats</strong> option, and choose either the <strong>Plain Text</strong> or the <strong>BibTeX</strong> file format. Although bibliometrix supports all these file formats, we recommend the use of the plaintext format. When asked which data elements to download, choose the <strong>Full Record and Cited References option</strong>. Downloading cited reference data is necessary for identifying citation, bibliographic coupling, and co-citation links between items.</p>
 <p><strong>WoS BibTeX file format</strong></p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw">library</span>(bibliometrix)</span>
-<span id="cb3-2"><a href="#cb3-2"></a></span>
-<span id="cb3-3"><a href="#cb3-3"></a>file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/wos_bibtex.bib&quot;</span></span>
-<span id="cb3-4"><a href="#cb3-4"></a></span>
-<span id="cb3-5"><a href="#cb3-5"></a>M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;wos&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;bibtex&quot;</span>)</span>
-<span id="cb3-6"><a href="#cb3-6"></a></span>
-<span id="cb3-7"><a href="#cb3-7"></a><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1"><span class="kw">library</span>(bibliometrix)</a>
+<a class="sourceLine" id="cb3-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb3-3" data-line-number="3">file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/wos_bibtex.bib&quot;</span></a>
+<a class="sourceLine" id="cb3-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb3-5" data-line-number="5">M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;wos&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;bibtex&quot;</span>)</a>
+<a class="sourceLine" id="cb3-6" data-line-number="6"></a>
+<a class="sourceLine" id="cb3-7" data-line-number="7"><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</a></code></pre></div>
 <p><strong>WoS plaintext file format</strong></p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a>file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/wos_plaintext.txt&quot;</span></span>
-<span id="cb4-2"><a href="#cb4-2"></a></span>
-<span id="cb4-3"><a href="#cb4-3"></a>M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;wos&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;plaintext&quot;</span>)</span>
-<span id="cb4-4"><a href="#cb4-4"></a></span>
-<span id="cb4-5"><a href="#cb4-5"></a><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb4-1" data-line-number="1">file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/wos_plaintext.txt&quot;</span></a>
+<a class="sourceLine" id="cb4-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb4-3" data-line-number="3">M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;wos&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;plaintext&quot;</span>)</a>
+<a class="sourceLine" id="cb4-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb4-5" data-line-number="5"><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</a></code></pre></div>
 <p><strong>WoS EndNote Desktop file format</strong></p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a>file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/wos_plaintext.ciw&quot;</span></span>
-<span id="cb5-2"><a href="#cb5-2"></a></span>
-<span id="cb5-3"><a href="#cb5-3"></a>M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;wos&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;endnote&quot;</span>)</span>
-<span id="cb5-4"><a href="#cb5-4"></a></span>
-<span id="cb5-5"><a href="#cb5-5"></a><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1">file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/wos_plaintext.ciw&quot;</span></a>
+<a class="sourceLine" id="cb5-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb5-3" data-line-number="3">M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;wos&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;endnote&quot;</span>)</a>
+<a class="sourceLine" id="cb5-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb5-5" data-line-number="5"><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</a></code></pre></div>
 <p> </p>
 </div>
 <div id="how-to-import-data-from-scopus" class="section level3">
@@ -702,21 +688,21 @@ By a key (10 requests/s)</td>
 <p><em>bibliometrix</em> supports two Scopus export file formats: BibTeX and csv (comma-separated values).</p>
 <p>TO access Scopus services, a subscription is required. To download data from Scopus, choose the <strong>CSV</strong> or the <strong>BibTeX export</strong> option. (Do not choose the Download option!) Make sure that the data is downloaded in a ‘.csv’ or ‘.bib’ file and that all data elements are included. Although bibliometrix supports both file formats, we recommend the use of the CSV format.</p>
 <p><strong>Scopus BibTeX file format</strong></p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a><span class="kw">library</span>(bibliometrix)</span>
-<span id="cb6-2"><a href="#cb6-2"></a></span>
-<span id="cb6-3"><a href="#cb6-3"></a>file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/scopus_csv.csv&quot;</span></span>
-<span id="cb6-4"><a href="#cb6-4"></a></span>
-<span id="cb6-5"><a href="#cb6-5"></a>M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;scopus&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;csv&quot;</span>)</span>
-<span id="cb6-6"><a href="#cb6-6"></a></span>
-<span id="cb6-7"><a href="#cb6-7"></a><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="kw">library</span>(bibliometrix)</a>
+<a class="sourceLine" id="cb6-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb6-3" data-line-number="3">file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/scopus_csv.csv&quot;</span></a>
+<a class="sourceLine" id="cb6-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb6-5" data-line-number="5">M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;scopus&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;csv&quot;</span>)</a>
+<a class="sourceLine" id="cb6-6" data-line-number="6"></a>
+<a class="sourceLine" id="cb6-7" data-line-number="7"><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</a></code></pre></div>
 <p><strong>Scopus csv file format</strong></p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1"></a><span class="kw">library</span>(bibliometrix)</span>
-<span id="cb7-2"><a href="#cb7-2"></a></span>
-<span id="cb7-3"><a href="#cb7-3"></a>file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/scopus_bibtex.bib&quot;</span></span>
-<span id="cb7-4"><a href="#cb7-4"></a></span>
-<span id="cb7-5"><a href="#cb7-5"></a>M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;scopus&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;bibtex&quot;</span>)</span>
-<span id="cb7-6"><a href="#cb7-6"></a></span>
-<span id="cb7-7"><a href="#cb7-7"></a><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb7-1" data-line-number="1"><span class="kw">library</span>(bibliometrix)</a>
+<a class="sourceLine" id="cb7-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb7-3" data-line-number="3">file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/scopus_bibtex.bib&quot;</span></a>
+<a class="sourceLine" id="cb7-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb7-5" data-line-number="5">M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;scopus&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;bibtex&quot;</span>)</a>
+<a class="sourceLine" id="cb7-6" data-line-number="6"></a>
+<a class="sourceLine" id="cb7-7" data-line-number="7"><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</a></code></pre></div>
 <p> </p>
 </div>
 <div id="how-to-import-data-from-dimensions" class="section level3">
@@ -726,17 +712,17 @@ By a key (10 requests/s)</td>
 <p><em>bibliometrix</em> supports both the two Dimensions export file formats: excel and csv (comma-separated values).</p>
 <p>The free version of Dimensions, for which no subscription is needed, can be used. A user account is required. To download data from Dimensions, choose the Save / Export option, followed by the <strong>Export for bibliometric mapping or Excel option</strong>.</p>
 <p><strong>Dimensions Excel file format</strong></p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a>file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/dimensions_excel.xlsx&quot;</span></span>
-<span id="cb8-2"><a href="#cb8-2"></a></span>
-<span id="cb8-3"><a href="#cb8-3"></a>M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;dimensions&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;excel&quot;</span>)</span>
-<span id="cb8-4"><a href="#cb8-4"></a></span>
-<span id="cb8-5"><a href="#cb8-5"></a><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1">file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/dimensions_excel.xlsx&quot;</span></a>
+<a class="sourceLine" id="cb8-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb8-3" data-line-number="3">M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;dimensions&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;excel&quot;</span>)</a>
+<a class="sourceLine" id="cb8-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb8-5" data-line-number="5"><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</a></code></pre></div>
 <p><strong>Dimensions csv file format</strong></p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a>file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/dimensions_csv.csv&quot;</span></span>
-<span id="cb9-2"><a href="#cb9-2"></a></span>
-<span id="cb9-3"><a href="#cb9-3"></a>M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;dimensions&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;csv&quot;</span>)</span>
-<span id="cb9-4"><a href="#cb9-4"></a></span>
-<span id="cb9-5"><a href="#cb9-5"></a><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" data-line-number="1">file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/dimensions_csv.csv&quot;</span></a>
+<a class="sourceLine" id="cb9-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb9-3" data-line-number="3">M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;dimensions&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;csv&quot;</span>)</a>
+<a class="sourceLine" id="cb9-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb9-5" data-line-number="5"><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</a></code></pre></div>
 <p> </p>
 </div>
 <div id="how-to-import-data-from-pubmed" class="section level3">
@@ -746,11 +732,11 @@ By a key (10 requests/s)</td>
 <p><em>bibliometrix</em> supports only the “pubmed txt” file format.</p>
 <p>PubMed can be accessed at <a href="https://pubmed.ncbi.nlm.nih.gov/" class="uri">https://pubmed.ncbi.nlm.nih.gov/</a>. To download data from PubMed, choose the <strong>Save option</strong>, choose <strong>All results</strong> as content selection, and choose <strong>PubMed</strong> as the file format. Data downloaded from PubMed cannot be used for identifying citation, bibliographic coupling, and co-citation links between items.</p>
 <p><strong>PubMed txt file format</strong></p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a>file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/pubmed_txt.txt&quot;</span></span>
-<span id="cb10-2"><a href="#cb10-2"></a></span>
-<span id="cb10-3"><a href="#cb10-3"></a>M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;pubmed&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;pubmed&quot;</span>)</span>
-<span id="cb10-4"><a href="#cb10-4"></a></span>
-<span id="cb10-5"><a href="#cb10-5"></a><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb10-1" data-line-number="1">file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/pubmed_txt.txt&quot;</span></a>
+<a class="sourceLine" id="cb10-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb10-3" data-line-number="3">M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;pubmed&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;pubmed&quot;</span>)</a>
+<a class="sourceLine" id="cb10-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb10-5" data-line-number="5"><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</a></code></pre></div>
 <p> </p>
 </div>
 <div id="how-to-import-data-from-cochrane-library" class="section level3">
@@ -760,11 +746,11 @@ By a key (10 requests/s)</td>
 <p><em>bibliometrix</em> supports the “plaintext” file format.</p>
 <p>CDSR can be accessed at <a href="https://www.cochranelibrary.com/search" class="uri">https://www.cochranelibrary.com/search</a>. To download data from CDSRed, choose the <strong>Export selected citation(s) option</strong>, and choose <strong>Plain Text</strong> as the file format. Data downloaded from CDSR cannot be used for identifying citation, bibliographic coupling, and co-citation links between items.</p>
 <p><strong>Cochrane plaintext file format</strong></p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a>file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/cochrane_plaintext.txt&quot;</span></span>
-<span id="cb11-2"><a href="#cb11-2"></a></span>
-<span id="cb11-3"><a href="#cb11-3"></a>M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;cochrane&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;plaintext&quot;</span>)</span>
-<span id="cb11-4"><a href="#cb11-4"></a></span>
-<span id="cb11-5"><a href="#cb11-5"></a><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1">file &lt;-<span class="st"> &quot;https://www.bibliometrix.org/datasets/cochrane_plaintext.txt&quot;</span></a>
+<a class="sourceLine" id="cb11-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb11-3" data-line-number="3">M &lt;-<span class="st"> </span><span class="kw">convert2df</span>(file, <span class="dt">dbsource =</span> <span class="st">&quot;cochrane&quot;</span>, <span class="dt">format =</span> <span class="st">&quot;plaintext&quot;</span>)</a>
+<a class="sourceLine" id="cb11-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb11-5" data-line-number="5"><span class="kw">head</span>(M[<span class="st">&quot;TC&quot;</span>])</a></code></pre></div>
 <p> </p>
 <p> </p>
 </div>

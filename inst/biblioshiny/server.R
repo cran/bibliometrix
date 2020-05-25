@@ -30,7 +30,7 @@ server <- function(input, output, session) {
   values$dsQuery <- ""
   values$pmQuery <- " "
   values$pmSample <- 0
-  values$ApiOk=0
+  values$ApiOk <- 0
 
   
   
@@ -453,9 +453,10 @@ server <- function(input, output, session) {
   }) 
   
   output$sampleLog2 <- renderText({ 
-    if (values$ApiOk==1) {n <- nrow(values$M)}else{n <- 0}
+    
+    if (nrow(values$M)<2) {n <- 0}else{n <- nrow(values$M)}
     mes <- paste("Dimensions API returns ",n, " documents", collapse="",sep="")
-    values$ApiOk=0
+    values$ApiOk <- 0
     return(mes)
   }) 
   
@@ -538,7 +539,7 @@ server <- function(input, output, session) {
     })
   }) 
   output$pmSampleLog2 <- renderText({ 
-    if (values$ApiOk==1) {n <- nrow(values$M)}else{n <- 0}
+    if (nrow(values$M)<2) {n <- 0}else{n <- nrow(values$M)}
     
       mes <- paste("PubMed API returns ",n, " documents", collapse="",sep="")
       values$ApiOk <- 0
@@ -794,7 +795,7 @@ server <- function(input, output, session) {
     
     names(Y)=c("Year","Freq")
     
-    g=ggplot2::ggplot(Y, aes(x = Y$Year, y = Y$Freq, text=paste("Year: ",Y$Year,"\nN .of Documents: ",Y$Freq))) +
+    g=ggplot2::ggplot(Y, aes(x = .data$Year, y = .data$Freq, text=paste("Year: ",.data$Year,"\nN .of Documents: ",.data$Freq))) +
       geom_line(aes(group="NA")) +
       geom_area(aes(group="NA"),fill = '#002F80', alpha = .5) +
       labs(x = 'Year'
@@ -916,15 +917,13 @@ server <- function(input, output, session) {
 
   })
   
-  output$ThreeFielsPlot <- networkD3::renderSankeyNetwork({
-    
-    input$apply3F
-    
-    isolate({
+  TFP <- eventReactive(input$apply3F,{
     fields=c(input$LeftField, input$CentralField, input$RightField)
     threeFieldsPlot(values$M, fields=fields,n=c(input$LeftFieldn, input$CentralFieldn,input$RightFieldn), width=1200,height=600)
-    })
-    
+  })
+  
+  output$ThreeFielsPlot <- networkD3::renderSankeyNetwork({
+    TFP()  
   })
   
   ### SOURCES MENU ####
@@ -1073,18 +1072,17 @@ server <- function(input, output, session) {
       formatStyle(names(values$bradford$table),  backgroundColor = 'white',textAlign = 'center')
   })
   
-  output$SourceHindexPlot <- renderPlotly({
-    
-    input$applyHsource
-    
+  Hsource <- eventReactive(input$applyHsource,{
     withProgress(message = 'Calculation in progress',
                  value = 0, {
-                   isolate(res <- Hindex_plot(values,type="source"))
+                   res <- Hindex_plot(values,type="source")
                  })
     
-    
-    isolate(plot.ly(res$g))
-   
+    plot.ly(res$g)
+  })
+  
+  output$SourceHindexPlot <- renderPlotly({
+    Hsource()
   })#, height = 500, width =900)
   
   output$SourceHindexTable <- DT::renderDT({
@@ -1113,6 +1111,7 @@ server <- function(input, output, session) {
     
   })
   
+  
   output$soGrowthPlot <- renderPlot({
     
     if (input$SOse=="Yes"){se=TRUE}else{se=FALSE}
@@ -1130,7 +1129,7 @@ server <- function(input, output, session) {
     term=rep(term,each=dim(values$PYSO)[1])
     n=dim(values$PYSO)[1]*(dim(values$PYSO)[2]-1)
     freq=matrix(as.matrix(values$PYSO[,-1]),n,1)
-    values$SODF=data.frame(Year=rep(values$PYSO$Year,(dim(values$PYSO)[2]-1)),Source=term, Freq=freq)
+    values$SODF=data.frame(Year=rep(values$PYSO$Year,(dim(values$PYSO)[2]-1)),Source=term, Freq=freq, stringsAsFactors = TRUE)
     
     g=ggplot(values$SODF)+
       geom_smooth(aes(x=values$SODF$Year,y=values$SODF$Freq, group=values$SODF$Source, color=values$SODF$Source),se=se, method = "loess", formula="y ~ x")+
@@ -2120,7 +2119,7 @@ server <- function(input, output, session) {
     term=rep(term,each=dim(values$KW)[1])
     n=dim(values$KW)[1]*(dim(values$KW)[2]-1)
     freq=matrix(as.matrix(values$KW[,-1]),n,1)
-    values$DF=data.frame(Year=rep(values$KW$Year,(dim(values$KW)[2]-1)),Term=term, Freq=freq)
+    values$DF=data.frame(Year=rep(values$KW$Year,(dim(values$KW)[2]-1)),Term=term, Freq=freq, stringsAsFactors = TRUE)
     
     g=ggplot(values$DF)+
       geom_smooth(aes(x=values$DF$Year,y=values$DF$Freq, group=values$DF$Term, color=values$DF$Term),se = se,method = "loess",formula ='y ~ x')+
@@ -2272,7 +2271,7 @@ server <- function(input, output, session) {
   output$cocTable <- DT::renderDT({
     
     cocData=values$cocnet$cluster_res
-    names(cocData)=c("Term", "Cluster", "Btw Centrality")
+    names(cocData)=c("Node", "Cluster", "Betweenness", "Closeness", "PageRank")
     DT::datatable(cocData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"), filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
                                  buttons = list('pageLength',
@@ -2297,8 +2296,15 @@ server <- function(input, output, session) {
     
   })
   
+      ### Degree Plot Co-word analysis ####
+  output$cocDegree <- renderPlotly({
+    p <- degreePlot(values$cocnet)
+    plot.ly(p)
+  })
       ### Correspondence Analysis ----
 
+  
+  
   output$CSPlot1 <- renderPlot({
     
     input$applyCA
@@ -2814,7 +2820,7 @@ server <- function(input, output, session) {
   output$cocitTable <- DT::renderDT({
     
     cocitData=values$cocitnet$cluster_res
-    names(cocitData)=c("Node", "Cluster", "Btw Centrality")
+    names(cocitData)=c("Node", "Cluster", "Betweenness", "Closeness", "PageRank")
     DT::datatable(cocitData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
                                  buttons = list('pageLength',
@@ -2847,6 +2853,12 @@ server <- function(input, output, session) {
     },
     contentType = "html"
   )
+  
+  ### Degree Plot Co-citation analysis ####
+  output$cocitDegree <- renderPlotly({
+    p <- degreePlot(values$cocitnet)
+    plot.ly(p)
+  })
       ### Historiograph ----
   output$histPlot <- renderPlot({
     
@@ -2939,7 +2951,7 @@ server <- function(input, output, session) {
   output$colTable <- DT::renderDT({
     
       colData=values$colnet$cluster_res
-      names(colData)=c("Node", "Cluster", "Btw Centrality")
+      names(colData)=c("Node", "Cluster", "Betweenness", "Closeness", "PageRank")
     
     DT::datatable(colData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"), filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
@@ -2972,6 +2984,13 @@ server <- function(input, output, session) {
     },
     contentType = "html"
   )
+  
+  
+  ### Degree Plot Collaboration analysis ####
+  output$colDegree <- renderPlotly({
+    p <- degreePlot(values$colnet)
+    plot.ly(p)
+  })
   
       ### WPPlot ----
   output$WMPlot<- renderPlot({
@@ -3337,6 +3356,26 @@ server <- function(input, output, session) {
   
   
       ### Network functions ----
+ 
+ degreePlot <- function(net){
+   deg <- data.frame(node = names(net$nodeDegree), x= (1:length(net$nodeDegree)), y = net$nodeDegree)
+   p <- ggplot(data = deg, aes(x=.data$x, y=.data$y, 
+                          text=paste("Node ",.data$x," - Degree ",.data$y, sep="")))+
+     geom_point()+
+     geom_line(aes(group="NA"),color = '#002F80', alpha = .5) +
+     theme(text = element_text(color = "#444444")
+           ,panel.background = element_rect(fill = '#EFEFEF')
+           ,panel.grid.minor = element_line(color = '#FFFFFF')
+           ,panel.grid.major = element_line(color = '#FFFFFF')
+           ,plot.title = element_text(size = 24)
+           ,axis.title = element_text(size = 14, color = '#555555')
+           ,axis.title.y = element_text(vjust = 1, angle = 0)
+           ,axis.title.x = element_text(hjust = 0)
+     ) + 
+     labs(x = "Node", y="Degree", title = "Node Degrees")
+   return(p)
+ }
+ 
   cocNetwork <- function(input,values){
     
     n = input$Nodes

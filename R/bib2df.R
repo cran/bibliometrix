@@ -2,6 +2,10 @@ bib2df<-function(D, dbsource = "isi"){
   
   D <- D[nchar(D)>1]  # remove empty rows
   Papers <- which(substr(D,1,1)=="@")  # # first row of each document
+  if (Papers[1]>1){
+    D <- D[-(1:(Papers[1]-1))]
+    Papers <- Papers-(Papers[1]-1)
+  }
   
   if (dbsource == "isi") D <- gsub(" = \\{","={",D)
   
@@ -64,6 +68,16 @@ bib2df<-function(D, dbsource = "isi"){
   
   ### replace "---" with ";"
   tagsComma <- c("AU","DE","ID","C1" ,"CR")
+  nolab <- setdiff(tagsComma,names(df))
+  if (length(nolab)>0){
+    cat("\nWarning:\nIn your file, some mandatory metadata are missing. Bibliometrix functions may not work properly!\n
+Please, take a look at the vignettes:
+- 'Data Importing and Converting' (https://cran.r-project.org/web/packages/bibliometrix/vignettes/Data-Importing-and-Converting.html)
+- 'A brief introduction to bibliometrix' (https://cran.r-project.org/web/packages/bibliometrix/vignettes/bibliometrix-vignette.html)\n\n")
+    cat("\nMissing fields: ",nolab)
+    }
+  
+  tagsComma <- tagsComma[(!(tagsComma %in% nolab))]
   df1 <- data.frame(lapply(df[tagsComma],function(x){
     gsub("---",";",x)
   }),stringsAsFactors = FALSE)
@@ -79,7 +93,8 @@ bib2df<-function(D, dbsource = "isi"){
   # Funding info
   ind <- which(regexpr("funding_text",names(df))>-1)
   if (!("FX" %in% Tag) & length(ind)>0){
-    df$FX <- apply(df[,ind],1,function(x) paste(x,collapse=" "))
+    df$FX <- apply((as.data.frame(df[,ind], stringsAsFactors = FALSE)),1,
+                   function(x) paste(x,collapse=" "))
     df <- df[,-ind]
   }
   
