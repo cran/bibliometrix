@@ -1,15 +1,14 @@
 Package: bibliometrix
 Type: Package
 Title: Comprehensive Science Mapping Analysis
-Version: 3.0.2
-Date: 2020-06-16
+Version: 3.0.3
 Authors@R: c(person("Massimo", "Aria", email = "aria@unina.it", role=c("cre","aut")),
              person("Corrado", "Cuccurullo", email = "cuccurullocorrado@gmail.com", role="aut"))
 Description: Tool for quantitative research in scientometrics and bibliometrics.
-    It provides various routines for importing bibliographic data from 'SCOPUS' (<http://scopus.com>),
-    'Clarivate Analytics Web of Science' (<http://www.webofknowledge.com/>), 'Digital Science Dimensions' 
-	(<https://www.dimensions.ai/>), 'Cochrane Library' (<http://www.cochranelibrary.com/>) 
-	and 'PubMed' (<https://www.ncbi.nlm.nih.gov/pubmed/>) databases, performing bibliometric analysis 
+    It provides various routines for importing bibliographic data from 'SCOPUS' (<https://scopus.com>),
+    'Clarivate Analytics Web of Science' (<https://www.webofknowledge.com/>), 'Digital Science Dimensions' 
+	(<https://www.dimensions.ai/>), 'Cochrane Library' (<https://www.cochranelibrary.com/>) 
+	and 'PubMed' (<https://pubmed.ncbi.nlm.nih.gov/>) databases, performing bibliometric analysis 
     and building networks for co-citation, coupling, scientific collaboration and co-word analysis.
 License: GPL-3
 URL: https://www.bibliometrix.org,
@@ -29,6 +28,6 @@ Author: Massimo Aria [cre, aut],
   Corrado Cuccurullo [aut]
 Maintainer: Massimo Aria <aria@unina.it>
 VignetteBuilder: knitr,
-Packaged: 2020-06-16 12:41:00 UTC; massimoaria
+Packaged: 2020-09-28 10:49:58 UTC; massimoaria
 Repository: CRAN
-Date/Publication: 2020-06-17 10:00:03 UTC
+Date/Publication: 2020-09-28 11:50:05 UTC

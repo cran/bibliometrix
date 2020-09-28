@@ -8,7 +8,7 @@
 #' \tabular{lll}{
 #' \code{"CR_AU"}\tab   \tab First Author of each cited reference\cr
 #' \code{"CR_SO"}\tab   \tab Source of each cited reference\cr
-#' \code{"AU_CO"}\tab   \tab Country of affiliation for each co-author\cr
+#' \code{"AU_CO"}\tab   \tab Country of affiliation for co-authors \cr
 #' \code{"AU1_CO"}\tab   \tab Country of affiliation for the first author\cr
 #' \code{"AU_UN"}\tab   \tab University of affiliation for each co-author and the corresponding author (AU1_UN)\cr
 #' \code{"SR"}\tab     \tab Short tag of the document (as used in reference lists)}
@@ -34,7 +34,7 @@
 #' scientometrics <- metaTagExtraction(scientometrics, Field = "CR_SO", sep = ";")
 #' unlist(strsplit(scientometrics$CR_SO[1], ";"))
 #'
-#' #Example 3: Affiliation country for co-author
+#' #Example 3: Affiliation country for co-authors
 #'
 #' data(scientometrics)
 #' scientometrics <- metaTagExtraction(scientometrics, Field = "AU_CO", sep = ";")
@@ -258,8 +258,6 @@ AU_CO<-function(M){
   M$AU_CO=gsub(";;", ";", M$AU_CO, fixed = TRUE)
   M$AU_CO=gsub("UNITED STATES","USA",M$AU_CO)
   M$AU_CO=gsub("TAIWAN","CHINA",M$AU_CO)
-  ## no need to gsub all Georgia to USA, as real Georgia will be like 'Georgia.' or 'Georgia;',
-  ## while Georgia, US will never be at the end of an address.
   M$AU_CO=gsub("ENGLAND","UNITED KINGDOM",M$AU_CO)
   M$AU_CO=gsub("SCOTLAND","UNITED KINGDOM",M$AU_CO)
   M$AU_CO=gsub("WALES","UNITED KINGDOM",M$AU_CO)
@@ -299,7 +297,9 @@ AU1_CO<-function(M,sep){
     RP=M$RP
     #RP[which(is.na(RP))]=M$RRP)
     RP=paste(RP,";",sep="")
-    RP=gsub("[[:punct:][:blank:]]+", " ", RP)} else {RP=C1}
+    RP=gsub("[[:punct:][:blank:]]+", " ", RP)} else {
+      RP <- C1 <-paste(" ",gsub("[[:punct:]]","",C1),sep="")
+      }
   
   for (i in 1:size[1]){
     if (!is.na(C1[i])){
@@ -317,7 +317,6 @@ AU1_CO<-function(M,sep){
   M$AU1_CO=trim(gsub("[[:digit:]]","",M$AU1_CO))
   M$AU1_CO=gsub("UNITED STATES","USA",M$AU1_CO)
   M$AU1_CO=gsub("TAIWAN","CHINA",M$AU1_CO)
-  ## TAIWAN is not a country. It is so far still a part of CHINA, whatever you thinks.
   M$AU1_CO=gsub("ENGLAND","UNITED KINGDOM",M$AU1_CO)
   M$AU1_CO=gsub("SCOTLAND","UNITED KINGDOM",M$AU1_CO)
   M$AU1_CO=gsub("WALES","UNITED KINGDOM",M$AU1_CO)

@@ -249,7 +249,7 @@ server <- function(input, output, session) {
    }), stringsAsFactors = FALSE)
    MData$DOI <-
      paste0(
-       '<a href=\"http://doi.org/',
+       '<a href=\"https://doi.org/',
        MData$DI,
        '\" target=\"_blank\">',
        MData$DI,
@@ -373,7 +373,7 @@ server <- function(input, output, session) {
         placeholder = NULL
       ),
       numericInput("dsStartYear", "Start Year", value = 1990),
-      numericInput("dsEndYear", "Start Year", value = as.numeric(substr(Sys.time(), 1, 4))),
+      numericInput("dsEndYear", "End Year", value = as.numeric(substr(Sys.time(), 1, 4))),
       
       
       actionButton("dsQuery", "Create the query "),
@@ -460,7 +460,7 @@ server <- function(input, output, session) {
   
   output$sliderLimit <- renderUI({
     
-    sliderInput("sliderLimit", "Total document to downalod", min = 1,
+    sliderInput("sliderLimit", "Total document to download", min = 1,
                 max = values$dsSample, value = values$dsSample, step = 1)
   })
   
@@ -481,7 +481,7 @@ server <- function(input, output, session) {
         placeholder = NULL
       ),
       numericInput("pmStartYear", "Start Year", value = 1990),
-      numericInput("pmEndYear", "Start Year", value = as.numeric(substr(Sys.time(
+      numericInput("pmEndYear", "End Year", value = as.numeric(substr(Sys.time(
       ), 1, 4))),
       actionButton("pmQuery", "Try the query "),
       h5(tags$b("Query Translation")),
@@ -548,7 +548,7 @@ server <- function(input, output, session) {
   }) 
   
   output$pmSliderLimit <- renderUI({
-    sliderInput("pmSliderLimit", "Total document to downalod", min = 1,
+    sliderInput("pmSliderLimit", "Total document to download", min = 1,
                 max = values$pmSample, value = values$pmSample, step = 1)
   })
   ### API MENU: Content Download ####
@@ -622,7 +622,7 @@ server <- function(input, output, session) {
     }), stringsAsFactors = FALSE)
     MData$DOI <-
       paste0(
-        '<a href=\"http://doi.org/',
+        '<a href=\"https://doi.org/',
         MData$DI,
         '\" target=\"_blank\">',
         MData$DI,
@@ -786,7 +786,7 @@ server <- function(input, output, session) {
     Tab=table(values$results$Years)
     
     ## inserting missing years
-    YY=setdiff(seq(min(values$results$Years),max(values$results$Years)),names(Tab))
+    YY=setdiff(seq(min(values$results$Years, na.rm = T),max(values$results$Years,na.rm = T)),names(Tab))
     Y=data.frame(Year=as.numeric(c(names(Tab),YY)),Freq=c(as.numeric(Tab),rep(0,length(YY))))
     Y=Y[order(Y$Year),]
     
@@ -865,9 +865,9 @@ server <- function(input, output, session) {
     values$AnnualTotCitperYear=Table2
     Table2$group="A"
     
-    g=ggplot(Table2, aes(x = Table2$Year, y =Table2$MeanTCperYear,text=paste("Year: ",Table2$Year,"\nAverage Citations per Year: ",round(Table2$MeanTCperYear,1)))) +
-      geom_line(aes(x = Table2$Year, y = Table2$MeanTCperYear, group=Table2$group)) +
-      geom_area(aes(x = Table2$Year, y = Table2$MeanTCperYear, group=Table2$group),fill = '#002F80', alpha = .5) +
+    g=ggplot(Table2, aes(x = .data$Year, y =.data$MeanTCperYear,text=paste("Year: ",.data$Year,"\nAverage Citations per Year: ",round(.data$MeanTCperYear,1)))) +
+      geom_line(aes(x = .data$Year, y = .data$MeanTCperYear, group=.data$group)) +
+      geom_area(aes(x = .data$Year, y = .data$MeanTCperYear, group=.data$group),fill = '#002F80', alpha = .5) +
       labs(x = 'Year'
            , y = 'Citations'
            , title = "Average Article Citations per Year")+
@@ -1428,7 +1428,7 @@ server <- function(input, output, session) {
   output$TopAuthorsProdTablePapers <- DT::renderDT({
     AUoverTime()
     TAB <- values$AUProdOverTime$dfPapersAU
-    TAB$DOI=paste0('<a href=\"http://doi.org/',TAB$DOI,'\" target=\"_blank\">',TAB$DOI,'</a>')
+    TAB$DOI=paste0('<a href=\"https://doi.org/',TAB$DOI,'\" target=\"_blank\">',TAB$DOI,'</a>')
     DT::datatable(TAB, rownames = FALSE, escape = FALSE,extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
                                  buttons = list('pageLength',
@@ -1747,9 +1747,9 @@ server <- function(input, output, session) {
     values$TABGlobDoc <- values$TAB
     
     if (input$CitDocsMeasure=="TC"){
-      xx=data.frame(values$results$MostCitedPapers[1],values$results$MostCitedPapers[2], stringsAsFactors = FALSE,row.names=NULL)
+      xx=data.frame(values$results$MostCitedPapers[1],values$results$MostCitedPapers[3], stringsAsFactors = FALSE,row.names=NULL)
       lab="Total Citations"} else {
-        xx=data.frame(values$results$MostCitedPapers[1],values$results$MostCitedPapers[3], stringsAsFactors = FALSE,row.names=NULL)
+        xx=data.frame(values$results$MostCitedPapers[1],values$results$MostCitedPapers[4], stringsAsFactors = FALSE,row.names=NULL)
         lab="Total Citations per Year"
       }
     
@@ -1779,7 +1779,8 @@ server <- function(input, output, session) {
   output$MostCitDocsTable <- DT::renderDT({
     g <- MGCDocuments()
     TAB <- values$TABGlobDoc
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
+    TAB$DOI<- paste0('<a href=\"https://doi.org/',TAB$DOI,'\" target=\"_blank\">',TAB$DOI,'</a>')
+    DT::datatable(TAB, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
                                  buttons = list('pageLength',
                                                 list(extend = 'copy'),
@@ -1839,7 +1840,11 @@ server <- function(input, output, session) {
   output$MostLocCitDocsTable <- DT::renderDT({
     
     TAB <- values$TABLocDoc
-    TAB$DOI<- paste0('<a href=\"http://doi.org/',TAB$DOI,'\" target=\"_blank\">',TAB$DOI,'</a>')
+    TAB$DOI <- paste0('<a href=\"https://doi.org/',TAB$DOI,'\" target=\"_blank\">',TAB$DOI,'</a>')
+    TAB$Ratio <- TAB[,4]/TAB[,5]*100
+    TAB$Ratio[is.nan(TAB$Ratio)] <- 0
+    #TAB$Ratio <- round(TAB$Ratio,2)
+    names(TAB)[ncol(TAB)] <- "Local Citations (%)"
     DT::datatable(TAB, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 20, dom = 'Bfrtip',
                                  buttons = list('pageLength',
@@ -1860,7 +1865,8 @@ server <- function(input, output, session) {
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
                   class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') %>%
+      formatRound(names(TAB)[6], digits=2)
     
   })
   
@@ -1945,7 +1951,7 @@ server <- function(input, output, session) {
   output$rpysTable <- DT::renderDT({
     RPYS()
     rpysData=values$res$rpysTable
-    
+  
     DT::datatable(rpysData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 50, dom = 'Bfrtip',
                                  buttons = list('pageLength',
@@ -1973,8 +1979,11 @@ server <- function(input, output, session) {
   output$crTable <- DT::renderDT({
     RPYS()
     crData=values$res$CR
+    crData$link <- paste0('<a href=\"https://scholar.google.it/scholar?hl=en&as_sdt=0%2C5&q=',crData$Reference,'\" target=\"_blank\">','link','</a>')
+    
     crData=crData[order(-as.numeric(crData$Year),-crData$Freq),]
-    names(crData)=c("Year", "Reference", "Local Citations")
+    names(crData)=c("Year", "Reference", "Local Citations", "Google link")
+    crData <- crData[,c(1,4,2,3)] 
     DT::datatable(crData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 50, dom = 'Bfrtip',
                                  buttons = list('pageLength',
@@ -2085,24 +2094,35 @@ server <- function(input, output, session) {
     })
   
   TreeMap <- eventReactive(input$applyTreeMap,{
-    resW=wordlist(M=values$M, Field=input$treeTerms, n=input$treen_words, measure=input$treemeasure)
+    #resW=wordlist(M=values$M, Field=input$treeTerms, n=input$treen_words, measure=input$treemeasure)
+    resW=wordlist(M=values$M, Field=input$treeTerms, n=input$treen_words, measure="identity")
     
     W=resW$W
-    values$WordsT=resW$Words
+    values$TreeMap <- plot_ly(
+      type='treemap',
+      labels=W[,1],
+      parents="Tree",
+      values= W[,2],
+      textinfo="label+value+percent entry",
+      domain=list(column=0))
     
-    treemap::treemap(W, #Your data frame object
-                     index=c("Terms"),  #A list of your categorical variables
-                     vSize = "Frequency",  #This is your quantitative variable
-                     type="index", #Type sets the organization and color scheme of your treemap
-                     palette = input$treeCol,  #Select your color palette from the RColorBrewer presets or make your own.
-                     title="Word TreeMap", #Customize your title
-                     fontsize.title = 14, #Change the font size of the title
-                     fontsize.labels = input$treeFont
-    )
+    values$WordsT=resW$Words
+    return(resW$Words)
+    # treemap::treemap(W, #Your data frame object
+    #                  index=c("Terms"),  #A list of your categorical variables
+    #                  vSize = "Frequency",  #This is your quantitative variable
+    #                  type="index", #Type sets the organization and color scheme of your treemap
+    #                  palette = input$treeCol,  #Select your color palette from the RColorBrewer presets or make your own.
+    #                  title="Word TreeMap", #Customize your title
+    #                  fontsize.title = 14, #Change the font size of the title
+    #                  fontsize.labels = input$treeFont
+    # )
+    
   })
   
-  output$treemap <- renderPlot({
-   TreeMap()
+  output$treemap <- renderPlotly({
+    TreeMap()
+    values$TreeMap
   })
   
   output$wordTable <- DT::renderDT({
@@ -2132,7 +2152,7 @@ server <- function(input, output, session) {
   })
   
   output$treeTable <- DT::renderDT({
-    TreeMap()
+    WordsT <- TreeMap()
     
     DT::datatable(values$WordsT, rownames = FALSE,
                   options = list(pageLength = 10, dom = 'Bfrtip',
@@ -2152,9 +2172,10 @@ server <- function(input, output, session) {
                                                      header = TRUE),
                                                 list(extend = 'print')),
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$Words))-1)))), 
+                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$WordsT))-1)))), 
                   class = 'cell-border compact stripe') %>%
-      formatStyle(names(values$Words),  backgroundColor = 'white',textAlign = 'center')
+      formatStyle(names(values$WordsT),  backgroundColor = 'white',textAlign = 'center')
+    
   },height = 600, width = 900)
   
   WDynamics <- eventReactive(input$applyWD,{
@@ -2978,7 +2999,8 @@ server <- function(input, output, session) {
   output$histPlot <- renderPlot({
     
     Hist()
-    }, height = 500, width = 900)
+    plot(values$histPlot$g)
+    }, height = 610, width = 1100, res=150)
   
   output$histTable <- DT::renderDT({
     LCS=values$histResults$LCS
@@ -2986,7 +3008,7 @@ server <- function(input, output, session) {
     ind=which(LCS>=s)
     Data=values$histResults$histData
     Data=Data[ind,]
-    Data$DOI<- paste0('<a href=\"http://doi.org/',Data$DOI,'\" target=\"_blank\">',Data$DOI,'</a>')
+    Data$DOI<- paste0('<a href=\"https://doi.org/',Data$DOI,'\" target=\"_blank\">',Data$DOI,'</a>')
     DT::datatable(Data, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 50, dom = 'Bfrtip',
                                  buttons = list('pageLength',
@@ -3299,13 +3321,13 @@ server <- function(input, output, session) {
              AU <- data.frame(Author=names(values$results$Authors), 
                               freq=as.numeric(values$results$Authors), 
                               stringsAsFactors = FALSE)
-             TAB <- left_join(AU,values$results$AuthorsFrac)
+             TAB <- dplyr::left_join(AU,values$results$AuthorsFrac)
              names(TAB)=c("Authors","Articles","Articles Fractionalized")
              #print(S$MostProdAuthors)
            },
            "tab4"={
              TAB=values$S$MostCitedPapers
-             names(TAB)=c("Paper", "Total Citations","TC per Year")
+             names(TAB)=c("Paper", "DOI","Total Citations","TC per Year")
              #print(S$MostCitedPapers)
            },
            "tab5"={
@@ -3360,7 +3382,7 @@ server <- function(input, output, session) {
     names(v)=tolower(names(v))
     #v=tableTag(values$M,"ID")
     n=min(c(n,length(v)))
-    Words=data.frame(Terms=names(v)[1:n], Frequency=(as.numeric(v)[1:n]))
+    Words=data.frame(Terms=names(v)[1:n], Frequency=(as.numeric(v)[1:n]), stringsAsFactors = FALSE)
     W=Words
     switch(measure,
            identity={},
@@ -3447,17 +3469,17 @@ server <- function(input, output, session) {
   
  historiograph <- function(input,values){
     
-    if (input$histsearch=="FAST"){
-      min.cit=quantile(values$M$TC,0.75, na.rm = TRUE)
-    }else{min.cit=1}
+   min.cit <- 1
+    # if (input$histsearch=="FAST"){
+    #   min.cit=quantile(values$M$TC,0.75, na.rm = TRUE)
+    # }else{min.cit=1}
     
-    if (values$Histfield=="NA" | values$histsearch!=input$histsearch){
+    if (values$Histfield=="NA"){
       values$histResults <- histNetwork(values$M, min.citations=min.cit, sep = ";")
       values$Histfield="done"
-      values$histsearch=input$histsearch
     }
-    
-    values$histlog<- (values$histPlot <- histPlot(values$histResults, n=input$histNodes, size =input$histsize, labelsize = input$histlabelsize, verbose=FALSE))
+    titlelabel <- input$titlelabel=="TRUE"
+    values$histlog<- (values$histPlot <- histPlot(values$histResults, n=input$histNodes, size =input$histsize, labelsize = input$histlabelsize, title_as_label = titlelabel, verbose=FALSE))
   return(values)
   }
   
