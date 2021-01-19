@@ -52,7 +52,7 @@
 #' @examples
 #' # EXAMPLE Keywordd co-occurrence network
 #'
-#' data(management)
+#' data(management, package = "bibliometrixData")
 #'
 #' NetMatrix <- biblioNetwork(management, analysis = "co-occurrences", 
 #' network = "keywords", sep = ";")
@@ -156,12 +156,12 @@ networkPlot <-
       if (!isTRUE(bsk.S)) {
         bsk.S <- delete.vertices(bsk.S, which(Vind))
       }
-    } else {
+    } else if (!is.null(n)) {
       if (n > dim(NetMatrix)[1]) {
         n <- dim(NetMatrix)[1]
       }
       nodes <- names(sort(deg, decreasing = TRUE)[1:n])
-      
+
       bsk.network <- delete.vertices(bsk.network, which(!(V(bsk.network)$name %in% nodes)))
       if (!isTRUE(bsk.S)) {
         bsk.S <- delete.vertices(bsk.S,  which(!(V(bsk.S)$name %in% nodes)))

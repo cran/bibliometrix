@@ -25,17 +25,19 @@ isi2df<-function(D){
   
   df$PY <- as.numeric(df$PY)
   
-  ### replace "---" with ";"
-  tagsComma <- c("AU","AF","DE","ID","CR")
-  
-  nolab <- setdiff(tagsComma,names(df))
-  if (length(nolab)>0){
+  missingTags <- setdiff(c("AU","DE","C1","RP","CR","PY","SO","TI","TC"),names(df))
+  if (length(missingTags)>0){
     cat("\nWarning:\nIn your file, some mandatory metadata are missing. Bibliometrix functions may not work properly!\n
 Please, take a look at the vignettes:
-- 'Data Importing and Converting' (https://cran.r-project.org/web/packages/bibliometrix/vignettes/Data-Importing-and-Converting.html)
-- 'A brief introduction to bibliometrix' (https://cran.r-project.org/web/packages/bibliometrix/vignettes/bibliometrix-vignette.html)\n\n")
-    cat("\nMissing fields: ",nolab)
+- 'Data Importing and Converting' (https://www.bibliometrix.org/vignettes/Data-Importing-and-Converting.html)
+- 'A brief introduction to bibliometrix' (https://www.bibliometrix.org/vignettes/Introduction_to_bibliometrix.html)\n\n")
+    cat("\nMissing fields: ",missingTags,"\n")
   }
+  
+  ### replace "---" with ";"
+  tagsComma <- c("AU","AF","CR")
+  
+  nolab <- setdiff(tagsComma,names(df))
   
   tagsComma <- tagsComma[(!(tagsComma %in% nolab))]
   
@@ -62,6 +64,7 @@ Please, take a look at the vignettes:
   df$DI <- DI
   
   # add sep ; to affiliations
+  df$C1 <- trim(gsub("\\[.*?\\]", "", df$C1)) # to remove author info in square brackets
   df$C1 <- gsub("\\.",".;",df$C1)
 
   df <- df[names(df)!="Paper"]

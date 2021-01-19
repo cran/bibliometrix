@@ -1,0 +1,10 @@
+name: biblioshiny
+title:
+username:
+account: massimoaria
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2981192
+bundleId: 3721308
+url: https://massimoaria.shinyapps.io/biblioshiny/
+when: 1602258691.29773

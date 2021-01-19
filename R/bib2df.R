@@ -1,6 +1,8 @@
 bib2df<-function(D, dbsource = "isi"){
   
   D <- D[nchar(D)>1]  # remove empty rows
+  D <- gsub("\\{\\[\\}","[",D)
+  D <- gsub("\\{\\]\\}","]",D)
   Papers <- which(substr(D,1,1)=="@")  # # first row of each document
   if (Papers[1]>1){
     D <- D[-(1:(Papers[1]-1))]
@@ -72,9 +74,9 @@ bib2df<-function(D, dbsource = "isi"){
   if (length(nolab)>0){
     cat("\nWarning:\nIn your file, some mandatory metadata are missing. Bibliometrix functions may not work properly!\n
 Please, take a look at the vignettes:
-- 'Data Importing and Converting' (https://cran.r-project.org/web/packages/bibliometrix/vignettes/Data-Importing-and-Converting.html)
-- 'A brief introduction to bibliometrix' (https://cran.r-project.org/web/packages/bibliometrix/vignettes/bibliometrix-vignette.html)\n\n")
-    cat("\nMissing fields: ",nolab)
+- 'Data Importing and Converting' (https://www.bibliometrix.org/vignettes/Data-Importing-and-Converting.html)
+- 'A brief introduction to bibliometrix' (https://www.bibliometrix.org/vignettes/Introduction_to_bibliometrix.html)\n\n")
+    cat("\nMissing fields: ",nolab,"\n")
     }
   
   tagsComma <- tagsComma[(!(tagsComma %in% nolab))]

@@ -10,6 +10,7 @@ biblioNetwork(
   network = "authors",
   n = NULL,
   sep = ";",
+  short = FALSE,
   shortlabel = TRUE
 )
 }
@@ -29,6 +30,8 @@ Default is \code{network = "authors"}.}
 \item{n}{is an integer. It indicates the number of items to select. If \code{N = NULL}, all items are selected.}
 
 \item{sep}{is the field separator character. This character separates strings in each column of the data frame. The default is \code{sep = ";"}.}
+
+\item{short}{is a logical. If TRUE all items with frequency<2 are deleted to reduce the matrix size.}
 
 \item{shortlabel}{is logical. IF TRUE, reference labels are stored in a short format. Default is \code{shortlabel=TRUE}.}
 }
@@ -70,7 +73,7 @@ Aria, M., & Cuccurullo, C. (2017). bibliometrix: An R-tool for comprehensive sci
 \examples{
 # EXAMPLE 1: Authors collaboration network
 
-# data(scientometrics)
+# data(scientometrics, package = "bibliometrixData")
 
 # NetMatrix <- biblioNetwork(scientometrics, analysis = "collaboration", 
 # network = "authors", sep = ";")
@@ -80,7 +83,7 @@ Aria, M., & Cuccurullo, C. (2017). bibliometrix: An R-tool for comprehensive sci
 
 # EXAMPLE 2: Co-citation network
 
-data(scientometrics)
+data(scientometrics, package = "bibliometrixData")
 
 NetMatrix <- biblioNetwork(scientometrics, analysis = "co-citation", 
 network = "references", sep = ";")

@@ -4,7 +4,15 @@
 \alias{cocMatrix}
 \title{Co-occurrence matrix}
 \usage{
-cocMatrix(M, Field = "AU", type = "sparse", n = NULL, sep = ";", binary = TRUE)
+cocMatrix(
+  M,
+  Field = "AU",
+  type = "sparse",
+  n = NULL,
+  sep = ";",
+  binary = TRUE,
+  short = FALSE
+)
 }
 \arguments{
 \item{M}{is a data frame obtained by the converting function
@@ -34,6 +42,8 @@ argument generates a compact representation of the matrix.}}
 column of the data frame. The default is \code{sep = ";"}.}
 
 \item{binary}{is a logical. If TRUE each cell contains a 0/1. if FALSE each cell contains the frequency.}
+
+\item{short}{is a logical. If TRUE all items with frequency<2 are deleted to reduce the matrix size.}
 }
 \value{
 a co-occurrence matrix with cases corresponding to manuscripts and variables to the
@@ -54,18 +64,18 @@ Aria, M., & Cuccurullo, C. (2017). bibliometrix: An R-tool for comprehensive sci
 \examples{
 # EXAMPLE 1: Articles x Authors co-occurrence matrix
 
-data(scientometrics)
+data(scientometrics, package = "bibliometrixData")
 WA <- cocMatrix(scientometrics, Field = "AU", type = "sparse", sep = ";")
 
 # EXAMPLE 2: Articles x Cited References co-occurrence matrix
 
-# data(scientometrics)
+# data(scientometrics, package = "bibliometrixData")
 
 # WCR <- cocMatrix(scientometrics, Field = "CR", type = "sparse", sep = ";")
 
 # EXAMPLE 3: Articles x Cited First Authors co-occurrence matrix
 
-# data(scientometrics)
+# data(scientometrics, package = "bibliometrixData")
 # scientometrics <- metaTagExtraction(scientometrics, Field = "CR_AU", sep = ";")
 # WCR <- cocMatrix(scientometrics, Field = "CR_AU", type = "sparse", sep = ";")
 

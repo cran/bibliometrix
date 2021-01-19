@@ -34,24 +34,25 @@
 #' @param sep is the field separator character. This character separates strings in each 
 #' column of the data frame. The default is \code{sep = ";"}.
 #' @param binary is a logical. If TRUE each cell contains a 0/1. if FALSE each cell contains the frequency. 
+#' @param short is a logical. If TRUE all items with frequency<2 are deleted to reduce the matrix size.
 #' @return a co-occurrence matrix with cases corresponding to manuscripts and variables to the
 #'   objects extracted from the Tag \code{Field}.
 #'
 #' @examples
 #' # EXAMPLE 1: Articles x Authors co-occurrence matrix
 #'
-#' data(scientometrics)
+#' data(scientometrics, package = "bibliometrixData")
 #' WA <- cocMatrix(scientometrics, Field = "AU", type = "sparse", sep = ";")
 #'
 #' # EXAMPLE 2: Articles x Cited References co-occurrence matrix
 #'
-#' # data(scientometrics)
+#' # data(scientometrics, package = "bibliometrixData")
 #'
 #' # WCR <- cocMatrix(scientometrics, Field = "CR", type = "sparse", sep = ";")
 #'
 #' # EXAMPLE 3: Articles x Cited First Authors co-occurrence matrix
 #'
-#' # data(scientometrics)
+#' # data(scientometrics, package = "bibliometrixData")
 #' # scientometrics <- metaTagExtraction(scientometrics, Field = "CR_AU", sep = ";")
 #' # WCR <- cocMatrix(scientometrics, Field = "CR_AU", type = "sparse", sep = ";")
 #' 
@@ -61,7 +62,7 @@
 #' @seealso \code{\link{biblioNetwork}} to compute a bibliographic network.
 #' @export
 
-cocMatrix<-function(M, Field = "AU", type = "sparse", n=NULL, sep = ";",binary=TRUE){
+cocMatrix<-function(M, Field = "AU", type = "sparse", n=NULL, sep = ";",binary=TRUE, short = FALSE){
 #
 # The function creates co-occurences data between Works and Field
 #
@@ -89,15 +90,15 @@ if (Field=="CR"){Fi<-lapply(Fi,function(l) l<-l[nchar(l)>10])}  ## delete not co
 
 
 # vector of unique units
-uniqueField<-unique(unlist(Fi))
-uniqueField<-uniqueField[!is.na(uniqueField)]
+allField <- unlist(Fi)
+allField <- allField[!is.na(allField)]
 
 if (Field=="CR"){
-  S<-gsub("\\).*",")",uniqueField)
+  S <- gsub("\\).*", ")", allField)
   S<-gsub(","," ",S)
   S<-gsub(";"," ",S)
   S<-reduceRefs(S)
-  uniqueField<-unique(trimES(S))
+  allField <- trimES(S)
   Fi<-lapply(Fi, function(l){
     l<-gsub("\\).*",")",l)
     l<-gsub(","," ",l)
@@ -109,11 +110,11 @@ if (Field=="CR"){
   })
 } else {
   # normalize reference names
-  S<-gsub("\\,",";",uniqueField)
+  S<-gsub("\\,", ";", allField)
   S<-sub("\\;",",",S)
   S<-sub("\\;",",",S)
   S<-gsub("\\;.*","",S)
-  uniqueField<-unique(trimws(S))
+  allField <- trimws(S)
   Fi<-lapply(Fi, function(l){
     l<-gsub("\\,",";",l)
     l<-sub("\\;",",",l)
@@ -123,7 +124,20 @@ if (Field=="CR"){
     l<-trimws(l)
     return(l)
   })
-  }
+}
+tabField <- sort(table(allField), decreasing = TRUE)
+uniqueField <- names(tabField)			     
+# select n items
+if (!is.null(n)) {
+    uniqueField <- uniqueField[1:n]
+} else if (isTRUE(short)){
+  uniqueField <- names(tabField[tabField>1])  # remove items with frequency<2
+}
+
+if (length(uniqueField)<1){
+  print("Matrix is empty!!")
+  return(NA)
+}
 
 if (type=="matrix" | !isTRUE(binary)){
   # Initialization of WA matrix
@@ -138,30 +152,28 @@ rownames(WF)<-rownames(M)
       #if (Field=="CR"){Fi[[i]]=reduceRefs(Fi[[i]])}
       if (isTRUE(binary)){
         ## binary counting
-      WF[i,uniqueField %in% Fi[[i]]]<-1}else{
-        ## full counting
-        tab=table(Fi[[i]])
-        name=names(tab)
-        WF[i,name[nchar(name)>0]]=tab[nchar(name)>0]
+	ind <- uniqueField %in% Fi[[i]]
+        if (sum(ind) > 0){
+          WF[i, ind] <- 1
         }
       }
-	}
+      else{
+        ## full counting
+        tab=table(Fi[[i]])
+        name <- names(tab)[names(tab) %in% uniqueField]
+        name <- name[nchar(name)>0]
+        if (length(name)>0){
+          WF[i,name] <- tab[name]
+        }
+        }
+    }
+  }
 
 if (type=="sparse" & !isTRUE(binary)){
   WF=Matrix(WF)
 }
 
   WF=WF[,!is.na(uniqueField)]
-  #WF=attrPY(M,WF)  # Median Year of each attribute
-  
-  # select n items
-  if (!is.null(n)){
-    n <- min(c(n, dim(WF)[2]))
-    deg <- colSums(WF)
-    nodes <- names(sort(deg, decreasing = TRUE)[1:n])
-    WF <- WF[,nodes]
-  }
-  
   
 return(WF)
 }

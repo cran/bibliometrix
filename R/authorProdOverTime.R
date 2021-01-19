@@ -11,7 +11,7 @@
 #' \code{graph}   \tab   \tab a ggplot object}
 #'
 #' @examples
-#' data(scientometrics)
+#' data(scientometrics, package = "bibliometrixData")
 #' res <- authorProdOverTime(scientometrics, k=10)
 #' print(res$dfAU)
 #' plot(res$graph)
@@ -25,6 +25,7 @@ authorProdOverTime <- function(M,k=10, graph=TRUE){
 
   M$TC=as.numeric(M$TC)
   M$PY=as.numeric(M$PY)
+  M <- M[!is.na(M$PY),] #remove rows with missing value in PY
   AU=names(tableTag(M,"AU"))
   k=min(k,length(AU))
   AU=AU[1:k]
@@ -56,17 +57,19 @@ authorProdOverTime <- function(M,k=10, graph=TRUE){
     scale_y_continuous(breaks = seq(min(df2$year),max(df2$year), by=2))+
     guides(size = guide_legend(order = 1, "N.Articles"), alpha = guide_legend(order = 2, "TC per Year"))+
     theme(legend.position = 'right'
+          #,aspect.ratio = 1
           ,text = element_text(color = "#444444")
           ,panel.background = element_rect(fill = 'gray97')
           ,panel.grid.minor = element_line(color = '#FFFFFF')
           ,panel.grid.major = element_line(color = '#FFFFFF')
           ,plot.title = element_text(size = 24)
           ,axis.title = element_text(size = 14, color = '#555555')
-          ,axis.title.y = element_text(vjust = 1, angle = 0, face="bold")
-          ,axis.title.x = element_text(hjust = .95, face="bold")
-          ,axis.text.x = element_text(face="bold")
+          ,axis.title.y = element_text(vjust = 1, angle = 90, face="bold")
+          ,axis.title.x = element_text(hjust = .95,face="bold")
+          ,axis.text.x = element_text(face="bold", angle = 90)
           ,axis.text.y = element_text(face="bold")
     )+
+    #coord_fixed(ratio = 2/1) +
     labs(title="Top-Authors' Production over the Time", 
          x="Author",
          y="Year")+

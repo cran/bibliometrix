@@ -23,7 +23,7 @@
 #' @examples
 #' # Example 1: First Authors for each cited reference
 #'
-#' data(scientometrics)
+#' data(scientometrics, package = "bibliometrixData")
 #' scientometrics <- metaTagExtraction(scientometrics, Field = "CR_AU", sep = ";")
 #' unlist(strsplit(scientometrics$CR_AU[1], ";"))
 #'
@@ -331,6 +331,9 @@ AU_UN<-function(M,sep){
   
   ## remove reprint information from C1
   C1=M$C1
+  if (!("RP" %in% names(M))){
+    M$RP <- NA
+  }
   # C1=unlist(lapply(C1,function(l){
   #   l=unlist(strsplit(l,";"))
   #   #l=l[regexpr("REPRINT AUTHOR",l)==-1]
@@ -387,9 +390,6 @@ AU_UN<-function(M,sep){
   
   
   ## identification of Corresponding author affiliation
-  if (!("RP" %in% names(M))){
-    M$RP <- NA
-  }
   RP <- M$RP
   RP[is.na(RP)]=M$C1[is.na(RP)]
   AFF=gsub("\\[.*?\\] ", "", RP)

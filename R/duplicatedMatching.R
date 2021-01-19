@@ -19,7 +19,7 @@
 #'
 #' @examples
 #'  
-#' data(scientometrics)
+#' data(scientometrics, package = "bibliometrixData")
 #' 
 #' M=rbind(scientometrics[1:20,],scientometrics[10:30,])
 #' 
@@ -41,7 +41,7 @@ duplicatedMatching <- function(M, Field="TI", exact=FALSE, tol=0.95){
     return(M)
   }
   if (isTRUE(exact)){
-    exacgt="true"
+    exact="true"
   }else{exact="false"}
   switch(exact,
          true={

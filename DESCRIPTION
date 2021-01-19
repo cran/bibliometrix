@@ -1,7 +1,7 @@
 Package: bibliometrix
 Type: Package
 Title: Comprehensive Science Mapping Analysis
-Version: 3.0.3
+Version: 3.0.4
 Authors@R: c(person("Massimo", "Aria", email = "aria@unina.it", role=c("cre","aut")),
              person("Corrado", "Cuccurullo", email = "cuccurullocorrado@gmail.com", role="aut"))
 Description: Tool for quantitative research in scientometrics and bibliometrics.
@@ -17,17 +17,17 @@ BugReports: https://github.com/massimoaria/bibliometrix/issues
 LazyData: FALSE
 Encoding: UTF-8
 Depends: R (>= 3.3.0)
-Imports: stats, dimensionsR, dplyr, DT, factoextra, FactoMineR, ggraph,
-        ggplot2, ggrepel, igraph, Matrix, networkD3, pubmedR,
-        RColorBrewer, rio, rscopus, shiny, shinycssloaders,
-        shinythemes, SnowballC, stringdist, stringr, tidyr
-Suggests: knitr, rmarkdown, testthat (>= 2.1.0)
-RoxygenNote: 7.1.0
+Imports: stats, bibliometrixData, dimensionsR, dplyr, DT, factoextra,
+        FactoMineR, ggraph, ggplot2, ggrepel, igraph, Matrix,
+        networkD3, pubmedR, RColorBrewer, rio, rscopus, shiny,
+        SnowballC, stringdist, stringr, tidyr
+Suggests: knitr, rmarkdown, testthat (>= 2.1.0), plotly,
+        shinycssloaders, shinythemes, visNetwork, wordcloud2
+RoxygenNote: 7.1.1
 NeedsCompilation: no
 Author: Massimo Aria [cre, aut],
   Corrado Cuccurullo [aut]
 Maintainer: Massimo Aria <aria@unina.it>
-VignetteBuilder: knitr,
-Packaged: 2020-09-28 10:49:58 UTC; massimoaria
+Packaged: 2021-01-19 09:39:32 UTC; massimoaria
 Repository: CRAN
-Date/Publication: 2020-09-28 11:50:05 UTC
+Date/Publication: 2021-01-19 15:30:03 UTC
