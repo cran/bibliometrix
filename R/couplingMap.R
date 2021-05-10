@@ -15,6 +15,10 @@
 #' @param analysis is the textual attribute used to select the unit of analysis. It can be \code{analysis = c("documents", "authors", "sources")}.
 #' @param field is the textual attribute used to measure the coupling strength. It can be \code{field = c("CR", "ID","DE", "TI", "AB")}.
 #' @param n is an integer. It indicates the number of units to include in the analysis.
+#' @param label.term is a character. It indicates which content metadata have to use for cluster labeling. It can be \code{label.term = c("ID","DE","TI","AB")}.
+#' If \code{label.term = NULL} cluster items will be use for labeling.
+#' @param ngrams is an integer between 1 and 4. It indicates the type of n-gram to extract from texts. 
+#' An n-gram is a contiguous sequence of n terms. The function can extract n-grams composed by 1, 2, 3 or 4 terms. Default value is \code{ngrams=1}.
 #' @param impact.measure is a character. It indicates the impact measure used to rank cluster elements (documents, authors or sources).
 #' It can be \code{impact.measure = c("local", "global")}.\\
 #' With \code{impact.measure = "local"}, \link{couplingMap} calculates elements impact using the Normalized Local Citation Score while 
@@ -48,7 +52,7 @@
 #'
 #' @export
 
-couplingMap <- function(M, analysis = "documents", field="CR", n=500, impact.measure="local", minfreq=5, stemming=FALSE, size=0.5, n.labels=1, repel=TRUE){
+couplingMap <- function(M, analysis = "documents", field="CR", n=500, label.term=NULL, ngrams=1, impact.measure="local", minfreq=5, stemming=FALSE, size=0.5, n.labels=1, repel=TRUE){
   
   
   if (!(analysis %in% c("documents", "authors", "sources"))) {
@@ -104,7 +108,7 @@ couplingMap <- function(M, analysis = "documents", field="CR", n=500, impact.mea
   df <- df_lab %>%
     mutate(centrality = mean(.data$pagerank_centrality),
            impact = mean(.data$MNLCS2,na.rm=TRUE),
-           impact = replace(.data$impact, is.na(.data$impact),NA)) %>%
+           impact = replace(.data$impact, is.na(.data$impact),0)) %>%
     top_n(.data$MNLCS, n=10) %>%
     summarize(freq = .data$freq[1],
               centrality = .data$centrality[1]*100,
@@ -122,12 +126,14 @@ couplingMap <- function(M, analysis = "documents", field="CR", n=500, impact.mea
            rimpact = rank(.data$impact)) %>%
     arrange(.data$group) %>% as.data.frame()
   
-  
   row.names(df) <- df$label
   
   meandens <- mean(df$rimpact)
   meancentr <- mean(df$rcentrality)
   df <- df[df$freq>=minfreq,]
+  
+  df_lab<- df_lab %>% 
+    dplyr::filter(.data$group %in% df$group)
   
   rangex <- max(c(meancentr-min(df$rcentrality),max(df$rcentrality)-meancentr))
   rangey <- max(c(meandens-min(df$rimpact),max(df$rimpact)-meandens))
@@ -135,9 +141,25 @@ couplingMap <- function(M, analysis = "documents", field="CR", n=500, impact.mea
   ylimits <- c(meandens-rangey-0.5,meandens+rangey+0.5)
   
   
+  df_lab <- df_lab[,c(1,7,15,8,4)]
+  names(df_lab)=c(analysis, "Cluster","ClusterFrequency", "ClusterColor","NormalizedLocalCitationScore")
+  df_lab$ClusterName <- df$label[df_lab$Cluster]
   #quadrant_names=rep(" ",4) ## empty tooltips for quadrant names
   
-  g=ggplot(df, aes(x=.data$rcentrality, y=.data$rimpact, text=(.data$words))) +
+  if (is.null(label.term)){
+    label.term="null"
+  } 
+  if (label.term %in% c("DE", "ID", "TI","AB")){
+    w <- labeling(M, df_lab, term=label.term, n=n, n.labels=n.labels, analysis = analysis, ngrams=ngrams)
+    df$label <- w
+  }
+  
+  data("logo",envir=environment())
+  logo <- grid::rasterGrob(logo,interpolate = TRUE)
+  x <- c(max(df$rcentrality)-0.02-diff(range(df$rcentrality))*0.125, max(df$rcentrality)-0.02)+0.5
+  y <- c(min(df$rimpact),min(df$rimpact)+diff(range(df$rimpact))*0.125)
+  
+  g <- ggplot(df, aes(x=.data$rcentrality, y=.data$rimpact, text=(.data$words))) +
     geom_point(group="NA",aes(size=log(as.numeric(.data$freq))),shape=20,col=adjustcolor(df$color,alpha.f=0.5))     # Use hollow circles
   if (size>0){
     if (isTRUE(repel)){
@@ -158,11 +180,10 @@ couplingMap <- function(M, analysis = "documents", field="CR", n=500, impact.mea
           axis.text.x=element_blank(),
           axis.ticks.x=element_blank(),
           axis.text.y=element_blank(),
-          axis.ticks.y=element_blank())
+          axis.ticks.y=element_blank()) + 
+    annotation_custom(logo, xmin = x[1], xmax = x[2], ymin = y[1], ymax = y[2]) 
   
-  df_lab <- df_lab[,c(1,7,15,8,4)]
-  names(df_lab)=c(analysis, "Cluster","ClusterFrequency", "ClusterColor","NormalizedLocalCitationScore")
-  df_lab$ClusterName <- df$label[df_lab$Cluster]
+
   
   row.names(df)=NULL
   df <- df %>% rename(items = .data$words)
@@ -172,7 +193,8 @@ couplingMap <- function(M, analysis = "documents", field="CR", n=500, impact.mea
 }
 
 coupling <- function(M,field, analysis){
-  if (field=="TI") field <- "TI_TM"
+
+  if (field=="TI"){field <- "TI_TM"}
   if (field=="AB") field <- "AB_TM"
   switch(analysis,
          documents = {
@@ -256,4 +278,43 @@ network <- function(M, analysis,field, stemming, n){
   }
   
   return(Net)
+}
+
+## cluster labeling
+labeling <- function(M, df_lab, term, n, n.labels, analysis, ngrams){
+  
+  if (term %in% c("TI", "AB")){
+    M <- termExtraction(M, Field = term,ngrams = ngrams, verbose=FALSE)
+    term <- paste(term,"_TM",sep="")
+  }
+  switch(analysis,
+         documents={
+           df <- left_join(df_lab,M, by=c("documents" = "SR" ))
+         },
+         authors={
+           WF <- cocMatrix(M, Field = term, short=TRUE)
+           WA <- cocMatrix(M,Field = "AU", n=n, short=TRUE)
+           AF <- (crossprod(WA,WF))
+           A <- apply(AF,1,function(x){
+             paste(rep(names(x)[x>0],x[x>0]), collapse=";")
+           })
+           A <- data.frame(AU=names(A),words=A)
+           names(A)[2]=term
+           df <- left_join(df_lab,A, by=c("authors" = "AU"))
+         },
+         sources={
+           df <- left_join(df_lab,M, by=c("sources" = "SO" ))
+         })
+  
+  clusters <- unique(df$Cluster)
+  w <- character(length(clusters))
+  
+  
+  for (i in 1:length(clusters)){
+    ind <- which(df$Cluster == clusters[i])
+    tab <- round((tableTag(df[ind,], term)[1:n.labels])/length(ind)*100,1)
+    w[i]=tolower(paste(names(tab)," ",as.numeric(tab),"%",sep="", collapse="\n"))
+  }
+  return(w)
+  
 }

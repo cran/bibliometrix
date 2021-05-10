@@ -17,6 +17,8 @@
 #'   \code{DE_TM}\tab   \tab Author's Keywords stemmed through the Porter's stemming algorithm\cr
 #'   \code{TI}\tab   \tab Terms extracted from titles\cr
 #'   \code{AB}\tab   \tab Terms extracted from abstracts}
+#' @param ngrams is an integer between 1 and 3. It indicates the type of n-gram to extract from texts. 
+#' An n-gram is a contiguous sequence of n terms. The function can extract n-grams composed by 1, 2, 3 or 4 terms. Default value is \code{ngrams=1}.
 #' @param method is a character object. It indicates the factorial method used to create the factorial map. Use \code{method="CA"} for Correspondence Analysis,
 #'  \code{method="MCA"} for Multiple Correspondence Analysis or \code{method="MDS"} for Metric Multidimensional Scaling. The default is \code{method="MCA"}
 #' @param minDegree is an integer. It indicates the minimum occurrences of terms to analize and plot. The default value is 2.
@@ -53,7 +55,7 @@
 #' @seealso \code{\link{biblioAnalysis}} to perform a bibliometric analysis.
 #' 
 #' @export
-conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quanti.supp=NULL, minDegree=2, clust="auto", k.max=5, stemming=FALSE, labelsize=10,documents=2, graph=TRUE){
+conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=NULL, quanti.supp=NULL, minDegree=2, clust="auto", k.max=5, stemming=FALSE, labelsize=10,documents=2, graph=TRUE){
   
   #cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
   cbPalette <- c(brewer.pal(9, 'Set1')[-6], brewer.pal(8, 'Set2')[-7], brewer.pal(12, 'Paired')[-11],brewer.pal(12, 'Set3')[-c(2,8,12)])
@@ -120,7 +122,7 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
           
          },
          TI={
-           M=termExtraction(M,Field="TI",remove.numbers=TRUE, stemming=stemming, language="english", remove.terms=NULL, keep.terms=NULL, verbose=FALSE)
+           M=termExtraction(M,Field="TI",remove.numbers=TRUE, stemming=stemming, language="english", remove.terms=NULL, keep.terms=NULL, verbose=FALSE, ngrams=ngrams)
            
            CW <- cocMatrix(M, Field = "TI_TM", type="matrix", sep=";",binary=binary)
            # Define minimum degree (number of occurrences of each Keyword)
@@ -131,7 +133,7 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
           
          },
          AB={
-           M=termExtraction(M,Field="AB",remove.numbers=TRUE, stemming=stemming, language="english", remove.terms=NULL, keep.terms=NULL, verbose=FALSE)
+           M=termExtraction(M,Field="AB",remove.numbers=TRUE, stemming=stemming, language="english", remove.terms=NULL, keep.terms=NULL, verbose=FALSE, ngrams=ngrams)
            
            CW <- cocMatrix(M, Field = "AB_TM", type="matrix", sep=";",binary=binary)
            # Define minimum degree (number of occurrences of each Keyword)
@@ -195,6 +197,9 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
   
   km.res$centers=centers[,c(2,3,1)]
   
+  data("logo",envir=environment())
+  logo <- grid::rasterGrob(logo,interpolate = TRUE)
+  
   b=fviz_cluster(km.res, stand=FALSE, data = df,labelsize=labelsize, repel = TRUE)+
     theme_minimal()+
     scale_color_manual(values = cbPalette[1:clust])+
@@ -238,10 +243,16 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
   }
   b=b + theme(legend.position="none")
   
+  ## logo coordinates
+  coord_b <- plotCoord(b)
+
+  b <- b + annotation_custom(logo, xmin = coord_b[1], xmax = coord_b[2], ymin = coord_b[3], ymax = coord_b[4]) 
+  ##
+  
   if (isTRUE(graph)){plot(b)}
   
   b_dend <- fviz_dend(km.res, rect = TRUE, k=clust, 
-                                       labelsize=labelsize, main="Topic Dendrogram",
+                                       cex=labelsize/20, main="Topic Dendrogram",
                                        k_colors = cbPalette[clust:1])+ 
     #scale_color_manual(values = cbPalette[(clust+1):1])+
     #scale_fill_manual(values = cbPalette[(clust+1):1])+
@@ -252,6 +263,12 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
           #size = 1, linetype = "solid"),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank())
+  
+  ## logo coordinates
+  coord <- plotCoord(b_dend, side="u")
+  
+  b_dend <- b_dend + annotation_custom(logo, xmin = coord[1], xmax = coord[2], ymin = coord[3], ymax = coord[4]) 
+  ##
   
   if (isTRUE(graph)){plot(b_dend)}
   
@@ -294,7 +311,7 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
     rangex=c(min(df_all[,1]),max(df_all[,1]))
     rangey=c(min(df_all[,2]),max(df_all[,2]))
 
-    b_doc=ggplot(aes(x=.data$dim1,y=.data$dim2,label=.data$nomi),data=A)+
+    b_doc <- ggplot(aes(x=.data$dim1,y=.data$dim2,label=.data$nomi),data=A)+
       geom_point(size = 2, color = A$color)+
       labs(title= "Factorial map of the documents with the highest contributes") +
       geom_label_repel(box.padding = unit(0.5, "lines"),size=(log(labelsize*3)), fontface = "bold", 
@@ -317,6 +334,12 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
         ylab(paste("Dim 2 (",round(res.mca$eigCorr$perc[2],2),"%)",sep=""))
     }else{b_doc=b_doc+xlab("Dim 1")+ylab("Dim 2")}
       
+    ## logo coordinates
+    xl <- c(rangex[2]-0.02-diff(rangex)*0.125, rangex[2]-0.02)
+    yl <- c(rangey[1],rangey[1]+diff(rangey)*0.125)+0.02
+    b_doc <- b_doc + annotation_custom(logo, xmin = xl[1], xmax = xl[2], ymin = yl[1], ymax = yl[2]) 
+    ##
+    
     if (isTRUE(graph)){(plot(b_doc))}
     
     ## Factorial map of the most cited documents
@@ -362,7 +385,12 @@ conceptualStructure<-function(M,field="ID", method="MCA", quali.supp=NULL, quant
            panel.grid.major = element_line(size = 0.3, linetype = 'dashed', colour = adjustcolor("gray90",alpha.f = 0.7)),
            panel.grid.minor = element_blank())
       
-    
+    ## logo coordinates
+    xl <- c(rangex[2]-0.02-diff(rangex)*0.125, rangex[2]-0.02)
+    yl <- c(rangey[1],rangey[1]+diff(rangey)*0.125)+0.02
+    b_doc_TC <- b_doc_TC + annotation_custom(logo, xmin = xl[1], xmax = xl[2], ymin = yl[1], ymax = yl[2]) 
+    ##
+
     if (isTRUE(graph)){plot(b_doc_TC)}
 
     semanticResults=list(net=CW,res=res.mca,km.res=km.res,graph_terms=b,graph_dendogram=b_dend,graph_documents_Contrib=b_doc,graph_documents_TC=b_doc_TC,docCoord=docCoord)
@@ -480,4 +508,44 @@ eigCorrection <- function(res) {
   cumPerc = cumsum(perc)
   res$eigCorr <- data.frame(eig=e, eigBenz=eigBenz, perc=perc, cumPerc=cumPerc)
   return(res)
+}
+
+
+plotCoord <- function(g, side="b"){
+  a <- ggplot_build(g)$data
+  
+  ymin <- unlist(lapply(a, function(l){
+    if ("y" %in% names(l)){
+      min(l["y"])  
+    }
+  })) %>% min(na.rm=TRUE)
+  
+  ymax <- unlist(lapply(a, function(l){
+    if ("y" %in% names(l)){
+      max(l["y"])  
+    }
+  })) %>% max(na.rm=TRUE)
+  
+  xmin <- unlist(lapply(a, function(l){
+    if ("x" %in% names(l)){
+      min(l["x"])  
+    }
+  })) %>% min(na.rm=TRUE)
+  
+  xmax <- unlist(lapply(a, function(l){
+    if ("x" %in% names(l)){
+      max(l["x"])  
+    }
+  })) %>% max(na.rm=TRUE)
+  
+  coord <- c(xmin,xmax,ymin,ymax)
+  
+  xl <- c(xmax-0.02-diff(c(xmin,xmax))*0.125, xmax-0.02)
+  if (side=="b"){
+    yl <- c(ymin,ymin+diff(c(ymin,ymax))*0.125)+0.02
+  }else{
+    yl <- c(ymax-0.02-diff(c(ymin,ymax))*0.125, ymax-0.02)
+  }
+  coord <- c(xl,yl)
+  
 }
