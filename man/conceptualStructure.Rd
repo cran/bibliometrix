@@ -17,7 +17,9 @@ conceptualStructure(
   stemming = FALSE,
   labelsize = 10,
   documents = 2,
-  graph = TRUE
+  graph = TRUE,
+  remove.terms = NULL,
+  synonyms = NULL
 )
 }
 \arguments{
@@ -59,6 +61,10 @@ An n-gram is a contiguous sequence of n terms. The function can extract n-grams 
 \item{documents}{is an integer. It indicates the number of documents per cluster to plot in the factorial map. The default value is 2. It is used only for CA and MCA.}
 
 \item{graph}{is logical. If TRUE the function plots the maps otherwise they are saved in the output object. Default value is TRUE}
+
+\item{remove.terms}{is a character vector. It contains a list of additional terms to delete from the documents before term extraction. The default is \code{remove.terms = NULL}.}
+
+\item{synonyms}{is a character vector. Each element contains a list of synonyms, separated by ";",  that will be merged into a single term (the first word contained in the vector element). The default is \code{synonyms = NULL}.}
 }
 \value{
 It is an object of the class \code{list} containing the following components:

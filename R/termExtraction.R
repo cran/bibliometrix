@@ -80,6 +80,8 @@ termExtraction <- function(M, Field="TI", ngrams = 1, stemming=FALSE, language="
   data("stop_words", envir=environment(), package = "tidytext")
   stop_words <- stop_words %>% as.data.frame()
   
+  if (ngrams == 2){remove.terms <- c(remove.terms,stopwords$bigrams)}
+  
   switch(language,
     english={stopwords=(stop_words$word)},
     italian={stopwords=stopwords$it},
@@ -129,24 +131,17 @@ termExtraction <- function(M, Field="TI", ngrams = 1, stemming=FALSE, language="
     }
   }
 
-  
-  # keep terms in the vector keep.terms
-  if (length(synonyms)>0 & class(synonyms)=="character"){
-    s <- strsplit(tolower(synonyms),";")
-    snew <- paste(" ",unlist(lapply(s,function(l) l[1]))," ",sep="")
-    sold <- (lapply(s,function(l) paste(" ",l[-1]," ",sep="")))
-    TERMS <- TERMS %>% mutate(text = paste(" ",.data$text," ", sep=""))
-    for (i in 1:length(s)){
-      TERMS <- TERMS %>%
-        mutate(
-          text = str_replace_all(.data$text, paste(sold[[i]], collapse="|",sep=""),snew[i]))
-    }
+  ## come back to the original multiword format
+  if (Field %in% c("ID","DE")){
+    TERMS <- TERMS %>% 
+      mutate(text = gsub("_|-", " ", .data$text))
   }
+  
   if (is.null(remove.terms)) remove.terms <- ""
   
   TERMS <- extractNgrams(text=TERMS, Var="text", nword=ngrams, 
                              stopwords=stopwords, custom_stopwords=tolower(remove.terms),
-                             stemming=stemming, language=language)
+                             stemming=stemming, language=language, synonyms = synonyms)
   
   TERMS <- TERMS %>%
     dplyr::filter(!(.data$ngram %in% paste(rep("NA",ngrams),sep="",collapse=" "))) %>% 
@@ -180,13 +175,13 @@ termExtraction <- function(M, Field="TI", ngrams = 1, stemming=FALSE, language="
   
 }
 
-extractNgrams <- function(text, Var, nword, stopwords, custom_stopwords, stemming, language){
+extractNgrams <- function(text, Var, nword, stopwords, custom_stopwords, stemming, language, synonyms){
   # text is data frame containing the corpus data text = M %>% select(.data$SR,.data$AB)
   # Var is a string indicating the column name. I.e. Var = "AB"
   # nword is a integer vector indicating the ngrams to extract. I.e. nword = c(2,3)
   
-  custom_stopwords <- c(stopwords, custom_stopwords, "elsevier", "springer", "wiley", "mdpi", "emerald")
-  custom_stopngrams <- c("rights reserved", "john wiley", "john wiley sons", "science bv", "mdpi basel", 
+  stopwords <- c(stopwords,"elsevier", "springer", "wiley", "mdpi", "emerald")
+  custom_stopngrams <- c(custom_stopwords,"rights reserved", "john wiley", "john wiley sons", "science bv", "mdpi basel", 
                          "mdpi licensee", "emerald publishing", "taylor francis", "paper proposes", 
                          "we proposes", "paper aims", "articles published", "study aims")
   ngram <- NULL
@@ -195,7 +190,7 @@ extractNgrams <- function(text, Var, nword, stopwords, custom_stopwords, stemmin
     drop_na(any_of(Var)) %>%
     unnest_tokens(ngram, !!Var, token = "ngrams", n = nword) %>%
     separate(.data$ngram, paste("word",1:nword,sep=""), sep = " ") %>%
-    dplyr::filter(if_all(starts_with("word"), ~ !.x %in% custom_stopwords)) 
+    dplyr::filter(if_all(starts_with("word"), ~ !.x %in% stopwords)) 
   
   if (isTRUE(stemming)){
     ngrams <- ngrams %>% 
@@ -207,5 +202,22 @@ extractNgrams <- function(text, Var, nword, stopwords, custom_stopwords, stemmin
       dplyr::filter(!.data$ngram %in% custom_stopngrams) %>%
       mutate(ngram = toupper(.data$ngram))
 
+    # Merge synonyms in the vector synonyms
+    if (length(synonyms)>0 & class(synonyms)=="character"){
+      s <- strsplit(toupper(synonyms),";")
+      snew <- trimws(unlist(lapply(s,function(l) l[1])))
+      #snew <- paste(" ",unlist(lapply(s,function(l) l[1]))," ",sep="")
+      sold <- (lapply(s,function(l) trimws(l[-1])))
+      #sold <- (lapply(s,function(l) paste(" ",l[-1]," ",sep="")))
+      #TERMS <- TERMS %>% mutate(text = paste(" ",.data$text," ", sep=""))
+      #TERMS$text <- trimws(TERMS$text)
+      for (i in 1:length(s)){
+        ngrams <- ngrams %>% 
+          mutate(
+            ngram = str_replace_all(.data$ngram, paste(sold[[i]], collapse="|",sep=""),snew[i])
+          )
+      }
+    }
+    
   return(ngrams)
 }

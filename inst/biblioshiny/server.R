@@ -33,6 +33,7 @@ server <- function(input, output, session) {
   values$Histfield="NA"
   values$histlog="working..."
   values$kk=0
+  #values$MRWremove.terms=NULL
   values$M=data.frame(PY=0)
   values$histsearch="NA"
   values$citShortlabel="NA"
@@ -740,10 +741,17 @@ server <- function(input, output, session) {
 
 # FILTERS MENU ----
 ## Filters uiOutput ----
-  output$textDim <- renderUI({
-    dimMatrix=paste("Documents ",dim(values$M)[1]," of ",dim(values$Morig)[1])
-    textInput("textDim", "Number of Documents", 
-              value=dimMatrix)
+  # output$textDim <- renderUI({
+  #   dimMatrix=paste("Documents ",dim(values$M)[1]," of ",dim(values$Morig)[1],"\nSources ",length(unique(values$M$SO)))
+  #   textInput("textDim", "Number of Documents", 
+  #             value=dimMatrix)
+  # })
+  # 
+  output$textDim <-  renderUI({
+    str1=paste("Documents  ",dim(values$M)[1]," of ",dim(values$Morig)[1])
+    str2=paste("Sources    ",length(unique(values$M$SO))," of ", length(unique(values$Morig$SO)))
+    str3=paste("Authors    ",length(unique(unlist(strsplit(values$M$AU,";"))))," of ", length(unique(unlist(strsplit(values$Morig$AU,";")))))
+    HTML(paste("<pre>", str1, str2, str3,"</pre>", sep = '<br/>'))
   })
   
   output$selectType <- renderUI({
@@ -752,6 +760,18 @@ server <- function(input, output, session) {
     selectInput("selectType", "Document Type", 
                 choices = artType,
                 selected = artType,
+                multiple =TRUE )
+  })
+  output$selectLA <- renderUI({
+    
+    if ("LA" %in% names(values$Morig)){
+    LA <- sort(unique(values$Morig$LA))} else {
+      values$Morig$LA <- "N.A."
+      LA <- "N.A."
+    }
+    selectInput("selectLA", "Language", 
+                choices = LA,
+                selected = LA,
                 multiple =TRUE )
   })
   
@@ -770,20 +790,28 @@ server <- function(input, output, session) {
     
   })
   
-  output$sliderTC <- renderUI({
-    
-    sliderInput("sliderTC", "Total Citation", min = min(values$Morig$TC, na.rm=T),
-                max = max(values$Morig$TC, na.rm=T), value = c(min(values$Morig$TC, na.rm=T),max(values$Morig$TC,na.rm=T)))
+  output$sliderTCpY <- renderUI({
+    Y <- as.numeric(substr(Sys.time(),1,4))
+    values$Morig <- values$Morig %>% 
+      mutate(Age = Y - .data$PY+1,
+             TCpY = round(.data$TC/Age,2)) %>% 
+      group_by(.data$PY) %>% 
+      mutate(NTC = .data$TC/mean(.data$TC, na.rm=T)) %>% 
+      as.data.frame()
+    sliderInput("sliderTCpY", "Average Citation per Year", min = floor(min(values$Morig$TCpY, na.rm=T)),
+                max = ceiling(max(values$Morig$TCpY,na.rm=T)), step=0.1,
+                value = c(floor(min(values$Morig$TCpY, na.rm=T)),ceiling(max(values$Morig$TCpY,na.rm=T))))
   })
 
-## Update filterd data ----
+## Update filtered data ----
   
   DTfiltered <- eventReactive(input$applyFilter,{
-    M=values$Morig
-    B=bradford(M)$table
-    M=subset(M, M$PY>=input$sliderPY[1] & M$PY<=input$sliderPY[2])
-    M=subset(M, M$TC>=input$sliderTC[1] & M$TC<=input$sliderTC[2])
-    M=subset(M, M$DT %in% input$selectType)
+    M <- values$Morig
+    B <- bradford(M)$table
+    M <- subset(M, M$PY>=input$sliderPY[1] & M$PY<=input$sliderPY[2])
+    M <- subset(M, M$TCpY>=input$sliderTCpY[1] & M$TCpY<=input$sliderTCpY[2])
+    M <- subset(M, M$DT %in% input$selectType)
+    M <- subset(M, M$LA %in% input$selectLA)
     switch(input$bradfordSources,
            "core"={
              SO=B$SO[B$Zone %in% "Zone 1"]
@@ -1998,7 +2026,7 @@ server <- function(input, output, session) {
       laby="N. of Citations per Year"
     }
     
-    g <- freqPlot(xx,x=2,y=1, textLaby = "Countries", textLabx = laby, title = "Most Cited Contries")
+    g <- freqPlot(xx,x=2,y=1, textLaby = "Countries", textLabx = laby, title = "Most Cited Countries")
 
     values$MCCplot <- g
     return(g)
@@ -2371,8 +2399,22 @@ server <- function(input, output, session) {
     }else{
       ngrams <- 1
     }
-
-    WR=wordlist(values$M,Field=input$MostRelWords,n=Inf,measure="identity", ngrams=ngrams)$v
+    
+    ### load file with terms to remove
+    if (input$MostRelWordsStopFile=="Y"){
+      remove.terms <- trimws(readStopwordsFile(file=input$MostRelWordsStop, sep=input$MostRelWordsSep))
+    }else{remove.terms <- NULL}
+    values$MRWremove.terms <- remove.terms
+    ### end of block
+    
+    ### load file with synonyms
+    if (input$MRWSynFile=="Y"){
+      synonyms <- trimws(readSynWordsFile(file=input$MRWSyn, sep=input$MRWSynSep))
+    }else{synonyms <- NULL}
+    values$MRWsyn.terms <- synonyms
+    ### end of block
+    
+    WR=wordlist(values$M,Field=input$MostRelWords,n=Inf,measure="identity", ngrams=ngrams, remove.terms = remove.terms, synonyms = synonyms)$v
     
     TAB=data.frame(names(WR),as.numeric(WR),stringsAsFactors = FALSE)
     names(TAB)=c("Words", "Occurrences")
@@ -2395,6 +2437,24 @@ server <- function(input, output, session) {
     values$MRWplot <- g
     return(g)
     
+  })
+  
+  output$MostRelWordsStopPreview <-  renderUI({
+    
+    if (!is.null(values$MRWremove.terms) | exists("values$MRWremove.terms")){
+      strPreview(values$MRWremove.terms, input$MostRelWordsSep)  
+    }else{
+      strPreview(" ", input$MostRelWordsSep)
+    }
+  })
+  
+  output$MRWSynPreview <-  renderUI({
+    
+    if (!is.null(values$MRWsyn.terms) | exists("values$MRWsyn.terms")){
+      strSynPreview(values$MRWsyn.terms)  
+    }else{
+      strSynPreview(" ; ")
+    }
   })
   
   output$MRWplot.save <- downloadHandler(
@@ -2450,7 +2510,22 @@ server <- function(input, output, session) {
       ngrams <- 1
     }
     
-    resW=wordlist(M=values$M, Field=input$summaryTerms, n=input$n_words, measure=input$measure, ngrams=ngrams)
+    ### load file with terms to remove
+    if (input$WCStopFile=="Y"){
+      remove.terms <- trimws(readStopwordsFile(file=input$WCStop, sep=input$WCSep))
+    }else{remove.terms <- NULL}
+    values$WCremove.terms <- remove.terms
+    ### end of block
+    
+    ### load file with synonyms
+    if (input$WCSynFile=="Y"){
+      synonyms <- trimws(readSynWordsFile(file=input$WCSyn, sep=input$WCSynSep))
+    }else{synonyms <- NULL}
+    values$WCsyn.terms <- synonyms
+    ### end of block
+    print(values$WCsyn.terms )
+    
+    resW=wordlist(M=values$M, Field=input$summaryTerms, n=input$n_words, measure=input$measure, ngrams=ngrams, remove.terms = remove.terms, synonyms = values$WCsyn.terms)
     
     W=resW$W
     values$Words=resW$Words
@@ -2466,6 +2541,7 @@ server <- function(input, output, session) {
     
     WordCloud()
   })
+  
 ## TreeMap ----  
   TreeMap <- eventReactive(input$applyTreeMap,{
     if (input$treeTerms %in% c("TI","AB")){
@@ -2473,8 +2549,20 @@ server <- function(input, output, session) {
     }else{
       ngrams <- 1
     }
+    ### load file with terms to remove
+    if (input$TreeMapStopFile=="Y"){
+      remove.terms <- trimws(readStopwordsFile(file=input$TreeMapStop, sep=input$TreeMapSep))
+    }else{remove.terms <- NULL}
+    values$TreeMapremove.terms <- remove.terms
+    ### end of block
+    ### load file with synonyms
+    if (input$TreeMapSynFile=="Y"){
+      synonyms <- trimws(readSynWordsFile(file=input$TreeMapSyn, sep=input$TreeMapSynSep))
+    }else{synonyms <- NULL}
+    values$TreeMapsyn.terms <- synonyms
+    ### end of block
     
-    resW=wordlist(M=values$M, Field=input$treeTerms, n=input$treen_words, measure="identity", ngrams=ngrams)
+    resW=wordlist(M=values$M, Field=input$treeTerms, n=input$treen_words, measure="identity", ngrams=ngrams, remove.terms=remove.terms, synonyms = synonyms)
     
     W=resW$W
     values$TreeMap <- plot_ly(
@@ -2494,6 +2582,25 @@ server <- function(input, output, session) {
     TreeMap()
     values$TreeMap
   })
+  
+  output$TreeMapStopPreview <-  renderUI({
+    
+    if (!is.null(values$TreeMapremove.terms) | exists("values$TreeMapremove.terms")){
+      strPreview(values$TreeMapremove.terms, input$TreeMapSep)  
+    }else{
+      strPreview(" ", input$TreeMapSep)
+    }
+  })
+  
+  output$TreeMapSynPreview <-  renderUI({
+    
+    if (!is.null(values$TreeMapsyn.terms) | exists("values$TreeMapsyn.terms")){
+      strSynPreview(values$TreeMapsyn.terms)  
+    }else{
+      strSynPreview(" ")
+    }
+  })
+  
   
   output$wordTable <- DT::renderDT({
     WordCloud()
@@ -2557,25 +2664,36 @@ server <- function(input, output, session) {
       laby="Annual occurrences"}
     #if (input$se=="Yes"){se=TRUE}else{se=FALSE}
     
-    
+    ### load file with terms to remove
+    if (input$WDStopFile=="Y"){
+      remove.terms <- trimws(readStopwordsFile(file=input$WDStop, sep=input$WDSep))
+    }else{remove.terms <- NULL}
+    values$WDremove.terms <- remove.terms
+    ### end of block
+    ### load file with synonyms
+    if (input$WDSynFile=="Y"){
+      synonyms <- trimws(readSynWordsFile(file=input$WDSyn, sep=input$WDSynSep))
+    }else{synonyms <- NULL}
+    values$WDsyn.terms <- synonyms
+    ### end of block
     
     switch(input$growthTerms,
            ID={
-             KW=KeywordGrowth(values$M, Tag = "ID", sep = ";", top = input$topkw[2], cdf = cdf)
+             KW=KeywordGrowth(values$M, Tag = "ID", sep = ";", top = input$topkw[2], cdf = cdf, remove.terms=remove.terms, synonyms = synonyms)
              
            },
            DE={
-             KW=KeywordGrowth(values$M, Tag = "DE", sep = ";", top = input$topkw[2], cdf = cdf)
+             KW=KeywordGrowth(values$M, Tag = "DE", sep = ";", top = input$topkw[2], cdf = cdf, remove.terms=remove.terms, synonyms = synonyms)
            },
            TI={
              #if (!("TI_TM" %in% names(values$M))){
-               values$M=termExtraction(values$M,Field = "TI", verbose=FALSE, ngrams=as.numeric(input$growthTermsngrams))
+               values$M=termExtraction(values$M,Field = "TI", verbose=FALSE, ngrams=as.numeric(input$growthTermsngrams), remove.terms=remove.terms, synonyms = synonyms)
              #}
              KW=KeywordGrowth(values$M, Tag = "TI_TM", sep = ";", top = input$topkw[2], cdf = cdf)
            },
            AB={
              #if (!("AB_TM" %in% names(values$M))){
-               values$M=termExtraction(values$M,Field = "AB", verbose=FALSE, ngrams=as.numeric(input$growthTermsngrams))
+               values$M=termExtraction(values$M,Field = "AB", verbose=FALSE, ngrams=as.numeric(input$growthTermsngrams), remove.terms=remove.terms, synonyms = synonyms)
              #}
              KW=KeywordGrowth(values$M, Tag = "AB_TM", sep = ";", top = input$topkw[2], cdf = cdf)
            }
@@ -2627,6 +2745,24 @@ server <- function(input, output, session) {
     
     values$WDplot <- g
     return(g)
+  })
+  
+  output$WDStopPreview <-  renderUI({
+    
+    if (!is.null(values$WDremove.terms) | exists("values$WDremove.terms")){
+      strPreview(values$WDremove.terms)  
+    }else{
+      strPreview(" ")
+    }
+  })
+  
+  output$WDSynPreview <-  renderUI({
+    
+    if (!is.null(values$WDsyn.terms) | exists("values$WDsyn.terms")){
+      strSynPreview(values$WDsyn.terms)  
+    }else{
+      strSynPreview(" ")
+    }
   })
   
   output$WDplot.save <- downloadHandler(
@@ -2707,14 +2843,46 @@ server <- function(input, output, session) {
   
   TrendTopics <- eventReactive(input$applyTrendTopics,{
     
+    ### load file with terms to remove
+    if (input$TTStopFile=="Y"){
+      remove.terms <- trimws(readStopwordsFile(file=input$TTStop, sep=input$TTSep))
+    }else{remove.terms <- NULL}
+    values$TTremove.terms <- remove.terms
+    ### end of block
+    ### load file with synonyms
+    if (input$TTSynFile=="Y"){
+      synonyms <- trimws(readSynWordsFile(file=input$TTSyn, sep=input$TTSynSep))
+    }else{synonyms <- NULL}
+    values$TTsyn.terms <- synonyms
+    ### end of block
+    
     if (input$trendTerms %in% c("TI","AB")){
       values$M=termExtraction(values$M, Field = input$trendTerms, stemming = input$trendStemming, verbose = FALSE, ngrams=as.numeric(input$trendTermsngrams))
       field=paste(input$trendTerms,"_TM",sep="")
     } else {field=input$trendTerms}
     values$trendTopics <- fieldByYear(values$M, field = field, timespan = input$trendSliderPY, min.freq = input$trendMinFreq,
-                                      n.items = input$trendNItems, dynamic.plot=TRUE, graph = FALSE)
+                                      n.items = input$trendNItems, remove.terms = remove.terms, synonyms = synonyms, 
+                                      dynamic.plot=TRUE, graph = FALSE)
     return(values$trendTopics$graph)
     
+  })
+  
+  output$TTStopPreview <-  renderUI({
+    
+    if (!is.null(values$TTremove.terms) | exists("values$TTremove.terms")){
+      strPreview(values$TTremove.terms)  
+    }else{
+      strPreview(" ")
+    }
+  })
+  
+  output$TTSynPreview <-  renderUI({
+    
+    if (!is.null(values$TTsyn.terms) | exists("values$TTsyn.terms")){
+      strSynPreview(values$TTsyn.terms)  
+    }else{
+      strSynPreview(" ")
+    }
   })
   
   output$TTplot.save <- downloadHandler(
@@ -2822,15 +2990,15 @@ server <- function(input, output, session) {
                                  buttons = list('pageLength',
                                                 list(extend = 'copy'),
                                                 list(extend = 'csv',
-                                                     filename = 'Thematic_Map',
+                                                     filename = 'CouplingMap',
                                                      title = " ",
                                                      header = TRUE),
                                                 list(extend = 'excel',
-                                                     filename = 'Thematic_Map',
+                                                     filename = 'CouplingMap',
                                                      title = " ",
                                                      header = TRUE),
                                                 list(extend = 'pdf',
-                                                     filename = 'Thematic_Map',
+                                                     filename = 'CouplingMap',
                                                      title = " ",
                                                      header = TRUE),
                                                 list(extend = 'print')),
@@ -2850,15 +3018,15 @@ server <- function(input, output, session) {
                                  buttons = list('pageLength',
                                                 list(extend = 'copy'),
                                                 list(extend = 'csv',
-                                                     filename = 'Thematic_Map',
+                                                     filename = 'CouplingMap_Clusters',
                                                      title = " ",
                                                      header = TRUE),
                                                 list(extend = 'excel',
-                                                     filename = 'Thematic_Map',
+                                                     filename = 'CouplingMap_Clusters',
                                                      title = " ",
                                                      header = TRUE),
                                                 list(extend = 'pdf',
-                                                     filename = 'Thematic_Map',
+                                                     filename = 'CouplingMap_Clusters',
                                                      title = " ",
                                                      header = TRUE),
                                                 list(extend = 'print')),
@@ -2882,12 +3050,31 @@ server <- function(input, output, session) {
     
     
   })
+  
   output$cocPlot <- renderVisNetwork({  
     
     COCnetwork()
     
     values$network$VIS
     
+  })
+  
+  output$COCStopPreview <-  renderUI({
+    
+    if (!is.null(values$COCremove.terms) | exists("values$COCremove.terms")){
+      strPreview(values$COCremove.terms)  
+    }else{
+      strPreview(" ")
+    }
+  })
+  
+  output$COCSynPreview <-  renderUI({
+    
+    if (!is.null(values$COCsyn.terms) | exists("values$COCsyn.terms")){
+      strSynPreview(values$COCsyn.terms)  
+    }else{
+      strSynPreview(" ")
+    }
   })
   
   # output$cocPlotComm <- renderVisNetwork({  
@@ -2957,6 +3144,24 @@ server <- function(input, output, session) {
   
   CSfactorial <- eventReactive(input$applyCA,{
     values <- CAmap(input,values)
+  })
+  
+  output$CSStopPreview <-  renderUI({
+    
+    if (!is.null(values$CSremove.terms) | exists("values$CSremove.terms")){
+      strPreview(values$CSremove.terms)  
+    }else{
+      strPreview(" ")
+    }
+  })
+  
+  output$FASynPreview <-  renderUI({
+    
+    if (!is.null(values$FAsyn.terms) | exists("values$FAsyn.terms")){
+      strSynPreview(values$FAsyn.terms)  
+    }else{
+      strSynPreview(" ")
+    }
   })
   
   output$FA1plot.save <- downloadHandler(
@@ -3134,10 +3339,23 @@ server <- function(input, output, session) {
       ngrams <- 1
     }
     
+    ### load file with terms to remove
+    if (input$TMStopFile=="Y"){
+      remove.terms <- trimws(readStopwordsFile(file=input$TMStop, sep=input$TMSep))
+    }else{remove.terms <- NULL}
+    values$TMremove.terms <- remove.terms
+    ### end of block
+    ### load file with synonyms
+    if (input$TMapSynFile=="Y"){
+      synonyms <- trimws(readSynWordsFile(file=input$TMapSyn, sep=input$TMapSynSep))
+    }else{synonyms <- NULL}
+    values$TMapsyn.terms <- synonyms
+    ### end of block
+    
     values$TM <- thematicMap(values$M, field=input$TMfield, 
                              n=input$TMn, minfreq=input$TMfreq, ngrams=ngrams,
                              stemming=input$TMstemming, size=input$sizeTM, 
-                             n.labels=input$TMn.labels, repel=FALSE)
+                             n.labels=input$TMn.labels, repel=FALSE, remove.terms=remove.terms, synonyms=synonyms)
     
     validate(
       need(values$TM$nclust > 0, "\n\nNo topics in one or more periods. Please select a different set of parameters.")
@@ -3158,6 +3376,24 @@ server <- function(input, output, session) {
     
     values$networkTM$VIS
     
+  })
+  
+  output$TMStopPreview <-  renderUI({
+    
+    if (!is.null(values$TMremove.terms) | exists("values$TMremove.terms")){
+      strPreview(values$TMremove.terms)  
+    }else{
+      strPreview(" ")
+    }
+  })
+  
+  output$TMapSynPreview <-  renderUI({
+
+    if (!is.null(values$TMapsyn.terms) | exists("values$TMapsyn.terms")){
+      strSynPreview(values$TMapsyn.terms)
+    }else{
+      strSynPreview(" ")
+    }
   })
   
   output$TMplot.save <- downloadHandler(
@@ -3251,13 +3487,27 @@ server <- function(input, output, session) {
       ngrams <- 1
     }
     
+    ### load file with terms to remove
+    if (input$TEStopFile=="Y"){
+      remove.terms <- trimws(readStopwordsFile(file=input$TEStop, sep=input$TESep))
+    }else{remove.terms <- NULL}
+    values$TEremove.terms <- remove.terms
+    ### end of block
+    ### load file with synonyms
+    if (input$TESynFile=="Y"){
+      synonyms <- trimws(readSynWordsFile(file=input$TESyn, sep=input$TESynSep))
+    }else{synonyms <- NULL}
+    values$TEsyn.terms <- synonyms
+    ### end of block
+    
     values$yearSlices <- as.numeric()
     for (i in 1:as.integer(input$numSlices)){
       if (length(input[[paste0("Slice", i)]])>0){values$yearSlices=c(values$yearSlices,input[[paste0("Slice", i)]])}
     }
     
     if (length(values$yearSlices)>0){
-      values$nexus <- thematicEvolution(values$M, field=input$TEfield, values$yearSlices, n = input$nTE, minFreq = input$fTE, size = input$sizeTE, n.labels=input$TEn.labels, repel=FALSE, ngrams=ngrams)
+      values$nexus <- thematicEvolution(values$M, field=input$TEfield, values$yearSlices, n = input$nTE, minFreq = input$fTE, size = input$sizeTE, 
+                                        n.labels=input$TEn.labels, repel=FALSE, ngrams=ngrams, remove.terms = remove.terms, synonyms = synonyms)
       
       validate(
         need(values$nexus$check != FALSE, "\n\nNo topics in one or more periods. Please select a different set of parameters.")
@@ -3271,6 +3521,24 @@ server <- function(input, output, session) {
     
     TEMAP()
     
+  })
+  
+  output$TEStopPreview <-  renderUI({
+    
+    if (!is.null(values$TEremove.terms) | exists("values$TEremove.terms")){
+      strPreview(values$TEremove.terms)  
+    }else{
+      strPreview(" ")
+    }
+  })
+  
+  output$TESynPreview <-  renderUI({
+    
+    if (!is.null(values$TEsyn.terms) | exists("values$TEsyn.terms")){
+      strSynPreview(values$TEsyn.terms)  
+    }else{
+      strSynPreview(" ")
+    }
   })
   
   output$TETable <- DT::renderDT({
@@ -4009,6 +4277,24 @@ server <- function(input, output, session) {
     ext
   }
   
+  # string preview (stopwords)
+  strPreview <- function(string, sep=","){
+    str1 <- unlist(strsplit(string, sep))
+    str1 <- str1[1:min(c(length(str1),5))]
+    str1 <- paste(str1, collapse=sep)
+    HTML(paste("<pre>", "File Preview: ", str1,"</pre>", sep = '<br/>'))
+  }
+  
+  # string preview (synonyms)
+  strSynPreview <- function(string){
+    string <- string[1]
+    str1 <- unlist(strsplit(string, ";"))
+    str1 <- str1[1:min(c(length(str1),5))]
+    str1 <- paste(paste(str1[1], " <- ",collapse=""),paste(str1[-1], collapse=";"), collapse="")
+    HTML(paste("<pre>", "File Preview: ", str1,"</pre>", sep = '<br/>'))
+  }
+  
+  # from ggplot to plotly
   plot.ly <- function(g, flip=FALSE, side="r", aspectratio=1, size=0.15,data.type=2, height=0){
     
     a <- ggplot_build(g)$data
@@ -4284,16 +4570,17 @@ server <- function(input, output, session) {
     return(res)
   }
   
-  wordlist <- function(M, Field, n, measure, ngrams){
+  wordlist <- function(M, Field, n, measure, ngrams, remove.terms=NULL, synonyms=NULL){
     switch(Field,
-           ID={v=tableTag(values$M,"ID")},
-           DE={v=tableTag(values$M,"DE")},
+           ID={v=tableTag(values$M,"ID", remove.terms  = remove.terms, synonyms = synonyms)},
+           DE={v=tableTag(values$M,"DE", remove.terms = remove.terms, synonyms = synonyms)},
            TI={
              if (!("TI_TM" %in% names(M))){
-               v=tableTag(M,"TI", ngrams=ngrams)
+               v=tableTag(M,"TI", ngrams=ngrams, remove.terms=remove.terms, synonyms = synonyms)
+               
              }},
            AB={if (!("AB_TM" %in% names(M))){
-             v=tableTag(M,"AB", ngrams=ngrams)
+             v=tableTag(M,"AB", ngrams=ngrams, remove.terms = remove.terms, synonyms = synonyms)
            }}
     )
     names(v)=tolower(names(v))
@@ -4310,6 +4597,23 @@ server <- function(input, output, session) {
     
     results=list(v=v,W=W, Words=Words)
     return(results)
+  }
+  
+  readStopwordsFile <- function(file, sep=","){
+    if (!is.null(file)){
+    req(file$datapath)
+    remove.terms <- unlist(strsplit(readr::read_lines(file$datapath), sep))
+    }else{remove.terms <- NULL}
+    return(remove.terms)
+  }
+  
+  readSynWordsFile <- function(file, sep=","){
+    if (!is.null(file)){
+      req(file$datapath)
+      syn.terms <- readr::read_lines(file$datapath)
+      if (sep!=";") syn.terms <- gsub(sep,";",syn.terms)
+    }else{syn.terms <- NULL}
+    return(syn.terms)
   }
   
   mapworld <- function(M){
@@ -4373,13 +4677,27 @@ server <- function(input, output, session) {
         ngrams <- 1
       }
       
+      ### load file with terms to remove
+      if (input$CSStopFile=="Y"){
+        remove.terms <- trimws(readStopwordsFile(file=input$CSStop, sep=input$CSSep))
+      }else{remove.terms <- NULL}
+      values$CSremove.terms <- remove.terms
+      ### end of block
+      ### load file with synonyms
+      if (input$FASynFile=="Y"){
+        synonyms <- trimws(readSynWordsFile(file=input$FASyn, sep=input$FASynSep))
+      }else{synonyms <- NULL}
+      values$FAsyn.terms <- synonyms
+      ### end of block
+      
       tab=tableTag(values$M,input$CSfield, ngrams=ngrams)
       if (length(tab>=2)){
         
         minDegree=as.numeric(tab[input$CSn])
         
         values$CS <- conceptualStructure(values$M, method=input$method , field=input$CSfield, minDegree=minDegree, clust=input$nClustersCS, 
-                                         k.max = 8, stemming=F, labelsize=input$CSlabelsize,documents=input$CSdoc,graph=FALSE, ngrams=ngrams)
+                                         k.max = 8, stemming=F, labelsize=input$CSlabelsize,documents=input$CSdoc,graph=FALSE, ngrams=ngrams, 
+                                         remove.terms=remove.terms, synonyms = synonyms)
         
         
       }else{emptyPlot("Selected field is not included in your data collection")
@@ -4434,6 +4752,20 @@ server <- function(input, output, session) {
     
     n = input$Nodes
     label.n = input$Labels
+    
+    ### load file with terms to remove
+    if (input$COCStopFile=="Y"){
+      remove.terms <- trimws(readStopwordsFile(file=input$COCStop, sep=input$COCSep))
+    }else{remove.terms <- NULL}
+    values$COCremove.terms <- remove.terms
+    ### end of block
+    ### load file with synonyms
+    if (input$COCSynFile=="Y"){
+      synonyms <- trimws(readSynWordsFile(file=input$COCSyn, sep=input$COCSynSep))
+    }else{synonyms <- NULL}
+    values$COCsyn.terms <- synonyms
+    ### end of block
+    
     if ((input$field %in% names(values$M))){
       
       if ((dim(values$NetWords)[1])==1 | !(input$field==values$field) | !(input$cocngrams==values$cocngrams) | ((dim(values$NetWords)[1])!=input$Nodes) ){
@@ -4443,23 +4775,23 @@ server <- function(input, output, session) {
         
         switch(input$field,
                ID={
-                 values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "keywords", n = n, sep = ";")
+                 values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "keywords", n = n, sep = ";", remove.terms=remove.terms, synonyms = synonyms)
                  values$Title= "Keywords Plus Network"
                },
                DE={
-                 values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "author_keywords", n = n, sep = ";")
+                 values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "author_keywords", n = n, sep = ";", remove.terms=remove.terms, synonyms = synonyms)
                  values$Title= "Authors' Keywords network"
                },
                TI={
                  #if(!("TI_TM" %in% names(values$M))){
-                   values$M=termExtraction(values$M,Field="TI",verbose=FALSE, ngrams=as.numeric(input$cocngrams))
+                   values$M=termExtraction(values$M,Field="TI",verbose=FALSE, ngrams=as.numeric(input$cocngrams), remove.terms=remove.terms, synonyms = synonyms)
                    #}
                  values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "titles", n = n, sep = ";")
                  values$Title= "Title Words network"
                },
                AB={
                  #if(!("AB_TM" %in% names(values$M))){
-                   values$M=termExtraction(values$M,Field="AB",verbose=FALSE, ngrams=as.numeric(input$cocngrams))
+                   values$M=termExtraction(values$M,Field="AB",verbose=FALSE, ngrams=as.numeric(input$cocngrams), remove.terms=remove.terms, synonyms = synonyms)
                  #}
                  values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "abstracts", n = n, sep = ";")
                  values$Title= "Abstract Words network"

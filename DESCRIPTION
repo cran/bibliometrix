@@ -1,7 +1,7 @@
 Package: bibliometrix
 Type: Package
 Title: Comprehensive Science Mapping Analysis
-Version: 3.1.4
+Version: 3.2
 Authors@R: c(person("Massimo", "Aria", email = "aria@unina.it", role=c("cre","aut")),
              person("Corrado", "Cuccurullo", email = "cuccurullocorrado@gmail.com", role="aut"))
 Description: Tool for quantitative research in scientometrics and bibliometrics.
@@ -29,6 +29,6 @@ NeedsCompilation: no
 Author: Massimo Aria [cre, aut],
   Corrado Cuccurullo [aut]
 Maintainer: Massimo Aria <aria@unina.it>
-Packaged: 2021-07-05 12:27:49 UTC; massimoaria
+Packaged: 2022-02-09 16:23:49 UTC; massimoaria
 Repository: CRAN
-Date/Publication: 2021-07-05 14:40:05 UTC
+Date/Publication: 2022-02-09 17:10:02 UTC

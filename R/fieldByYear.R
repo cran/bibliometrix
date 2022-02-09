@@ -8,6 +8,8 @@
 #' @param min.freq is an integer. It indicates the min frequency of the items to include in the analysis
 #' @param n.items is an integer. I indicates the maximum number of items per year to include in the plot.
 #' @param labelsize is deprecated argument. It will be removed in the next update.
+#' @param remove.terms is a character vector. It contains a list of additional terms to delete from the documents before term extraction. The default is \code{remove.terms = NULL}.
+#' @param synonyms is a character vector. Each element contains a list of synonyms, separated by ";",  that will be merged into a single term (the first word contained in the vector element). The default is \code{synonyms = NULL}.
 #' @param dynamic.plot is a logical. If TRUE plot aesthetics are optimized for plotly package.
 #' @param graph is logical. If TRUE the function plots Filed Tag distribution by Year graph. Default is \code{graph = TRUE}.
 #' @return The function \code{fieldByYear} returns a list containing threeobjects:
@@ -35,10 +37,12 @@ fieldByYear <- function(M,
                         min.freq = 2,
                         n.items = 5,
                         labelsize = NULL,
+                        remove.terms = NULL,
+                        synonyms = NULL,
                         dynamic.plot = FALSE,
                         graph = TRUE) {
   
-  A <- cocMatrix(M, Field = field, binary = FALSE)
+  A <- cocMatrix(M, Field = field, binary = FALSE, remove.terms = NULL, synonyms = synonyms)
   n <- colSums(as.array(A))
   
   #A=tdIdf(A)
@@ -52,7 +56,7 @@ fieldByYear <- function(M,
     rename("year_q1"='25%', "year_med"='50%', "year_q3"='75%') %>%  
     mutate(item=rownames(t(trend_med)), freq=n) %>% 
     relocate(c(.data$item,.data$freq), .data$year_q1)
-  
+
   # if timespan is null, timespan is set to the whole period
   if (is.null(timespan) | length(timespan)!=2){
     timespan <- as.numeric(range(trend_med$year_med, na.rm = TRUE))

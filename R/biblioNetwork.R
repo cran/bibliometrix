@@ -43,6 +43,8 @@
 #' @param sep is the field separator character. This character separates strings in each column of the data frame. The default is \code{sep = ";"}.
 #' @param short is a logical. If TRUE all items with frequency<2 are deleted to reduce the matrix size.
 #' @param shortlabel is logical. IF TRUE, reference labels are stored in a short format. Default is \code{shortlabel=TRUE}.
+#' @param remove.terms is a character vector. It contains a list of additional terms to delete from the documents before term extraction. The default is \code{remove.terms = NULL}.
+#' @param synonyms is a character vector. Each element contains a list of synonyms, separated by ";",  that will be merged into a single term (the first word contained in the vector element). The default is \code{synonyms = NULL}.
 #' @return It is a squared network matrix. It is an object of class \code{dgMatrix} of the package \code{\link{Matrix}}.
 #' @examples
 #' # EXAMPLE 1: Authors collaboration network
@@ -78,7 +80,9 @@ biblioNetwork <-
            n = NULL,
            sep = ";",
            short = FALSE,
-           shortlabel = TRUE) {
+           shortlabel = TRUE,
+           remove.terms = NULL,
+           synonyms = NULL) {
     crossprod <- Matrix::crossprod
     NetMatrix <-  NA
     
@@ -117,16 +121,16 @@ biblioNetwork <-
           WA <- cocMatrix(M, Field = "AU", type = "sparse", n, sep,short=short)
         },
         keywords = {
-          WA <- cocMatrix(M, Field = "ID", type = "sparse", n, sep,short=short)
+          WA <- cocMatrix(M, Field = "ID", type = "sparse", n, sep,short=short, remove.terms=remove.terms, synonyms = synonyms)
         },
         author_keywords = {
-          WA <- cocMatrix(M, Field = "DE", type = "sparse", n, sep,short=short)
+          WA <- cocMatrix(M, Field = "DE", type = "sparse", n, sep,short=short, remove.terms=remove.terms, synonyms = synonyms)
         },
         titles = {
-          WA <- cocMatrix(M, Field = "TI_TM", type = "sparse", n, sep,short=short)
+          WA <- cocMatrix(M, Field = "TI_TM", type = "sparse", n, sep,short=short, remove.terms=remove.terms, synonyms = synonyms)
         },
         abstracts = {
-          WA <- cocMatrix(M, Field = "AB_TM", type = "sparse", n, sep,short=short)
+          WA <- cocMatrix(M, Field = "AB_TM", type = "sparse", n, sep,short=short, remove.terms=remove.terms, synonyms = synonyms)
         },
         sources = {
           WA <- cocMatrix(M, Field = "SO", type = "sparse", n, sep,short=short)
