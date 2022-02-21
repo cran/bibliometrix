@@ -1,7 +1,7 @@
 Package: bibliometrix
 Type: Package
 Title: Comprehensive Science Mapping Analysis
-Version: 3.2
+Version: 3.2.1
 Authors@R: c(person("Massimo", "Aria", email = "aria@unina.it", role=c("cre","aut")),
              person("Corrado", "Cuccurullo", email = "cuccurullocorrado@gmail.com", role="aut"))
 Description: Tool for quantitative research in scientometrics and bibliometrics.
@@ -23,12 +23,12 @@ Imports: stats, grDevices, bibliometrixData, dimensionsR, dplyr, DT,
         Matrix, plotly, openxlsx, pubmedR, RColorBrewer, readr, readxl,
         rscopus, shiny, SnowballC, stringdist, stringr, tidyr, tidytext
 Suggests: knitr, rmarkdown, testthat (>= 2.1.0), shinycssloaders,
-        shinythemes, visNetwork, wordcloud2
+        bslib, visNetwork, wordcloud2
 RoxygenNote: 7.1.1
 NeedsCompilation: no
 Author: Massimo Aria [cre, aut],
   Corrado Cuccurullo [aut]
 Maintainer: Massimo Aria <aria@unina.it>
-Packaged: 2022-02-09 16:23:49 UTC; massimoaria
+Packaged: 2022-02-19 23:05:57 UTC; massimoaria
 Repository: CRAN
-Date/Publication: 2022-02-09 17:10:02 UTC
+Date/Publication: 2022-02-21 09:50:07 UTC
