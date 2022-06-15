@@ -23,31 +23,43 @@
 #' 
 authorProdOverTime <- function(M,k=10, graph=TRUE){
 
+  if (!("DI" %in% names(M))){M$DI="NA"}
   M$TC <- as.numeric(M$TC)
   M$PY <- as.numeric(M$PY)
   M <- M[!is.na(M$PY),] #remove rows with missing value in PY
-  AU <- names(tableTag(M,"AU"))
-  k <- min(k,length(AU))
-  AU <- AU[1:k]
-  #AU=names(AU)
-  df <- data.frame("Author"="NA","year"=NA, "TI"="NA","SO"="NA","DOI"="NA", "TC"=NA,"TCpY"=NA,stringsAsFactors = FALSE)
+  
   Y <- as.numeric(substr(Sys.time(),1,4))
-  if (!("DI" %in% names(M))){M$DI="NA"}
-  for (i in 1:length(AU)){
-   
-    ind <- which(regexpr(AU[i],M$AU)>-1)
-    TCpY <- M$TC[ind]/(Y-M$PY[ind]+1)
-    dfAU <- data.frame("Author"=rep(AU[i],length(ind)),"year"=M$PY[ind],"TI"=M$TI[ind],"SO"=M$SO[ind],"DOI"=M$DI[ind],"TC"=M$TC[ind], "TCpY"=TCpY,stringsAsFactors = TRUE)
-    df <- rbind(df,dfAU)
-  }
-  df <- df[-1,]
+  listAU <- (strsplit(M$AU, ";"))
+  nAU <- lengths(listAU)
+  df <- data.frame(AU=trimws(unlist(listAU)), SR=rep(M$SR,nAU)) 
+  AU <- df %>% 
+    group_by(.data$AU) %>% 
+    count() %>% 
+    arrange(desc(.data$n)) %>% 
+    ungroup() 
+  k <- min(k,nrow(AU))
+  AU <- AU %>% 
+    slice_head(n=k)
+  
+  df <- df %>% 
+    right_join(AU, by = "AU") %>%
+    left_join(M, by = "SR") %>% 
+    select(.data$AU.x,.data$PY, .data$TI, .data$SO, .data$DI, .data$TC) %>% 
+    mutate(TCpY = .data$TC/(Y-.data$PY+1)) %>%
+    group_by(.data$AU.x) %>% 
+    mutate(n = length(.data$AU.x)) %>% 
+    ungroup() %>% 
+    rename(Author = .data$AU.x,
+           year = .data$PY,
+           DOI = .data$DI) %>% 
+    arrange(desc(.data$n), desc(.data$year)) %>% 
+    select(-.data$n)
   
   df2 <- dplyr::group_by(df, .data$Author,.data$year) %>%
-    dplyr::summarise(freq=length(.data$year),TC=sum(.data$TC),TCpY=sum(.data$TCpY))
+    dplyr::summarise(freq=length(.data$year),TC=sum(.data$TC),TCpY=sum(.data$TCpY)) %>% 
+    as.data.frame()
   
-  df2 <- as.data.frame(df2)
-  df2$Author <- factor(df2$Author,levels=AU[1:k])
-  #theme_set(theme_bw())
+  df2$Author <- factor(df2$Author,levels=AU$AU[1:k])
   
   x <- c(0.5,1.5*k/10)
   y <- c(min(df$year),min(df$year)+diff(range(df2$year))*0.125)
@@ -64,21 +76,25 @@ authorProdOverTime <- function(M,k=10, graph=TRUE){
     theme(legend.position = 'right'
           #,aspect.ratio = 1
           ,text = element_text(color = "#444444")
-          ,panel.background = element_rect(fill = 'gray97')
-          ,panel.grid.minor = element_line(color = '#FFFFFF')
-          ,panel.grid.major = element_line(color = '#FFFFFF')
+          ,panel.background = element_rect(fill = '#FFFFFF')
+          #,panel.grid.minor = element_line(color = 'grey95')
+          #,panel.grid.major = element_line(color = 'grey95')
           ,plot.title = element_text(size = 24)
           ,axis.title = element_text(size = 14, color = '#555555')
-          ,axis.title.y = element_text(vjust = 1, angle = 90, face="bold")
-          ,axis.title.x = element_text(hjust = .95,face="bold")
+          ,axis.title.y = element_text(vjust = 1, angle = 90)#, face="bold")
+          ,axis.title.x = element_text(hjust = .95)#,face="bold")
           ,axis.text.x = element_text(face="bold", angle = 90)
           ,axis.text.y = element_text(face="bold")
+          #,axis.line.x = element_line(color="black", size=1)
+          ,axis.line.x = element_line(color="grey50", size=0.5)
+          ,panel.grid.major.x = element_blank() 
+          ,panel.grid.major.y = element_line( size=.2, color="grey90" ) 
     )+
     #coord_fixed(ratio = 2/1) +
     labs(title="Top-Authors' Production over Time", 
          x="Author",
          y="Year")+
-    geom_line(data=df2,aes(x = .data$Author, y = .data$year, group=.data$Author),size=1.0, color="firebrick", alpha=0.3 )+
+    geom_line(data=df2,aes(x = .data$Author, y = .data$year, group=.data$Author),size=1.0, color="firebrick4", alpha=0.3 )+
     scale_x_discrete(limits = rev(levels(df2$Author)))+
     coord_flip() +
     annotation_custom(logo, xmin = x[1], xmax = x[2], ymin = y[1], ymax = y[2]) 

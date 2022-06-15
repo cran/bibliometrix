@@ -22,8 +22,12 @@
 #' 
 #' @export
 
-biblioshiny <- function(host = "127.0.0.1", port = NULL, launch.browser = TRUE, maxUploadSize=200){
+biblioshiny <- function(host = "127.0.0.1", port = NULL, 
+                        launch.browser = TRUE, maxUploadSize=200
+                        ){
   
   shinyOptions(maxUploadSize = maxUploadSize)
+  
   runApp(system.file("biblioshiny",package="bibliometrix"),launch.browser = launch.browser, port = port, host = getOption("shiny.host", host))
+
 }

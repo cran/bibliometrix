@@ -34,18 +34,18 @@ tableTag <- function(M, Tag = "CR", sep = ";", ngrams=1, remove.terms=NULL, syno
   Tab<-unlist(strsplit(as.character(M %>% dplyr::pull(i)),sep))
   
   ### inserted to remove punct and extra spaces ####
-  #Tab<-trimws(trimES(gsub("[[:punct:]]"," ",Tab)))
-  Tab<-trimws(trimES(gsub("\\.|\\,"," ",Tab)))
+  Tab <- trimws(gsub("\\s+|\\.|\\,"," ",Tab))
   ####
-  Tab<-Tab[Tab!=""]
+  #Tab<-Tab[Tab!=""]
+  Tab <- Tab[nchar(Tab)>0]
   
   # Merge synonyms in the vector synonyms
-  if (length(synonyms)>0 & class(synonyms)=="character"){
+  if (length(synonyms)>0 & is.character(synonyms)){
     s <- strsplit(toupper(synonyms),";")
     snew <- trimws(unlist(lapply(s,function(l) l[1])))
     sold <- (lapply(s,function(l) trimws(l[-1])))
     for (i in 1:length(s)){
-      Tab <-  str_replace_all(Tab, paste(sold[[i]], collapse="|",sep=""),snew[i])
+      Tab[Tab %in% unlist(sold[[i]])] <- snew[i]
     }
   }
   

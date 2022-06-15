@@ -37,7 +37,7 @@
 
 summary.bibliometrix<-function(object, ...){
 
-  if (class(object)!="bibliometrix"){cat('\n argument "object" have to be an object of class "bibliometrix"\n');return(NA)}
+  if (!inherits(object,"bibliometrix")){cat('\n argument "object" have to be an object of class "bibliometrix"\n');return(NA)}
   
   options(width=130)
   
@@ -55,13 +55,22 @@ summary.bibliometrix<-function(object, ...){
   CollIndex <- format(object$AuMultiAuthoredArt/sum(object$nAUperPaper>1),digits=3)  # Collaboration Index
   MYfP <- as.numeric(substr(Sys.time(),1,4))-mean(object$Years,na.rm = TRUE)
   
+  # CAGR
+  Y=table(object$Years)
+  ny=dim(Y)[1]
+  CAGR<-as.numeric(round(((Y[ny]/Y[1])^(1/(ny-1))-1)*100,2))
+  #
+  
+  #IntColl<- sum(object$CountryCollaboration$MCP)/object$Articles*100
+  
   #Main Information about data
   MainInfo=toupper("\n\nMain Information about data\n\n")
   MainInfo[length(MainInfo)+1]=paste("Timespan                             ",min(object$Years,na.rm=T),":",max(object$Years,na.rm=T),"\n")
   MainInfo[length(MainInfo)+1]=paste("Sources (Journals, Books, etc)       ",length(object$Sources),"\n")
   MainInfo[length(MainInfo)+1]=paste("Documents                            ",object$Articles,"\n")
-  MainInfo[length(MainInfo)+1]=paste("Average years from publication       ",format(MYfP,digits = 3),"\n")
-  MainInfo[length(MainInfo)+1]=paste("Average citations per documents      ",format(TCm, digits = 3),"\n")
+  MainInfo[length(MainInfo)+1]=paste("Annual Growth Rate %                 ",format(CAGR, digits = 4),"\n")
+  MainInfo[length(MainInfo)+1]=paste("Document Average Age                 ",format(MYfP,digits = 3),"\n")
+  MainInfo[length(MainInfo)+1]=paste("Average citations per doc            ",format(TCm, digits = 3),"\n")
   MainInfo[length(MainInfo)+1]=paste("Average citations per year per doc   ",format(TCmy, digits = 3),"\n")
   MainInfo[length(MainInfo)+1]=paste("References                           ",object$nReferences,"\n")
   if (!is.na(object$Documents[1])) {
@@ -76,14 +85,15 @@ summary.bibliometrix<-function(object, ...){
   MainInfo[length(MainInfo)+1]=toupper("\nAuthors\n")
   MainInfo[length(MainInfo)+1]=paste("Authors                              ",object$nAuthors,"\n")
   MainInfo[length(MainInfo)+1]=paste("Author Appearances                   ",object$Appearances,"\n")
-  MainInfo[length(MainInfo)+1]=paste("Authors of single-authored documents ",object$AuSingleAuthoredArt,"\n")
-  MainInfo[length(MainInfo)+1]=paste("Authors of multi-authored documents  ",object$AuMultiAuthoredArt,"\n")
+  MainInfo[length(MainInfo)+1]=paste("Authors of single-authored docs      ",object$AuSingleAuthoredArt,"\n")
+  #MainInfo[length(MainInfo)+1]=paste("Authors of multi-authored documents  ",object$AuMultiAuthoredArt,"\n")
   MainInfo[length(MainInfo)+1]=toupper("\nAuthors Collaboration\n")
-  MainInfo[length(MainInfo)+1]=paste("Single-authored documents            ",as.character(round(sum(object$nAUperPaper==1),0)),"\n")#format(sum(object$nAUperPaper==1),digits=0),"\n")
+  MainInfo[length(MainInfo)+1]=paste("Single-authored docs                 ",as.character(round(sum(object$nAUperPaper==1),0)),"\n")#format(sum(object$nAUperPaper==1),digits=0),"\n")
   MainInfo[length(MainInfo)+1]=paste("Documents per Author                 ",format(object$Articles/object$nAuthors,digits=3),"\n")
-  MainInfo[length(MainInfo)+1]=paste("Authors per Document                 ",format(object$nAuthors/object$Articles,digits=3),"\n")
-  MainInfo[length(MainInfo)+1]=paste("Co-Authors per Documents             ",format(mean(object$nAUperPaper),digits=3),"\n")
-  MainInfo[length(MainInfo)+1]=paste("Collaboration Index                  ",CollIndex,"\n")
+  #MainInfo[length(MainInfo)+1]=paste("Authors per Document                 ",format(object$nAuthors/object$Articles,digits=3),"\n")
+  MainInfo[length(MainInfo)+1]=paste("Co-Authors per Doc                   ",format(mean(object$nAUperPaper),digits=3),"\n")
+  MainInfo[length(MainInfo)+1]=paste("International co-authorships %       ",format(object$IntColl,digits=4),"\n")
+  #MainInfo[length(MainInfo)+1]=paste("Collaboration Index                  ",CollIndex,"\n")
   MainInfo[length(MainInfo)+1]=paste("\n")
   
   

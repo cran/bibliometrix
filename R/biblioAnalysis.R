@@ -36,11 +36,13 @@
 #'
 #'
 #' @examples
+#' \dontrun{
 #' data(management, package = "bibliometrixData")
 #'
 #' results <- biblioAnalysis(management)
 #'
 #' summary(results, k = 10, pause = FALSE)
+#' }
 #'
 #' @seealso \code{\link{convert2df}} to import and convert an WoS or SCOPUS Export file in a bibliographic data frame.
 #' @seealso \code{\link{summary}} to obtain a summary of the results.
@@ -183,6 +185,12 @@ if ("DT" %in% names(M)){
   names(Documents)=substr(paste(names(Documents),"                                              ",sep=""),1,n+5)
 }else{Documents=NA}
 
+# international collaboration
+if (!("AU_CO" %in% names(M))){M=metaTagExtraction(M,Field="AU_CO",sep)}
+Coll <- unlist(lapply(strsplit(M$AU_CO,sep), function(l){
+  length(unique(l))>1
+}))
+
 results=list(Articles=dim(M)[1],             # Articles
              Authors=Authors,                # Authors' frequency distribution
              AuthorsFrac=Authors_frac,       # Authors' frequency distribution (fractionalized)
@@ -206,6 +214,7 @@ results=list(Articles=dim(M)[1],             # Articles
              DE=DE,                          # Keywords
              ID=ID,                          # Authors' keywords
              Documents=Documents,
+             IntColl=sum(Coll)/nrow(M)*100,         
              nReferences = nReferences,      # N. of References
              DB=M$DB[1])
   class(results)<-"bibliometrix"

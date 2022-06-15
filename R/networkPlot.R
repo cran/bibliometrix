@@ -31,7 +31,7 @@
 #' @param label.color is logical. If TRUE, for each vertex, the label color is the same as its cluster. 
 #' @param label.cex is logical. If TRUE the label size of each vertex is proportional to its degree.  
 #' @param halo is logical. If TRUE communities are plotted using different colors. Default is \code{halo=FALSE}
-#' @param cluster is a character. It indicates the type of cluster to perform among ("none", optimal", "louvain","infomap","edge_betweenness","walktrap", "spinglass", "leading_eigen", "fast_greedy").
+#' @param cluster is a character. It indicates the type of cluster to perform among ("none", "optimal", "louvain","leiden", "infomap","edge_betweenness","walktrap", "spinglass", "leading_eigen", "fast_greedy").
 #' @param community.repulsion is a real. It indicates the repulsion force among network communities. It is a real number between 0 and 1. Default is \code{community.repulsion = 0.1}.
 #' @param curved is a logical or a number. If TRUE edges are plotted with an optimal curvature. Default is \code{curved=FALSE}. Curved values are any numbers from 0 to 1.
 #' @param weighted This argument specifies whether to create a weighted graph from an adjacency matrix. 
@@ -79,7 +79,7 @@ networkPlot <-
            label.color = FALSE,
            label.n = NULL,
            halo = FALSE,
-           cluster = "louvain",
+           cluster = "leading_eigen",
            community.repulsion = 0.1,
            vos.path = NULL,
            size = 3,
@@ -127,9 +127,16 @@ networkPlot <-
     # vertex labels
     V(bsk.network)$name <- colnames(NetMatrix)
     
+    # node degree plot
+    #deg <- igraph::degree_distribution(bsk.network, cumulative=T, mode="all")
+    deg <- degree(bsk.network, mode = "all")
+    deg.dist <- data.frame(node=V(bsk.network)$name, degree=deg) %>% 
+      arrange(desc(.data$degree)) %>% 
+      mutate(degree = .data$degree/max(.data$degree))
+    
     
     # Compute node degrees (#links) and use that to set node size:
-    deg <- degree(bsk.network, mode = "all")
+    #deg <- degree(bsk.network, mode = "all")
     V(bsk.network)$deg <- deg
     if (isTRUE(size.cex)) {
       V(bsk.network)$size <- (deg / max(deg)[1]) * size
@@ -341,7 +348,7 @@ networkPlot <-
       community_obj = cl$net_groups,
       layout = l,
       S = S,
-      nodeDegree = sort(deg, decreasing = T) 
+      nodeDegree = deg.dist
     )
     
     return(net)
@@ -379,8 +386,13 @@ clusteringNetwork <- function(bsk.network, cluster) {
     optimal = {
       net_groups <- cluster_optimal(bsk.network)
     },
+    leiden = {
+      net_groups <- cluster_leiden(bsk.network, objective_function = "modularity",
+                                   n_iterations = 3, resolution_parameter = 0.75)
+    },
     louvain = {
       net_groups <- cluster_louvain(bsk.network)
+      #net_groups <- louvain(bsk.network)
     },
     fast_greedy = {
       net_groups <- cluster_fast_greedy(bsk.network)
@@ -497,3 +509,14 @@ weight.community=function(row,membership,weigth.within,weight.between){
   }
   return(weight)
 }
+
+# # louvain community detection
+# louvain <- function(g){
+#   cl <- 50 %>% 
+#     rerun(cluster_louvain(g)$membership) %>% 
+#     do.call(rbind, .) %>%
+#     data.frame() %>% 
+#     summarize_all(Mode)
+#   cl <- list(membership=as.numeric(cl), names=V(g)$name)
+#   return(cl)
+# }
