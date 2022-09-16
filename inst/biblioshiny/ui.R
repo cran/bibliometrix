@@ -14,6 +14,7 @@ if (!require(dashboardthemes)){install.packages("dashboardthemes"); require(dash
 if (!require(shinydashboardPlus)){install.packages("shinydashboardPlus"); require(shinydashboardPlus, quietly=TRUE)}
 if (!require(shinydashboard)){install.packages("shinydashboard"); require(shinydashboard, quietly=TRUE)}
 if (!require(shinyjs)){install.packages("shinyjs"); require(shinyjs, quietly=TRUE)}
+if (!require(shinyscreenshot)){install.packages("shinyscreenshot"); require(shinyscreenshot, quietly=TRUE)}
 require(Matrix, quietly = TRUE)
 require(dimensionsR, quietly = TRUE)
 require(pubmedR, quietly = TRUE)
@@ -30,7 +31,7 @@ mytitle <- tags$link(tags$a(href = 'https://www.bibliometrix.org/',target="_blan
 intro <- "javascript:void(window.open('https://www.bibliometrix.org/vignettes/Introduction_to_bibliometrix.html', '_blank'))"
 importData <- "javascript:void(window.open('https://www.bibliometrix.org/vignettes/Data-Importing-and-Converting.html', '_blank'))"
 slides <- "javascript:void(window.open('https://bibliometrix.org/biblioshiny/assets/player/KeynoteDHTMLPlayer.html#0', '_blank'))"
-donation <- "javascript:void(window.open('https://www.bibliometrix.org/donate.html', '_blank'))"
+donation <- "javascript:void(window.open('https://www.bibliometrix.org/home/index.php/donation', '_blank'))"
 bibliometrixWeb <- "javascript:void(window.open('https://www.bibliometrix.org/', '_blank'))" 
 k_synth <- "javascript:void(window.open('https://www.k-synth.unina.it', '_blank'))"
 github_aria <- "javascript:void(window.open('https://github.com/massimoaria/bibliometrix', '_blank'))"
@@ -1265,8 +1266,10 @@ body <- dashboardBody(
               ),
               fluidRow(
                 tabsetPanel(type = "tabs",
-                            tabPanel("Plot",
-                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "histPlot", height = "75vh"))),
+                            tabPanel("Network", 
+                                     shinycssloaders::withSpinner(visNetworkOutput("histPlotVis", height = "80vh"))),
+                            # tabPanel("Plot",
+                            #          shinycssloaders::withSpinner(plotlyOutput(outputId = "histPlot", height = "75vh"))),
                             tabPanel("Table", 
                                      shinycssloaders::withSpinner(DT::DTOutput(outputId = "histTable")))
                 )

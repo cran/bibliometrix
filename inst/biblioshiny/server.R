@@ -2333,7 +2333,7 @@ server <- function(input, output,session){
     xx[,3]=as.numeric(xx[,3])
     if (input$MostCitCountriesK>dim(xx)[1]){
       k=dim(xx)[1]
-    } else {k=input$MostRelAffiliationsK}
+    } else {k=input$MostCitCountriesK}
     if (input$CitCountriesMeasure=="TC"){
       xx=xx[1:k,c(1,2)]
       laby="N. of Citations"
@@ -2729,7 +2729,8 @@ server <- function(input, output,session){
            ID={lab="Keywords Plus"},
            DE={lab="Author's Keywords"},
            TI={lab="Title's Words"},
-           AB={lab="Abstract's Words"})
+           AB={lab="Abstract's Words"},
+           WC={lab="Subject Categories"})
     
     g <- freqPlot(xx,x=2,y=1, textLaby = lab, textLabx = "Occurrences", title = "Most Relevant Words", values)
     
@@ -3209,6 +3210,7 @@ server <- function(input, output,session){
     values$CM <- couplingMap(values$M, analysis=input$CManalysis, field=input$CMfield, 
                              n=input$CMn, minfreq=input$CMfreq,
                              ngrams=as.numeric(input$CMngrams),
+                             community.repulsion = input$CMrepulsion,
                              impact.measure=input$CMimpact,
                              stemming=input$CMstemming, size=input$sizeCM, 
                              label.term = input$CMlabeling,
@@ -3342,6 +3344,12 @@ server <- function(input, output,session){
     },
     contentType = "html"
   )
+  
+  ### save coc network as png ###
+  observeEvent(input$cocPlot.save, {
+    file <- paste("Co_occurrence_Network-", Sys.Date(), ".png", sep="")
+    screenshot(selector="#cocPlot", scale=input$cocRes, filename=file)
+  })
   
   output$cocTable <- DT::renderDT({
     COCnetwork()
@@ -3582,6 +3590,7 @@ server <- function(input, output,session){
     
     values$TM <- thematicMap(values$M, field=input$TMfield, 
                              n=input$TMn, minfreq=input$TMfreq, ngrams=ngrams,
+                             community.repulsion = input$TMrepulsion,
                              stemming=input$TMstemming, size=input$sizeTM, cluster=input$TMCluster,
                              n.labels=input$TMn.labels, repel=FALSE, remove.terms=remove.terms, synonyms=synonyms)
     
@@ -3685,7 +3694,7 @@ server <- function(input, output,session){
     TMAP()
     tmDataDoc <- values$TM$documentToClusters
     tmDataDoc$DI<- paste0('<a href=\"https://doi.org/',tmDataDoc$DI,'\" target=\"_blank\">',tmDataDoc$DI,'</a>')
-    names(tmDataDoc)[1:7] <- c("DOI", "Authors","Title","Source","Year","TotalCitation", "SR") 
+    names(tmDataDoc)[1:9] <- c("DOI", "Authors","Title","Source","Year","TotalCitation","TCperYear","NTC","SR") 
     
     DT::datatable(tmDataDoc, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 10, dom = 'Bfrtip',
@@ -3707,7 +3716,9 @@ server <- function(input, output,session){
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmDataDoc))-1))))) %>%
       formatStyle(names(tmDataDoc),  backgroundColor = 'white') %>% 
-      formatRound(names(tmDataDoc)[8:(ncol(tmDataDoc)-1)], 3)
+      formatRound(names(tmDataDoc)[7:8], 3) %>% 
+      formatRound(names(tmDataDoc)[c(10:(ncol(tmDataDoc)-2),ncol(tmDataDoc))], 3) %>% 
+      formatRound(names(tmDataDoc)[ncol(tmDataDoc)], 3) 
   })
   
   ### Thematic Evolution ----
@@ -4177,7 +4188,7 @@ server <- function(input, output,session){
     TEMAP()
     tmDataDoc <- values$nexus$TM[[1]]$documentToClusters
     tmDataDoc$DI<- paste0('<a href=\"https://doi.org/',tmDataDoc$DI,'\" target=\"_blank\">',tmDataDoc$DI,'</a>')
-    names(tmDataDoc)[1:7] <- c("DOI", "Authors","Title","Source","Year","TotalCitation", "SR") 
+    names(tmDataDoc)[1:9] <- c("DOI", "Authors","Title","Source","Year","TotalCitation","TCperYear","NTC","SR") 
     
     DT::datatable(tmDataDoc, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 10, dom = 'Bfrtip',
@@ -4199,14 +4210,16 @@ server <- function(input, output,session){
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmDataDoc))-1))))) %>%
       formatStyle(names(tmDataDoc),  backgroundColor = 'white') %>% 
-      formatRound(names(tmDataDoc)[8:(ncol(tmDataDoc)-1)], 3)
+      formatRound(names(tmDataDoc)[7:8], 3) %>% 
+      formatRound(names(tmDataDoc)[10:(ncol(tmDataDoc)-2)], 3) %>% 
+      formatRound(names(tmDataDoc)[ncol(tmDataDoc)], 3)
   })
   
   output$TMTableDocument2 <- DT::renderDT({
     TEMAP()
     tmDataDoc <- values$nexus$TM[[2]]$documentToClusters
     tmDataDoc$DI<- paste0('<a href=\"https://doi.org/',tmDataDoc$DI,'\" target=\"_blank\">',tmDataDoc$DI,'</a>')
-    names(tmDataDoc)[1:7] <- c("DOI", "Authors","Title","Source","Year","TotalCitation", "SR") 
+    names(tmDataDoc)[1:9] <- c("DOI", "Authors","Title","Source","Year","TotalCitation","TCperYear","NTC","SR") 
     
     DT::datatable(tmDataDoc, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 10, dom = 'Bfrtip',
@@ -4228,14 +4241,16 @@ server <- function(input, output,session){
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmDataDoc))-1))))) %>%
       formatStyle(names(tmDataDoc),  backgroundColor = 'white') %>% 
-      formatRound(names(tmDataDoc)[8:(ncol(tmDataDoc)-1)], 3)
+      formatRound(names(tmDataDoc)[7:8], 3) %>% 
+      formatRound(names(tmDataDoc)[10:(ncol(tmDataDoc)-2)], 3) %>% 
+      formatRound(names(tmDataDoc)[ncol(tmDataDoc)], 3)
   })
   
   output$TMTableDocument3 <- DT::renderDT({
     TEMAP()
     tmDataDoc <- values$nexus$TM[[3]]$documentToClusters
     tmDataDoc$DI<- paste0('<a href=\"https://doi.org/',tmDataDoc$DI,'\" target=\"_blank\">',tmDataDoc$DI,'</a>')
-    names(tmDataDoc)[1:7] <- c("DOI", "Authors","Title","Source","Year","TotalCitation", "SR") 
+    names(tmDataDoc)[1:9] <- c("DOI", "Authors","Title","Source","Year","TotalCitation","TCperYear","NTC","SR") 
     
     DT::datatable(tmDataDoc, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 10, dom = 'Bfrtip',
@@ -4257,14 +4272,16 @@ server <- function(input, output,session){
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmDataDoc))-1))))) %>%
       formatStyle(names(tmDataDoc),  backgroundColor = 'white') %>% 
-      formatRound(names(tmDataDoc)[8:(ncol(tmDataDoc)-1)], 3)
+      formatRound(names(tmDataDoc)[7:8], 3) %>% 
+      formatRound(names(tmDataDoc)[10:(ncol(tmDataDoc)-2)], 3) %>% 
+      formatRound(names(tmDataDoc)[ncol(tmDataDoc)], 3)
   })
   
   output$TMTableDocument4 <- DT::renderDT({
     TEMAP()
     tmDataDoc <- values$nexus$TM[[4]]$documentToClusters
     tmDataDoc$DI<- paste0('<a href=\"https://doi.org/',tmDataDoc$DI,'\" target=\"_blank\">',tmDataDoc$DI,'</a>')
-    names(tmDataDoc)[1:7] <- c("DOI", "Authors","Title","Source","Year","TotalCitation", "SR") 
+    names(tmDataDoc)[1:9] <- c("DOI", "Authors","Title","Source","Year","TotalCitation","TCperYear","NTC","SR") 
     
     DT::datatable(tmDataDoc, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 10, dom = 'Bfrtip',
@@ -4286,14 +4303,16 @@ server <- function(input, output,session){
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmDataDoc))-1))))) %>%
       formatStyle(names(tmDataDoc),  backgroundColor = 'white') %>% 
-      formatRound(names(tmDataDoc)[8:(ncol(tmDataDoc)-1)], 3)
+      formatRound(names(tmDataDoc)[7:8], 3) %>% 
+      formatRound(names(tmDataDoc)[10:(ncol(tmDataDoc)-2)], 3) %>% 
+      formatRound(names(tmDataDoc)[ncol(tmDataDoc)], 3)
   })
   
   output$TMTableDocument5 <- DT::renderDT({
     TEMAP()
     tmDataDoc <- values$nexus$TM[[5]]$documentToClusters
     tmDataDoc$DI<- paste0('<a href=\"https://doi.org/',tmDataDoc$DI,'\" target=\"_blank\">',tmDataDoc$DI,'</a>')
-    names(tmDataDoc)[1:7] <- c("DOI", "Authors","Title","Source","Year","TotalCitation", "SR") 
+    names(tmDataDoc)[1:9] <- c("DOI", "Authors","Title","Source","Year","TotalCitation","TCperYear","NTC","SR") 
     
     DT::datatable(tmDataDoc, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
                   options = list(pageLength = 10, dom = 'Bfrtip',
@@ -4315,7 +4334,9 @@ server <- function(input, output,session){
                                  lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
                                  columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmDataDoc))-1))))) %>%
       formatStyle(names(tmDataDoc),  backgroundColor = 'white') %>% 
-      formatRound(names(tmDataDoc)[8:(ncol(tmDataDoc)-1)], 3)
+      formatRound(names(tmDataDoc)[7:8], 3) %>% 
+      formatRound(names(tmDataDoc)[10:(ncol(tmDataDoc)-2)], 3) %>% 
+      formatRound(names(tmDataDoc)[ncol(tmDataDoc)], 3)
   })
   
   # INTELLECTUAL STRUCTURE ####
@@ -4339,6 +4360,11 @@ server <- function(input, output,session){
     },
     contentType = "net"
   )
+  
+  observeEvent(input$cocitPlot.save, {
+    file <- paste("Co_citation_Network-", Sys.Date(), ".png", sep="")
+    screenshot(selector="#cocitPlot", scale=input$cocitRes, filename=file)
+  })
   
   output$cocitTable <- DT::renderDT({
     COCITnetwork()
@@ -4389,50 +4415,67 @@ server <- function(input, output,session){
                    values <- historiograph(input,values)
                  })
     
-    fx <- list(
-      family = "Old Standard TT, serif",
-      size = 11,
-      color = "black"
-    )
-    
-    a <- list(
-      ticks = "outside",
-      autotick = FALSE,
-      ticktext = values$histPlot$axis$label, 
-      tickvals = values$histPlot$axis$values,
-      tickmode = "array",
-      showticklabels = TRUE,
-      tickangle = 270,
-      tickfont = fx,
-      ticklen = 2,
-      tickwidth = 2,
-      tickcolor = toRGB("black")
-    )
-    
-    g <- plot.ly(values$histPlot$g, side="r", size=0.05, aspectratio = 1.5, height=-0.1) %>% 
-      layout(xaxis = a, autosize=TRUE ,showlegend = FALSE, 
-             hoverlabel = list(font=list(size=input$histlabelsize+9)))
-    return(g)
+    # fx <- list(
+    #   family = "Old Standard TT, serif",
+    #   size = 11,
+    #   color = "black"
+    # )
+    # 
+    # a <- list(
+    #   ticks = "outside",
+    #   autotick = FALSE,
+    #   ticktext = values$histPlot$axis$label, 
+    #   tickvals = values$histPlot$axis$values,
+    #   tickmode = "array",
+    #   showticklabels = TRUE,
+    #   tickangle = 270,
+    #   tickfont = fx,
+    #   ticklen = 2,
+    #   tickwidth = 2,
+    #   tickcolor = toRGB("black")
+    # )
+    # 
+    # g <- plot.ly(values$histPlot$g, side="r", size=0.05, aspectratio = 1.5, height=-0.1) %>% 
+    #   layout(xaxis = a, autosize=TRUE ,showlegend = FALSE, 
+    #          hoverlabel = list(font=list(size=input$histlabelsize+9)))
+    # return(g)
+  })
+
+  
+  # output$HGplot.save <- downloadHandler(
+  #   filename = function() {
+  #     paste("Historiograph-", Sys.Date(), ".png", sep="")
+  #   },
+  #   content <- function(file) {
+  #     ggsave(filename = file, plot = values$histPlot$g, dpi = as.numeric(input$HGdpi),  height = input$HGh, width = input$HGh*2, bg="white")
+  #   },
+  #   contentType = "png"
+  # )
+  
+  ### screenshot Button Historiograph
+  observeEvent(input$HGplot.save, {
+    file <- paste("Historiograph-", Sys.Date(), ".png", sep="")
+    screenshot(selector="#histPlotVis", scale=input$HGh, filename=file)
   })
   
-  output$HGplot.save <- downloadHandler(
-    filename = function() {
-      paste("Historiograph-", Sys.Date(), ".png", sep="")
-    },
-    content <- function(file) {
-      ggsave(filename = file, plot = values$histPlot$g, dpi = as.numeric(input$HGdpi),  height = input$HGh, width = input$HGh*2, bg="white")
-    },
-    contentType = "png"
-  )
+  # output$histPlot <- renderPlotly({
+  #   Hist()
+  # })
   
-  output$histPlot <- renderPlotly({
-    Hist()
+  output$histPlotVis <- renderVisNetwork({  
+    g <- Hist()
+    values$histPlotVis<-hist2vis(values$histPlot,curved=FALSE, 
+                               labelsize=input$histlabelsize, 
+                               nodesize=input$histsize,
+                               opacity=0.7,
+                               shape="dot",
+                               labeltype=input$titlelabel,
+                               timeline=FALSE)
+    values$histPlotVis$VIS
   })
   
   output$histTable <- DT::renderDT({
-    # LCS <- values$histResults$LCS
-    # s <- sort(LCS,decreasing = TRUE)[input$histNodes]
-    # ind <- which(LCS>=s)
+
     Data <- values$histResults$histData
     #Data <- Data[ind,]
     Data$DOI<- paste0('<a href=\"https://doi.org/',Data$DOI,'\" target=\"_blank\">',Data$DOI,'</a>')
@@ -4503,6 +4546,11 @@ server <- function(input, output,session){
     },
     contentType = "net"
   )
+  
+  observeEvent(input$colPlot.save, {
+    file <- paste("Collaboration_Network-", Sys.Date(), ".png", sep="")
+    screenshot(selector="#colPlot", scale=input$colRes, filename=file)
+  })
   
   output$colTable <- DT::renderDT({
     COLnetwork()
@@ -5654,7 +5702,8 @@ server <- function(input, output,session){
                                                 choices = c("Keywords Plus" = "ID",
                                                             "Author's keywords" = "DE",
                                                             "Titles" = "TI",
-                                                            "Abstracts" = "AB"),
+                                                            "Abstracts" = "AB",
+                                                            "Subject Categories (WoS)" = "WC"),
                                                 selected = "ID"),
                                     conditionalPanel(condition = "input.MostRelWords == 'AB' |input.MostRelWords == 'TI'",
                                                      selectInput("MRWngrams",'N-Grams',
@@ -5696,7 +5745,7 @@ server <- function(input, output,session){
                                         conditionalPanel(condition = "input.MRWSynFile == 'Y'",
                                                          helpText(h5(strong("Upload a TXT or CSV file containing, in each row, a list of synonyms, that will be merged into a single term (the first word contained in the row)")),
                                                                   h5(("Terms have to be separated by a standard separator (comma, semicolon or tabulator). 
-                              Rows have to be separated by return separator (\\n)."))
+                              Rows have to be separated by return separator."))
                                                          ),
                                                          fileInput("MRWSyn", "",
                                                                    multiple = FALSE,
@@ -5737,7 +5786,7 @@ server <- function(input, output,session){
                                                                     style ="border-radius: 10px; border-width: 3px;font-size: 20px;",
                                                                     width = "100%"))
                    ),
-                   ## Word cloud ----
+                   ## Wordcloud ----
                    conditionalPanel(condition = 'input.sidebarmenu == "wcloud"',
                                     h4(em(strong(" "))),
                                     " ",
@@ -5745,7 +5794,8 @@ server <- function(input, output,session){
                                                 choices = c("Keywords Plus" = "ID",
                                                             "Author's keywords" = "DE",
                                                             "Titles" = "TI",
-                                                            "Abstracts" = "AB"),
+                                                            "Abstracts" = "AB",
+                                                            "Subject Categories (WoS)" = "WC"),
                                                 selected = "ID"),
                                     conditionalPanel(condition = "input.summaryTerms == 'AB' |input.summaryTerms == 'TI'",
                                                      selectInput("summaryTermsngrams",'N-Grams',
@@ -5785,7 +5835,7 @@ server <- function(input, output,session){
                                         conditionalPanel(condition = "input.WCSynFile == 'Y'",
                                                          helpText(h5(strong("Upload a TXT or CSV file containing, in each row, a list of synonyms, that will be merged into a single term (the first word contained in the row)")),
                                                                   h5(("Terms have to be separated by a standard separator (comma, semicolon or tabulator). 
-                              Rows have to be separated by return separator (\\n)."))
+                              Rows have to be separated by return separator."))
                                                          ),
                                                          fileInput("WCSyn", "",
                                                                    multiple = FALSE,
@@ -5855,7 +5905,8 @@ server <- function(input, output,session){
                                                 choices = c("Keywords Plus" = "ID",
                                                             "Author's keywords" = "DE",
                                                             "Titles" = "TI",
-                                                            "Abstracts" = "AB"),
+                                                            "Abstracts" = "AB",
+                                                            "Subject Categories (WoS)" = "WC"),
                                                 selected = "ID"),
                                     conditionalPanel(condition = "input.treeTerms == 'AB' |input.treeTerms == 'TI'",
                                                      selectInput("treeTermsngrams",'N-Grams',
@@ -5897,7 +5948,7 @@ server <- function(input, output,session){
                                         conditionalPanel(condition = "input.TreeMapSynFile == 'Y'",
                                                          helpText(h5(strong("Upload a TXT or CSV file containing, in each row, a list of synonyms, that will be merged into a single term (the first word contained in the row)")),
                                                                   h5(("Terms have to be separated by a standard separator (comma, semicolon or tabulator). 
-                              Rows have to be separated by return separator (\\n)."))
+                              Rows have to be separated by return separator."))
                                                          ),
                                                          fileInput("TreeMapSyn", "",
                                                                    multiple = FALSE,
@@ -5962,7 +6013,7 @@ server <- function(input, output,session){
                                         conditionalPanel(condition = "input.WDSynFile == 'Y'",
                                                          helpText(h5(strong("Upload a TXT or CSV file containing, in each row, a list of synonyms, that will be merged into a single term (the first word contained in the row)")),
                                                                   h5(("Terms have to be separated by a standard separator (comma, semicolon or tabulator). 
-                              Rows have to be separated by return separator (\\n)."))
+                              Rows have to be separated by return separator."))
                                                          ),
                                                          fileInput("WDSyn", "",
                                                                    multiple = FALSE,
@@ -6068,7 +6119,7 @@ server <- function(input, output,session){
                                         conditionalPanel(condition = "input.TTSynFile == 'Y'",
                                                          helpText(h5(strong("Upload a TXT or CSV file containing, in each row, a list of synonyms, that will be merged into a single term (the first word contained in the row)")),
                                                                   h5(("Terms have to be separated by a standard separator (comma, semicolon or tabulator). 
-                              Rows have to be separated by return separator (\\n)."))
+                              Rows have to be separated by return separator."))
                                                          ),
                                                          fileInput("TTSyn", "",
                                                                    multiple = FALSE,
@@ -6174,7 +6225,23 @@ server <- function(input, output,session){
                                         fluidRow(column(6,
                                                         numericInput("CMn.labels", label="Labels per cluster",value=3,min=1,max=10,step=1)),
                                                  column(6,
-                                                        numericInput("sizeCM", label="Label size",value=0.3,min=0.0,max=1,step=0.05)))
+                                                        numericInput("sizeCM", label="Label size",value=0.3,min=0.0,max=1,step=0.05))),
+                                        fluidRow(column(6,
+                                                        numericInput("CMrepulsion", label="Community Repulsion",value=0,min=0,max=1,step=0.01)),
+                                                 column(6,
+                                                        selectInput("CMcluster", 
+                                                                    label = "Clustering Algorithm",
+                                                                    choices = c("None" = "none",
+                                                                                "Edge Betweenness" = "edge_betweenness",
+                                                                                "Fast Greedy" = "fast_greedy",
+                                                                                "InfoMap" = "infomap",
+                                                                                "Leading Eigenvalues" = "leading_eigen",
+                                                                                "Leiden" = "leiden",
+                                                                                "Louvain" = "louvain",
+                                                                                "Spinglass" = "spinglass",
+                                                                                "Walktrap" = "walktrap"),
+                                                                    selected = "walktrap")
+                                                 ))
                                     ),
                                     selectInput(
                                       'CMdpi',
@@ -6209,7 +6276,8 @@ server <- function(input, output,session){
                                                 choices = c("Keywords Plus" = "ID", 
                                                             "Author's Keywords" = "DE",
                                                             "Titles" = "TI",
-                                                            "Abstracts" = "AB"),
+                                                            "Abstracts" = "AB",
+                                                            "Subject Categories (WoS)" = "WC"),
                                                 selected = "ID"),
                                     conditionalPanel(condition = "input.field == 'TI' | input.field == 'AB'",
                                                      selectInput("cocngrams",'N-Grams',
@@ -6250,7 +6318,7 @@ server <- function(input, output,session){
                                         conditionalPanel(condition = "input.COCSynFile == 'Y'",
                                                          helpText(h5(strong("Upload a TXT or CSV file containing, in each row, a list of synonyms, that will be merged into a single term (the first word contained in the row)")),
                                                                   h5(("Terms have to be separated by a standard separator (comma, semicolon or tabulator). 
-                              Rows have to be separated by return separator (\\n)."))
+                              Rows have to be separated by return separator."))
                                                          ),
                                                          fileInput("COCSyn", "",
                                                                    multiple = FALSE,
@@ -6430,6 +6498,26 @@ server <- function(input, output,session){
                                                           style ="border-radius: 10px; border-width: 3px;font-size: 15px;",
                                                           width = "100%")
                                     )
+                                  ),
+                                  br(),
+                                  selectInput("cocRes",
+                                              h4(strong("Export plot")),
+                                              choices = c(
+                                                "Select the image scale" = 0,
+                                                "screen resolution x1" = 1,
+                                                "screen resolution x2" = 2,
+                                                "screen resolution x3" = 3,
+                                                "screen resolution x4" = 4,
+                                                "screen resolution x5" = 5,
+                                                "screen resolution x6" = 6,
+                                                "screen resolution x7" = 7,
+                                                "screen resolution x8" = 8
+                                              ),
+                                              selected = 0),
+                                  conditionalPanel(condition = "input.cocRes != 0",
+                                                   actionButton("cocPlot.save", strong("Export plot as png"),
+                                                                style ="border-radius: 10px; border-width: 3px;font-size: 20px;",
+                                                                width = "100%")
                                   )
                    ),
                    ## Thematic Map ----
@@ -6488,7 +6576,7 @@ server <- function(input, output,session){
                                         conditionalPanel(condition = "input.TMapSynFile == 'Y'",
                                                          helpText(h5(strong("Upload a TXT or CSV file containing, in each row, a list of synonyms, that will be merged into a single term (the first word contained in the row)")),
                                                                   h5(("Terms have to be separated by a standard separator (comma, semicolon or tabulator). 
-                              Rows have to be separated by return separator (\\n)."))
+                              Rows have to be separated by return separator."))
                                                          ),
                                                          fileInput("TMapSyn", "",
                                                                    multiple = FALSE,
@@ -6520,7 +6608,9 @@ server <- function(input, output,session){
                                         column(6,
                                                numericInput("sizeTM", label="Label size",value=0.3,min=0.0,max=1,step=0.05)
                                         )),
-                                        fluidRow(column(12,
+                                        fluidRow(column(6,
+                                                        numericInput("TMrepulsion", label="Community Repulsion",value=0,min=0,max=1,step=0.01)),
+                                          column(6,
                                                         selectInput("TMCluster", 
                                                                     label = "Clustering Algorithm",
                                                                     choices = c("None" = "none",
@@ -6534,7 +6624,6 @@ server <- function(input, output,session){
                                                                                 "Walktrap" = "walktrap"),
                                                                     selected = "walktrap")
                                                         )
-                                          
                                         )
                                     ),
                                     selectInput(
@@ -6614,7 +6703,7 @@ server <- function(input, output,session){
                                         conditionalPanel(condition = "input.TESynFile == 'Y'",
                                                          helpText(h5(strong("Upload a TXT or CSV file containing, in each row, a list of synonyms, that will be merged into a single term (the first word contained in the row)")),
                                                                   h5(("Terms have to be separated by a standard separator (comma, semicolon or tabulator). 
-                              Rows have to be separated by return separator (\\n)."))
+                              Rows have to be separated by return separator."))
                                                          ),
                                                          fileInput("TESyn", "",
                                                                    multiple = FALSE,
@@ -6763,7 +6852,7 @@ server <- function(input, output,session){
                                         conditionalPanel(condition = "input.FASynFile == 'Y'",
                                                          helpText(h5(strong("Upload a TXT or CSV file containing, in each row, a list of synonyms, that will be merged into a single term (the first word contained in the row)")),
                                                                   h5(("Terms have to be separated by a standard separator (comma, semicolon or tabulator). 
-                              Rows have to be separated by return separator (\\n)."))
+                              Rows have to be separated by return separator."))
                                                          ),
                                                          fileInput("FASyn", "",
                                                                    multiple = FALSE,
@@ -6896,7 +6985,7 @@ server <- function(input, output,session){
                                                                        "Louvain" = "louvain",
                                                                        "Spinglass" = "spinglass",
                                                                        "Walktrap" = "walktrap"),
-                                                           selected = "leading_eigen")
+                                                           selected = "walktrap")
                                         )),
                                         fluidRow(column(6,
                                                         numericInput(inputId = "citNodes",
@@ -7012,7 +7101,26 @@ server <- function(input, output,session){
                                            downloadButton("networkCocit.fig", strong("Save HTML"),
                                                           style ="border-radius: 10px; border-width: 3px;font-size: 15px;",
                                                           width = "100%")
-                                    )
+                                    )),
+                                    br(),
+                                    selectInput("cocitRes",
+                                                h4(strong("Export plot")),
+                                                choices = c(
+                                                  "Select the image scale" = 0,
+                                                  "screen resolution x1" = 1,
+                                                  "screen resolution x2" = 2,
+                                                  "screen resolution x3" = 3,
+                                                  "screen resolution x4" = 4,
+                                                  "screen resolution x5" = 5,
+                                                  "screen resolution x6" = 6,
+                                                  "screen resolution x7" = 7,
+                                                  "screen resolution x8" = 8
+                                                ),
+                                                selected = 0),
+                                    conditionalPanel(condition = "input.cocitRes != 0",
+                                                     actionButton("cocitPlot.save", strong("Export plot as png"),
+                                                                  style ="border-radius: 10px; border-width: 3px;font-size: 20px;",
+                                                                  width = "100%")
                                     )
                    ),
                    ## Historiograph ----
@@ -7031,9 +7139,11 @@ server <- function(input, output,session){
                                         collapsed = FALSE,
                                         selectInput(inputId = "titlelabel",
                                                     label = "Node label",
-                                                    choices = c("Short id (1st Author, Year)" = "FALSE",
-                                                                "Document Title" = "TRUE"),
-                                                    selected = "FALSE"),
+                                                    choices = c("Short id (1st Author, Year)" = "short",
+                                                                "Document Title" = "title",
+                                                                "Authors' Keywords" = "keywords",
+                                                                "Keywords Plus" = "keywordsplus"),
+                                                    selected = "short"),
                                         fluidRow(column(6,
                                                         numericInput(inputId = "histlabelsize",
                                                                      label = "Label size",
@@ -7047,31 +7157,26 @@ server <- function(input, output,session){
                                                                      max = 20,
                                                                      value = 4, step = 1)))
                                     ),
-                                    selectInput(
-                                      'HGdpi',
-                                      h4(strong(
-                                        "Export plot"
-                                      )),
-                                      choices=c(
-                                        "dpi value" = "null",
-                                        "75 dpi" = "75",
-                                        "150 dpi" = "150",
-                                        "300 dpi" = "300",
-                                        "600 dpi" = "600"
-                                      ),
-                                      selected = "null"
-                                    ),
-                                    conditionalPanel(condition = "input.HGdpi != 'null'",
-                                                     sliderInput(
-                                                       'HGh',
-                                                       h4(em(strong(
-                                                         "Height (in inches)"
-                                                       ))),
-                                                       value = 7, min = 1, max = 20, step = 1),
-                                                     downloadButton("HGplot.save", strong("Export plot as png"),
-                                                                    style ="border-radius: 10px; border-width: 3px;font-size: 20px;",
-                                                                    width = "100%")
-                                    )
+                                    br(),
+                                    selectInput("HGh",
+                                                h4(strong("Export plot")),
+                                                choices = c(
+                                                  "Select the image scale" = 0,
+                                                  "screen resolution x1" = 1,
+                                                  "screen resolution x2" = 2,
+                                                  "screen resolution x3" = 3,
+                                                  "screen resolution x4" = 4,
+                                                  "screen resolution x5" = 5,
+                                                  "screen resolution x6" = 6,
+                                                  "screen resolution x7" = 7,
+                                                  "screen resolution x8" = 8
+                                                ),
+                                                selected = 0),
+                                    conditionalPanel(condition = "input.HGh != 0",
+                                        actionButton("HGplot.save", strong("Export plot as png"),
+                                                                 style ="border-radius: 10px; border-width: 3px;font-size: 20px;",
+                                                                 width = "100%")
+                                   )
                    ),
                    ## Collaboration Network ----
                    conditionalPanel(condition = 'input.sidebarmenu == "collabNetwork"',
@@ -7235,7 +7340,26 @@ server <- function(input, output,session){
                                            downloadButton("networkCol.fig", strong("Save HTML"),
                                                           style ="border-radius: 10px; border-width: 3px;font-size: 15px;",
                                                           width = "100%")
-                                    )
+                                    )), 
+                                    br(),
+                                    selectInput("colRes",
+                                                h4(strong("Export plot")),
+                                                choices = c(
+                                                  "Select the image scale" = 0,
+                                                  "screen resolution x1" = 1,
+                                                  "screen resolution x2" = 2,
+                                                  "screen resolution x3" = 3,
+                                                  "screen resolution x4" = 4,
+                                                  "screen resolution x5" = 5,
+                                                  "screen resolution x6" = 6,
+                                                  "screen resolution x7" = 7,
+                                                  "screen resolution x8" = 8
+                                                ),
+                                                selected = 0),
+                                    conditionalPanel(condition = "input.colRes != 0",
+                                                     actionButton("colPlot.save", strong("Export plot as png"),
+                                                                  style ="border-radius: 10px; border-width: 3px;font-size: 20px;",
+                                                                  width = "100%")
                                     )
                    ),
                    ## Collaboration World Map ----

@@ -1,9 +1,18 @@
 Package: bibliometrix
 Type: Package
 Title: Comprehensive Science Mapping Analysis
-Version: 4.0.0
-Authors@R: c(person("Massimo", "Aria", email = "aria@unina.it", role=c("cre","aut")),
-             person("Corrado", "Cuccurullo", email = "cuccurullocorrado@gmail.com", role="aut"))
+Version: 4.0.1
+Authors@R: c(
+    person(given = "Massimo",
+           family = "Aria",
+           role = c("cre", "aut", "cph"),
+           email = "aria@unina.it",
+           comment = c(ORCID = "0000-0002-8517-9411")),
+    person(given = "Corrado", 
+           family = "Cuccurullo", 
+           role = "aut",
+           email = "cuccurullocorrado@gmail.com",
+           comment = c(ORCID = "0000-0002-7401-8575")))
 Description: Tool for quantitative research in scientometrics and bibliometrics.
     It provides various routines for importing bibliographic data from 'SCOPUS',
     'Clarivate Analytics Web of Science' (<https://www.webofknowledge.com/>), 'Digital Science Dimensions' 
@@ -22,13 +31,14 @@ Imports: stats, grDevices, bibliometrixData, dimensionsR, dplyr, DT,
         factoextra, FactoMineR, forcats, ggplot2, ggrepel, igraph,
         Matrix, plotly, openxlsx, pubmedR, RColorBrewer, readr, readxl,
         rscopus, shiny, SnowballC, stringdist, stringr, tidyr, tidytext
-Suggests: knitr, rmarkdown, testthat (>= 2.1.0), shinycssloaders,
-        visNetwork, wordcloud2
-RoxygenNote: 7.2.0
+Suggests: knitr, rmarkdown, openalexR, testthat (>= 3.0.0),
+        shinycssloaders, visNetwork, wordcloud2
+RoxygenNote: 7.2.1
 NeedsCompilation: no
-Author: Massimo Aria [cre, aut],
-  Corrado Cuccurullo [aut]
+Config/testthat/edition: 3
+Packaged: 2022-09-16 16:32:10 UTC; massimoaria
+Author: Massimo Aria [cre, aut, cph] (<https://orcid.org/0000-0002-8517-9411>),
+  Corrado Cuccurullo [aut] (<https://orcid.org/0000-0002-7401-8575>)
 Maintainer: Massimo Aria <aria@unina.it>
-Packaged: 2022-06-15 15:00:34 UTC; massimoaria
 Repository: CRAN
-Date/Publication: 2022-06-15 15:40:17 UTC
+Date/Publication: 2022-09-16 16:56:03 UTC

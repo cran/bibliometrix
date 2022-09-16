@@ -609,7 +609,10 @@ wordlist <- function(M, Field, n, measure, ngrams, remove.terms=NULL, synonyms=N
            }},
          AB={if (!("AB_TM" %in% names(M))){
            v=tableTag(M,"AB", ngrams=ngrams, remove.terms = remove.terms, synonyms = synonyms)
-         }}
+         }},
+         WC={
+           v=tableTag(M,"WC")
+         }
   )
   names(v)=tolower(names(v))
   #v=tableTag(values$M,"ID")
@@ -749,8 +752,8 @@ historiograph <- function(input,values){
     values$histResults <- histNetwork(values$M, min.citations=min.cit, sep = ";")
     values$Histfield="done"
   }
-  titlelabel <- input$titlelabel=="TRUE"
-  values$histlog<- (values$histPlot <- histPlot(values$histResults, n=input$histNodes, size =input$histsize, labelsize = input$histlabelsize, title_as_label = titlelabel, verbose=FALSE))
+  #titlelabel <- input$titlelabel
+  values$histlog<- (values$histPlot <- histPlot(values$histResults, n=input$histNodes, size =input$histsize, labelsize = input$histlabelsize, label = input$titlelabel, verbose=FALSE))
   return(values)
 }
 
@@ -834,6 +837,11 @@ cocNetwork <- function(input,values){
                #}
                values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "abstracts", n = n, sep = ";")
                values$Title= "Abstract Words network"
+             },
+             WC={
+               WSC <- cocMatrix(values$M, Field="WC", binary=FALSE)
+               values$NetWords <- crossprod(WSC,WSC)
+               values$Title= "Subject Categories network"
              })
       
     }
@@ -1038,14 +1046,10 @@ netLayout <- function(type){
 }
 
 savenetwork <- function(con, values){
-  vn=values$network$vn
-  visNetwork::visNetwork(nodes = vn$nodes, edges = vn$edges, type="full", smooth=TRUE, physics=FALSE, height = "2000px",width = "2000px" ) %>%
-    visNetwork::visNodes(shape="box", font=list(color="black"),scaling=list(label=list(enables=TRUE))) %>%
-    visNetwork::visIgraphLayout(layout = values$network$l) %>%
-    visNetwork::visEdges(smooth = values$network$curved) %>%
-    visNetwork::visOptions(highlightNearest =list(enabled = T, hover = T, degree=1), nodesIdSelection = T) %>%
-    visNetwork::visInteraction(dragNodes = TRUE, navigationButtons = TRUE, hideEdgesOnDrag = TRUE)  %>% visNetwork::visExport() %>%
-    visNetwork::visPhysics(enabled = FALSE) %>% visNetwork::visSave(con)
+
+  values$network$VIS %>% 
+    visOptions(height = "800px") %>% 
+    visNetwork::visSave(con)
 }
 
 igraph2vis<-function(g,curved,labelsize,opacity,type,shape, net, shadow=TRUE){
@@ -1106,11 +1110,135 @@ igraph2vis<-function(g,curved,labelsize,opacity,type,shape, net, shadow=TRUE){
     visNetwork::visEdges(smooth = curved) %>%
     visNetwork::visOptions(highlightNearest =list(enabled = T, hover = T, degree=1), nodesIdSelection = T) %>%
     visNetwork::visInteraction(dragNodes = TRUE, navigationButtons = TRUE, hideEdgesOnDrag = TRUE) %>%
-    visNetwork::visOptions(manipulation = TRUE) %>%
-    visNetwork::visExport(type = "png", name = "network",
-              label = paste0("Export graph as png"), background = "#fff",
-              float = "right", style = NULL, loadDependencies = TRUE)
+    visNetwork::visOptions(manipulation = TRUE) #%>%
+    #visNetwork::visExport(type = "png", name = "network",
+    #          label = paste0("Export graph as png"), background = "#fff",
+    #          float = "right", style = NULL, loadDependencies = TRUE)
   #values$COCVIS=VIS
   return(list(VIS=VIS,vn=vn, type=type, l=l, curved=curved))
+}
+
+hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", opacity=0.7, labeltype="short", timeline=TRUE){
+  
+  LABEL <- igraph::V(net$net)$id
+  
+  LABEL[igraph::V(net$net)$labelsize==0] <- ""
+  
+  layout <- net$layout %>% 
+    dplyr::select(.data$x,.data$y,.data$color,.data$name)
+  
+  vn <- visNetwork::toVisNetworkData(net$net)
+  if (labeltype != "short"){
+    vn$nodes$label <- paste0(vn$nodes$years,": ",LABEL)
+  }else{
+    vn$nodes$label <- LABEL
+  }
+  
+  vn$nodes <- dplyr::left_join(vn$nodes,layout, by=c("id"="name"))
+  
+  vn$edges$num <- 1
+  vn$edges$dashes <- FALSE
+  vn$edges$dashes[vn$edges$lty==2] <- TRUE
+  vn$edges$color <- "grey"
+  
+  ## opacity
+  vn$nodes$font.color <- adjustcolor(vn$nodes$color,alpha.f=min(c(opacity+0.1,1)))
+  
+  vn$nodes$color <- adjustcolor(vn$nodes$color,alpha.f=min(c(opacity-0.2,1)))
+  vn$edges$color <- adjustcolor(vn$edges$color,alpha.f=opacity-0.2)
+  vn$edges$smooth <- curved 
+  
+  ## removing multiple edges
+  vn$edges=unique(vn$edges)
+  
+  ## labelsize
+  scalemin=20
+  scalemax=150
+  size=10*labelsize
+  size[size<scalemin]=scalemin
+  size[size>scalemax]=scalemax
+  vn$nodes$font.size=size*0.5
+  #vn$nodes$size <- vn$nodes$font.size*0.5
+  vn$nodes$size <- nodesize*2
+  
+  if (shape %in% c("dot","square")){
+    vn$nodes$font.vadjust <- -0.7*vn$nodes$font.size
+  }else{
+    vn$nodes$font.vadjust <-0
+  }
+  
+  text_data <- net$graph.data %>% 
+    select(.data$name, .data$DOI, .data$LCS,.data$GCS) %>% 
+    rename(id = .data$name) %>% 
+    filter(!duplicated(.data$id))
+  
+  vn$nodes <- vn$nodes %>% left_join(text_data, by = "id")
+  
+  ## split node tooltips into two strings
+  title <- strsplit(stringr::str_to_title(vn$nodes$title), " ")
+  
+  vn$nodes$title <- unlist(lapply(title, function(l){
+    n <- floor(length(l)/2)
+    paste0(paste(l[1:n], collapse=" ", sep=""),"<br>",paste(l[(n+1):length(l)], collapse=" ", sep=""))
+  }))
+  
+  vn$nodes <- vn$nodes %>%
+    mutate(title = paste("<b>Title</b>: ",
+                         .data$title,
+                         "<br><b>DOI</b>: ",
+                         paste0(
+                           '<a href=\"https://doi.org/',
+                           .data$DOI,
+                           '\" target=\"_blank\">',
+                           #"DOI: ",
+                        .data$DOI, '</a>'),
+                        "<br><b>GCS</b>: ",
+                        .data$GCS, "<br><b>LCS</b>: ",
+                        .data$LCS, sep=""))
+  
+  ## add time line
+  vn$nodes$group <- "normal"
+  vn$nodes$shape <- "dot"
+  
+  nr <- nrow(vn$nodes)
+  y <- max(vn$nodes$y)
+  
+  vn$nodes[nr+1,c("id","title","label","color","font.color")] <-
+    c(rep("logo",3),"black","white")
+  vn$nodes$x[nr+1] <- max(vn$nodes$x, na.rm=TRUE)
+  vn$nodes$y[nr+1] <- y
+  vn$nodes$size[nr+1] <- vn$nodes$size[nr]*4
+  vn$nodes$years[nr+1] <- as.numeric(vn$nodes$x[nr+1])
+  vn$nodes$font.size[nr+1] <- vn$nodes$font.size[nr]
+  vn$nodes$group[nr+1] <- "logo"
+  vn$nodes$shape[nr+1] <- "image"
+  vn$nodes$image[nr+1] <- "logo.jpg"
+  vn$nodes$fixed.x <- TRUE
+  vn$nodes$fixed.y <- FALSE
+  vn$nodes$fixed.y[nr+1] <- TRUE
+  
+  coords <- vn$nodes[,c("x","y")] %>% 
+    as.matrix()
+  
+  coords[,2] <- coords[,2]^(1/2)
+  
+  tooltipStyle = ('position: fixed;visibility:hidden;padding: 5px;white-space: nowrap;
+                  font-size:12px;font-color:black;background-color:white;')
+  
+  
+  VIS <-
+    visNetwork::visNetwork(nodes = vn$nodes, edges = vn$edges, type="full", smooth=TRUE, physics=FALSE) %>% 
+    visNetwork::visNodes(shadow=FALSE, font=list(color="black", size=vn$nodes$font.size,vadjust=vn$nodes$font.vadjust)) %>%
+    visNetwork::visIgraphLayout(layout = "layout.norm", layoutMatrix = coords, type = "full") %>%
+    visNetwork::visEdges(arrows=list(to = list(enabled = TRUE, scaleFactor = 0.5))) %>% #smooth = TRUE, 
+    visNetwork::visOptions(highlightNearest =list(enabled = T, hover = T, degree = list(from = 1), algorithm = "hierarchical"), nodesIdSelection = F,
+                           autoResize = TRUE,
+                           manipulation = FALSE, height = "100%") %>%
+    visNetwork::visInteraction(dragNodes = T, navigationButtons = F, hideEdgesOnDrag =F, tooltipStyle = tooltipStyle)
+  # visGroups(groupname = "time", shape = "icon", 
+  #           icon = list(code = "f060", size = 75)) %>% 
+  # addFontAwesome() %>% 
+  
+  return(list(VIS=VIS,vn=vn, type="historiograph", curved=curved))
 }
 

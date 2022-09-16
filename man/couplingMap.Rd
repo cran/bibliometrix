@@ -13,10 +13,12 @@ couplingMap(
   ngrams = 1,
   impact.measure = "local",
   minfreq = 5,
+  community.repulsion = 0.1,
   stemming = FALSE,
   size = 0.5,
   n.labels = 1,
-  repel = TRUE
+  repel = TRUE,
+  cluster = "walktrap"
 )
 }
 \arguments{
@@ -41,6 +43,8 @@ using code{impact.measure = "global"}, the function uses the Normalized Global C
 
 \item{minfreq}{is a integer. It indicates the minimum frequency (per thousand) of a cluster. It is a number in the range (0,1000).}
 
+\item{community.repulsion}{is a real. It indicates the repulsion force among network communities. It is a real number between 0 and 1. Default is \code{community.repulsion = 0.1}.}
+
 \item{stemming}{is logical. If it is TRUE the word (from titles or abstracts) will be stemmed (using the Porter's algorithm).}
 
 \item{size}{is numerical. It indicates the size of the cluster circles and is a number in the range (0.01,1).}
@@ -48,6 +52,8 @@ using code{impact.measure = "global"}, the function uses the Normalized Global C
 \item{n.labels}{is integer. It indicates how many labels associate to each cluster. Default is \code{n.labels = 1}.}
 
 \item{repel}{is logical. If it is TRUE ggplot uses geom_label_repel instead of geom_label.}
+
+\item{cluster}{is a character. It indicates the type of cluster to perform among ("optimal", "louvain","leiden", "infomap","edge_betweenness","walktrap", "spinglass", "leading_eigen", "fast_greedy").}
 }
 \value{
 a list containing:
