@@ -1,10 +1,3 @@
-# utils::globalVariables("CAmap"," cocNetwork","count.duplicates","countrycollaboration",
-# "degreePlot","descriptive","emptyPlot"," freqPlot","getFileNameExtension","Hindex_plot",
-# "historiograph","igraph2vis","initial","intellectualStructure","is_online","mapworld",
-# "netLayout","notifications","plot.ly","readStopwordsFile","readSynWordsFile","reduceRefs",
-# "savenetwork","socialStructure","strPreview","strSynPreview","wordlist","ValueBoxes","countryCollab")
-
-
 ### COMMON FUNCTIONS ####
 
 getFileNameExtension <- function (fn) {
@@ -37,14 +30,27 @@ strSynPreview <- function(string){
   HTML(paste("<pre>", "File Preview: ", str1,"</pre>", sep = '<br/>'))
 }
 
+# from igraph to png file
+igraph2PNG <- function(x, filename, width = 10, height = 7, dpi=75){
+  V(x)$centr <- centr_betw(x)$res
+  df <- data.frame(name=V(x)$label,cluster=V(x)$color, centr=V(x)$centr) %>% 
+    group_by(.data$cluster) %>% 
+    slice_head(n=3)
+  V(x)$label[!(V(x)$label %in% df$name)] <- ""
+  png(filename = filename, width = width, height = height, unit="in", res=dpi) 
+  grid::grid.draw(plot(x))
+  dev.off()
+}
+
 # from ggplot to plotly
-plot.ly <- function(g, flip=FALSE, side="r", aspectratio=1, size=0.15,data.type=2, height=0){
+plot.ly <- function(g, flip=FALSE, side="r", aspectratio=1, size=0.15,data.type=2, height=0, customdata=NA){
   
   g <- g + labs(title=NULL)
   
-  ggplotly(g, tooltip = "text") %>% 
+  gg <- ggplotly(g, tooltip = "text") %>% 
     config(displaylogo = FALSE,
            modeBarButtonsToRemove = c(
+             'toImage',
              'sendDataToCloud',
              'pan2d', 
              'select2d', 
@@ -53,6 +59,8 @@ plot.ly <- function(g, flip=FALSE, side="r", aspectratio=1, size=0.15,data.type=
              'hoverClosestCartesian',
              'hoverCompareCartesian'
            )) 
+  
+  return(gg)
 }
 
 freqPlot <- function(xx,x,y, textLaby,textLabx, title, values){
@@ -109,13 +117,21 @@ notifications <- function(){
   ## check connection and download notifications
   online <- is_online()
   location <- "https://www.bibliometrix.org/bs_notifications/biblioshiny_notifications.csv"
+  notifOnline=NULL
   if (isTRUE(is_online())){
-    suppressWarnings(notifOnline <- read.csv(location, header=TRUE, sep=","))
-    #notifOnline <- notifOnline[nchar(notifOnline)>2]
-    #n <- strsplit(notifOnline,",")
-    #notsOnline <- unlist(lapply(n,function(l) l[1]))
-    #linksOnline <- unlist(lapply(n,function(l) l[2]))
-    notifOnline$href[nchar(notifOnline$href)<6] <- NA
+    ## add check to avoid blocked app when internet connection is to slow
+    envir <- environment()
+    setTimeLimit(cpu = 1, elapsed = 1, transient = TRUE)
+    on.exit({
+      setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
+    })
+    tryCatch({
+      eval(expr=suppressWarnings(notifOnline <- read.csv(location, header=TRUE, sep=",")), envir = envir)
+    }, error = function(ex) {notifOnLine <- NULL}
+    )
+    if (is.null(notifOnline)){online <- FALSE}else{
+      notifOnline$href[nchar(notifOnline$href)<6] <- NA
+    }
   }
   
   ## check if a file exists on the local machine and load it
@@ -172,13 +188,18 @@ notifications <- function(){
   return(notifTot)
 }
 
-is_online <- function(site="https://www.bibliometrix.org/") {
+is_online <- function(){
+  ## add check to avoid blocked app when internet connection is to slow
+  envir <- environment()
+  setTimeLimit(cpu = 1, elapsed = 1, transient = TRUE)
+  on.exit({
+    setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
+  })
   tryCatch({
-    readLines(site,n=1)
-    TRUE
-  },
-  warning = function(w) invokeRestart("muffleWarning"),
-  error = function(e) FALSE)
+    eval(expr=suppressWarnings(resp <- curl::has_internet()), envir = envir)
+  }, error = function(ex) {resp <- FALSE}
+  )
+  return(resp)
 }
 
 initial <- function(values){
@@ -299,6 +320,15 @@ countryCollab<-function(M){
     length(unique(l))>1
   })))
   
+  M$AU1_CO=trim(gsub("[[:digit:]]","",M$AU1_CO))
+  M$AU1_CO=gsub("UNITED STATES","USA",M$AU1_CO)
+  M$AU1_CO=gsub("RUSSIAN FEDERATION","RUSSIA",M$AU1_CO)
+  M$AU1_CO=gsub("TAIWAN","CHINA",M$AU1_CO)
+  M$AU1_CO=gsub("ENGLAND","UNITED KINGDOM",M$AU1_CO)
+  M$AU1_CO=gsub("SCOTLAND","UNITED KINGDOM",M$AU1_CO)
+  M$AU1_CO=gsub("WALES","UNITED KINGDOM",M$AU1_CO)
+  M$AU1_CO=gsub("NORTH IRELAND","UNITED KINGDOM",M$AU1_CO)
+  
   df <- M %>% group_by(.data$AU1_CO) %>% 
     select(.data$AU1_CO,.data$nCO) %>% 
     summarize(Articles=n(),
@@ -336,12 +366,12 @@ Hindex_plot <- function(values, type, input){
   if (type=="author"){
     K=input$Hkauthor
     measure=input$HmeasureAuthors
-    title="Author Local Impact"
+    title="Authors' Local Impact"
     xn="Authors"
   } else {
     K=input$Hksource
     measure=input$HmeasureSources
-    title="Source Local Impact"
+    title="Sources' Local Impact"
     xn="Sources"
   }
   if (K>dim(xx)[1]){
@@ -486,7 +516,7 @@ AffiliationOverTime <- function(values,n){
     pivot_longer(cols = !Affiliation, names_to = "Year", values_to = "Articles") %>% 
     group_by(.data$Affiliation) %>% 
     mutate(Articles = cumsum(.data$Articles))
-
+  
   Affselected <- AFFY %>% 
     filter(.data$Year == max(.data$Year)) %>% 
     ungroup() %>% 
@@ -506,7 +536,7 @@ AffiliationOverTime <- function(values,n){
     geom_line()+
     labs(x = 'Year'
          , y = "Articles"
-         , title = "Affiliation Production over Time") +
+         , title = "Affiliations' Production over Time") +
     scale_x_continuous(breaks= (values$AffOverTime$Year[seq(1,length(values$AffOverTime$Year),by=ceiling(length(values$AffOverTime$Year)/20))])) +
     geom_hline(aes(yintercept=0), alpha=0.1)+
     labs(color = "Affiliation")+
@@ -650,8 +680,19 @@ readSynWordsFile <- function(file, sep=","){
 mapworld <- function(M, values){
   if (!("AU_CO" %in% names(M))){M=metaTagExtraction(M,"AU_CO")}
   CO=as.data.frame(tableTag(M,"AU_CO"),stringsAsFactors = FALSE)
+  CO$Tab=gsub("[[:digit:]]","",CO$Tab)
+  CO$Tab=gsub(".", "", CO$Tab, fixed = TRUE)
+  CO$Tab=gsub(";;", ";", CO$Tab, fixed = TRUE)
+  CO$Tab=gsub("UNITED STATES","USA",CO$Tab)
+  CO$Tab=gsub("RUSSIAN FEDERATION","RUSSIA",CO$Tab)
+  CO$Tab=gsub("TAIWAN","CHINA",CO$Tab)
+  CO$Tab=gsub("ENGLAND","UNITED KINGDOM",CO$Tab)
+  CO$Tab=gsub("SCOTLAND","UNITED KINGDOM",CO$Tab)
+  CO$Tab=gsub("WALES","UNITED KINGDOM",CO$Tab)
+  CO$Tab=gsub("NORTH IRELAND","UNITED KINGDOM",CO$Tab)
   CO$Tab=gsub("UNITED KINGDOM","UK",CO$Tab)
   CO$Tab=gsub("KOREA","SOUTH KOREA",CO$Tab)
+  
   
   map.world <- map_data("world")
   map.world$region=toupper(map.world$region)
@@ -730,6 +771,32 @@ CAmap <- function(input, values){
                                        k.max = 8, stemming=F, labelsize=input$CSlabelsize,documents=input$CSdoc,graph=FALSE, ngrams=ngrams, 
                                        remove.terms=remove.terms, synonyms = synonyms)
       
+      CSData=values$CS$docCoord
+      CSData=data.frame(Documents=row.names(CSData),CSData,stringsAsFactors = FALSE)
+      CSData$dim1=round(CSData$dim1,2)
+      CSData$dim2=round(CSData$dim2,2)
+      CSData$contrib=round(CSData$contrib,2)
+      values$CS$CSData <- CSData
+      
+      switch(input$method,
+             CA={
+               WData=data.frame(word=row.names(values$CS$km.res$data.clust), values$CS$km.res$data.clust, 
+                                stringsAsFactors = FALSE)
+               names(WData)[4]="cluster"
+             },
+             MCA={
+               WData=data.frame(word=row.names(values$CS$km.res$data.clust), values$CS$km.res$data.clust, 
+                                stringsAsFactors = FALSE)
+               names(WData)[4]="cluster"
+             },
+             MDS={
+               WData=data.frame(word=row.names(values$CS$res), values$CS$res, 
+                                cluster=values$CS$km.res$cluster,stringsAsFactors = FALSE)
+             })
+      
+      WData$Dim.1=round(WData$Dim.1,2)
+      WData$Dim.2=round(WData$Dim.2,2)
+      values$CS$WData <- WData
       
     }else{emptyPlot("Selected field is not included in your data collection")
       values$CS=list("NA")}
@@ -744,16 +811,25 @@ CAmap <- function(input, values){
 historiograph <- function(input,values){
   
   min.cit <- 1
-  # if (input$histsearch=="FAST"){
-  #   min.cit=quantile(values$M$TC,0.75, na.rm = TRUE)
-  # }else{min.cit=1}
-  
-  if (values$Histfield=="NA"){
+
+  #if (values$Histfield=="NA"){
     values$histResults <- histNetwork(values$M, min.citations=min.cit, sep = ";")
-    values$Histfield="done"
-  }
+  # values$Histfield="done"
+  #}
+  
   #titlelabel <- input$titlelabel
   values$histlog<- (values$histPlot <- histPlot(values$histResults, n=input$histNodes, size =input$histsize, labelsize = input$histlabelsize, label = input$titlelabel, verbose=FALSE))
+  values$histResults$histData$DOI<- paste0('<a href=\"https://doi.org/',values$histResults$histData$DOI,'\" target=\"_blank\">',values$histResults$histData$DOI,'</a>')
+  values$histResults$histData <- values$histResults$histData %>% 
+    left_join(
+      values$histPlot$layout %>% 
+        select(.data$name,.data$color), by= c("Paper" = "name")
+    ) %>% 
+    drop_na(.data$color) %>% 
+    mutate(cluster = match(.data$color,unique(.data$color))) %>% 
+    select(!.data$color) %>% 
+    group_by(.data$cluster) %>% 
+    arrange(.data$Year, .by_group = TRUE)
   return(values)
 }
 
@@ -765,11 +841,7 @@ degreePlot <- function(net){
   
   deg <- net$nodeDegree %>% 
     mutate(x = row_number())
-  # ,
-  #          diff = c(diff(ma(.data$degree,10))*-1,0))
-  # cutting <- deg %>% 
-  #   slice_max(.data$diff, n=2)
-  # 
+ 
   p <- ggplot(data = deg, aes(x=.data$x, y=.data$degree, 
                               text=paste(.data$node," - Degree ",round(.data$degree,3), sep="")))+
     geom_point()+
@@ -863,9 +935,7 @@ cocNetwork <- function(input,values){
       label=igraph::V(g)$name
       ind=which(tolower(Y$df$item) %in% label)
       df=Y$df[ind,]
-      
-      #bluefunc <- colorRampPalette(c("lightblue", "darkblue"))
-      #col=bluefunc((diff(range(df$year))+1)*10)
+
       col=hcl.colors((diff(range(df$year_med))+1)*10, palette="Blues 3")
       igraph::V(g)$color=col[(max(df$year_med)-df$year_med+1)*10]
       igraph::V(g)$year_med=df$year_med
@@ -1046,13 +1116,13 @@ netLayout <- function(type){
 }
 
 savenetwork <- function(con, values){
-
+  
   values$network$VIS %>% 
     visOptions(height = "800px") %>% 
     visNetwork::visSave(con)
 }
 
-igraph2vis<-function(g,curved,labelsize,opacity,type,shape, net, shadow=TRUE){
+igraph2vis<-function(g,curved,labelsize,opacity,type,shape, net, shadow=TRUE, edgesize=5){
   
   LABEL=igraph::V(g)$name
   
@@ -1066,57 +1136,142 @@ igraph2vis<-function(g,curved,labelsize,opacity,type,shape, net, shadow=TRUE){
   vn$edges$dashes[vn$edges$lty==2]=TRUE
   
   ## opacity
-  vn$nodes$color=adjustcolor(vn$nodes$color,alpha.f=min(c(opacity+0.2,1)))
-  vn$edges$color=adjustcolor(vn$edges$color,alpha.f=opacity)
-  
-  ## removing multiple edges
-  vn$edges=unique(vn$edges)
-  
-  ## labelsize
-  scalemin=20
-  scalemax=150
-  Min=min(vn$nodes$font.size)
-  Max=max(vn$nodes$font.size)
-  if (Max>Min){
-    size=(vn$nodes$font.size-Min)/(Max-Min)*15*labelsize+10
-  } else {size=10*labelsize}
-  size[size<scalemin]=scalemin
-  size[size>scalemax]=scalemax
-  vn$nodes$font.size=size
-  l<-netLayout(type)
-  
-  ### TO ADD SHAPE AND FONT COLOR OPTIONS
-  coords <- net$layout
-  
-  vn$nodes$size <- vn$nodes$font.size*0.8
-  
-  if (shape %in% c("text")){
-    vn$nodes$font.color <- vn$nodes$color
-  }else{
-    vn$nodes$font.color <- "black"
-  }
-  
-  if (shape %in% c("dot","square")){
-    vn$nodes$font.vadjust <- -0.7*vn$nodes$font.size
-  }else{
-    vn$nodes$font.vadjust <-0
-  }
-  
-  VIS<-
-    visNetwork::visNetwork(nodes = vn$nodes, edges = vn$edges, type="full", smooth=TRUE, physics=FALSE) %>%
-    #visNodes(shape=shape, font=list(color="black")) %>%
-    visNetwork::visNodes(shadow=shadow, shape=shape, font=list(color="black", size=vn$nodes$font.size,vadjust=vn$nodes$font.vadjust)) %>%
-    visNetwork::visIgraphLayout(layout = "layout.norm", layoutMatrix = coords) %>%
-    visNetwork::visEdges(smooth = curved) %>%
-    visNetwork::visOptions(highlightNearest =list(enabled = T, hover = T, degree=1), nodesIdSelection = T) %>%
-    visNetwork::visInteraction(dragNodes = TRUE, navigationButtons = TRUE, hideEdgesOnDrag = TRUE) %>%
-    visNetwork::visOptions(manipulation = TRUE) #%>%
-    #visNetwork::visExport(type = "png", name = "network",
-    #          label = paste0("Export graph as png"), background = "#fff",
-    #          float = "right", style = NULL, loadDependencies = TRUE)
-  #values$COCVIS=VIS
-  return(list(VIS=VIS,vn=vn, type=type, l=l, curved=curved))
+  vn$nodes$color=adjustcolor(vn$nodes$color,alpha.f=min(c(opacity,1)))
+  ## set a darkest gray for iter-cluster edges
+  vn$edges$color <- paste(substr(vn$edges$color,1,7),"90",sep="")
+  vn$edges$color[substr(vn$edges$color,1,7)=="#B3B3B3"] <- "#69696960"
+    vn$edges$color <- adjustcolor(vn$edges$color,alpha.f=opacity)
+    
+    ## removing multiple edges
+    vn$edges <- unique(vn$edges)
+
+    vn$edges$width <- vn$edges$width^2/(max(vn$edges$width^2))*(10+edgesize)
+
+    # if (edgesize==0){
+    #   vn$edges$hidden <- TRUE
+    #   }else{vn$edges$hidden <- FALSE}
+        
+    ## labelsize
+    vn$nodes$font.size <- vn$nodes$deg
+    scalemin <- 20
+    scalemax <- 150
+    Min <- min(vn$nodes$font.size)
+    Max <- max(vn$nodes$font.size)
+    if (Max>Min){
+      size=(vn$nodes$font.size-Min)/(Max-Min)*15*labelsize+10
+    } else {size=10*labelsize}
+    size[size<scalemin]=scalemin
+    size[size>scalemax]=scalemax
+    vn$nodes$font.size=size
+    l<-netLayout(type)
+    
+    ### TO ADD SHAPE AND FONT COLOR OPTIONS
+    coords <- net$layout
+    
+    vn$nodes$size <- vn$nodes$font.size*0.7
+    
+    #vn$nodes$font.color <- adjustcolor("black", alpha.f = min(c(opacity,1)))
+    
+    if (shape %in% c("dot","square")){
+      vn$nodes$font.vadjust <- -0.7*vn$nodes$font.size
+    }else{
+      vn$nodes$font.vadjust <-0
+    }
+    
+    opacity_font <- sqrt((vn$nodes$font.size-min(vn$nodes$font.size))/diff(range(vn$nodes$font.size)))*opacity+0.3
+    if(is.nan(opacity_font[1])) opacity_font <- rep(0.3,length(opacity_font))
+    
+    if (labelsize>0){
+      vn$nodes$font.color <- unlist(lapply(opacity_font, function(x) adjustcolor("black",alpha.f = x)))
+    }else{
+        vn$nodes$font.color <- adjustcolor("black", alpha.f = 0)
+        }
+
+    VIS<-
+      visNetwork::visNetwork(nodes = vn$nodes, edges = vn$edges, type="full", smooth=TRUE, physics=FALSE) %>%
+      visNetwork::visNodes(shadow=shadow, shape=shape, font=list(color=vn$nodes$font.color, size=vn$nodes$font.size,vadjust=vn$nodes$font.vadjust)) %>%
+      visNetwork::visIgraphLayout(layout = "layout.norm", layoutMatrix = coords, type = "full") %>%
+      visNetwork::visEdges(smooth = list(type="horizontal")) %>%
+      visNetwork::visOptions(highlightNearest =list(enabled = T, hover = T, degree=1), nodesIdSelection = T) %>%
+      visNetwork::visInteraction(dragNodes = TRUE, navigationButtons = F, hideEdgesOnDrag = TRUE) %>%
+      visNetwork::visOptions(manipulation = curved, height ="100%", width = "100%")
+    
+    return(list(VIS=VIS,vn=vn, type=type, l=l, curved=curved))
 }
+
+## visnetwork for subgraphs
+igraph2visClust<-function(g,curved=FALSE,labelsize=3,opacity=0.7,shape="dot",shadow=TRUE, edgesize=5){
+  
+  LABEL=igraph::V(g)$name
+  
+  LABEL[igraph::V(g)$labelsize==0]=""
+  
+  vn <- visNetwork::toVisNetworkData(g)
+  
+  vn$nodes$label=LABEL
+  vn$edges$num=1
+  vn$edges$dashes=FALSE
+  vn$edges$dashes[vn$edges$lty==2]=TRUE
+  
+  ## opacity
+  vn$nodes$color=adjustcolor(vn$nodes$color,alpha.f=min(c(opacity,1)))
+  ## set a darkest gray for iter-cluster edges
+  vn$edges$color <- paste(substr(vn$edges$color,1,7),"90",sep="")
+  vn$edges$color[substr(vn$edges$color,1,7)=="#B3B3B3"] <- "#69696960"
+    vn$edges$color <- adjustcolor(vn$edges$color,alpha.f=opacity)
+    
+    ## removing multiple edges
+    vn$edges <- unique(vn$edges)
+    
+    vn$edges$width <- vn$edges$width^2/(max(vn$edges$width^2))*(5+edgesize)
+    
+    ## labelsize
+    scalemin <- 20
+    scalemax <- 100
+    # aggiunta
+    vn$nodes$font.size <- vn$nodes$deg
+    #
+    Min <- min(vn$nodes$font.size)
+    Max <- max(vn$nodes$font.size)
+    if (Max>Min){
+      size=(vn$nodes$font.size-Min)/(Max-Min)*15*labelsize#+10
+    } else {size=5*labelsize}
+    size[size<scalemin]=scalemin
+    size[size>scalemax]=scalemax
+    vn$nodes$font.size=size
+    #l<-netLayout(type)
+    
+    ### TO ADD SHAPE AND FONT COLOR OPTIONS
+
+    vn$nodes$size <- vn$nodes$font.size*0.4
+    
+    if (shape %in% c("dot","square")){
+      vn$nodes$font.vadjust <- -0.7*vn$nodes$font.size
+    }else{
+      vn$nodes$font.vadjust <-0
+    }
+    
+    opacity_font <- sqrt((vn$nodes$font.size-min(vn$nodes$font.size))/diff(range(vn$nodes$font.size)))*opacity+0.3
+    if(is.nan(opacity_font[1])) opacity_font <- rep(0.3,length(opacity_font)) 
+    
+    if (labelsize>0){
+      vn$nodes$font.color <- unlist(lapply(opacity_font, function(x) adjustcolor("black",alpha.f = x)))
+    }else{
+      vn$nodes$font.color <- adjustcolor("black", alpha.f = 0)
+    }
+    
+    VIS<-
+      visNetwork::visNetwork(nodes = vn$nodes, edges = vn$edges, type="full", smooth=TRUE, physics=FALSE) %>%
+      visNetwork::visNodes(shadow=shadow, shape=shape, font=list(color=vn$nodes$font.color, size=vn$nodes$font.size,vadjust=vn$nodes$font.vadjust)) %>%
+      visNetwork::visIgraphLayout(layout = "layout_nicely", type = "full") %>%
+      visNetwork::visEdges(smooth = list(type="horizontal")) %>%
+      visNetwork::visOptions(highlightNearest =list(enabled = T, hover = T, degree=1), nodesIdSelection = T) %>%
+      visNetwork::visInteraction(dragNodes = TRUE, navigationButtons = F, hideEdgesOnDrag = TRUE) %>%
+      visNetwork::visOptions(manipulation = curved, height ="100%", width = "100%")
+    
+    return(list(VIS=VIS,vn=vn))
+}
+
 
 hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", opacity=0.7, labeltype="short", timeline=TRUE){
   
@@ -1128,6 +1283,7 @@ hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", o
     dplyr::select(.data$x,.data$y,.data$color,.data$name)
   
   vn <- visNetwork::toVisNetworkData(net$net)
+  
   if (labeltype != "short"){
     vn$nodes$label <- paste0(vn$nodes$years,": ",LABEL)
   }else{
@@ -1140,9 +1296,9 @@ hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", o
   vn$edges$dashes <- FALSE
   vn$edges$dashes[vn$edges$lty==2] <- TRUE
   vn$edges$color <- "grey"
-  
+    
   ## opacity
-  vn$nodes$font.color <- adjustcolor(vn$nodes$color,alpha.f=min(c(opacity+0.1,1)))
+  vn$nodes$font.color <- vn$nodes$color
   
   vn$nodes$color <- adjustcolor(vn$nodes$color,alpha.f=min(c(opacity-0.2,1)))
   vn$edges$color <- adjustcolor(vn$edges$color,alpha.f=opacity-0.2)
@@ -1158,7 +1314,6 @@ hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", o
   size[size<scalemin]=scalemin
   size[size>scalemax]=scalemax
   vn$nodes$font.size=size*0.5
-  #vn$nodes$size <- vn$nodes$font.size*0.5
   vn$nodes$size <- nodesize*2
   
   if (shape %in% c("dot","square")){
@@ -1168,14 +1323,14 @@ hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", o
   }
   
   text_data <- net$graph.data %>% 
-    select(.data$name, .data$DOI, .data$LCS,.data$GCS) %>% 
-    rename(id = .data$name) %>% 
+    select(.data$Label, .data$DOI, .data$LCS,.data$GCS) %>% 
+    rename(id = .data$Label) %>% 
     filter(!duplicated(.data$id))
   
   vn$nodes <- vn$nodes %>% left_join(text_data, by = "id")
   
   ## split node tooltips into two strings
-  title <- strsplit(stringr::str_to_title(vn$nodes$title), " ")
+  title <- strsplit(stringi::stri_trans_totitle(vn$nodes$title), " ")
   
   vn$nodes$title <- unlist(lapply(title, function(l){
     n <- floor(length(l)/2)
@@ -1183,6 +1338,8 @@ hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", o
   }))
   
   vn$nodes <- vn$nodes %>%
+    #select(!.data$LCS.y) %>% 
+    #rename(LCS = .data$LCS.x) %>% 
     mutate(title = paste("<b>Title</b>: ",
                          .data$title,
                          "<br><b>DOI</b>: ",
@@ -1191,21 +1348,22 @@ hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", o
                            .data$DOI,
                            '\" target=\"_blank\">',
                            #"DOI: ",
-                        .data$DOI, '</a>'),
-                        "<br><b>GCS</b>: ",
-                        .data$GCS, "<br><b>LCS</b>: ",
-                        .data$LCS, sep=""))
+                           .data$DOI, '</a>'),
+                         "<br><b>GCS</b>: ",
+                         .data$GCS, "<br><b>LCS</b>: ",
+                         .data$LCS, sep=""))
   
   ## add time line
   vn$nodes$group <- "normal"
   vn$nodes$shape <- "dot"
+  vn$nodes$shadow <- TRUE
   
   nr <- nrow(vn$nodes)
   y <- max(vn$nodes$y)
   
   vn$nodes[nr+1,c("id","title","label","color","font.color")] <-
     c(rep("logo",3),"black","white")
-  vn$nodes$x[nr+1] <- max(vn$nodes$x, na.rm=TRUE)
+  vn$nodes$x[nr+1] <- max(vn$nodes$x, na.rm=TRUE)+1
   vn$nodes$y[nr+1] <- y
   vn$nodes$size[nr+1] <- vn$nodes$size[nr]*4
   vn$nodes$years[nr+1] <- as.numeric(vn$nodes$x[nr+1])
@@ -1216,6 +1374,7 @@ hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", o
   vn$nodes$fixed.x <- TRUE
   vn$nodes$fixed.y <- FALSE
   vn$nodes$fixed.y[nr+1] <- TRUE
+  vn$nodes$shadow[nr+1] <- FALSE
   
   coords <- vn$nodes[,c("x","y")] %>% 
     as.matrix()
@@ -1225,20 +1384,197 @@ hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", o
   tooltipStyle = ('position: fixed;visibility:hidden;padding: 5px;white-space: nowrap;
                   font-size:12px;font-color:black;background-color:white;')
   
+  ## Font opacity
+  vn$nodes$LCS[is.na(vn$nodes$LCS)] <- max(vn$nodes$LCS, na.rm=TRUE)
+  opacity_font <- sqrt((vn$nodes$LCS-min(vn$nodes$LCS))/diff(range(vn$nodes$LCS)))*0.6+0.4
+  
+  vn$nodes$size <- opacity_font*5*nodesize
+  vn$nodes$size[nrow(vn$nodes)] <- max(5*nodesize)
+
+  for (i in 1:nrow(vn$nodes)) vn$nodes$font.color[i] <-adjustcolor(vn$nodes$font.color[i], alpha.f = opacity_font[i])
   
   VIS <-
     visNetwork::visNetwork(nodes = vn$nodes, edges = vn$edges, type="full", smooth=TRUE, physics=FALSE) %>% 
-    visNetwork::visNodes(shadow=FALSE, font=list(color="black", size=vn$nodes$font.size,vadjust=vn$nodes$font.vadjust)) %>%
+    visNetwork::visNodes(shadow=vn$nodes$shadow, shape=shape, size = vn$nodes$size, font=list(color=vn$nodes$font.color, size=vn$nodes$font.size,vadjust=vn$nodes$font.vadjust)) %>%
     visNetwork::visIgraphLayout(layout = "layout.norm", layoutMatrix = coords, type = "full") %>%
-    visNetwork::visEdges(arrows=list(to = list(enabled = TRUE, scaleFactor = 0.5))) %>% #smooth = TRUE, 
+    visNetwork::visEdges(smooth = list(type="horizontal"), arrows=list(to = list(enabled = TRUE, scaleFactor = 0.5))) %>% 
+    visNetwork::visInteraction(dragNodes = T, navigationButtons = F, hideEdgesOnDrag =F, tooltipStyle = tooltipStyle) %>% 
     visNetwork::visOptions(highlightNearest =list(enabled = T, hover = T, degree = list(from = 1), algorithm = "hierarchical"), nodesIdSelection = F,
-                           autoResize = TRUE,
-                           manipulation = FALSE, height = "100%") %>%
-    visNetwork::visInteraction(dragNodes = T, navigationButtons = F, hideEdgesOnDrag =F, tooltipStyle = tooltipStyle)
-  # visGroups(groupname = "time", shape = "icon", 
-  #           icon = list(code = "f060", size = 75)) %>% 
-  # addFontAwesome() %>% 
-  
+                           manipulation = FALSE, height = "100%", width = "100%")
+
   return(list(VIS=VIS,vn=vn, type="historiograph", curved=curved))
+}
+
+
+### Excel report functions
+addDataWb <- function(list_df, wb, sheetname){
+  l <- length(list_df)
+  startRow <- 1
+  for (i in 1:l){
+    df <- list_df[[i]]
+    n <- nrow(df)
+    writeDataTable(wb, sheetname, df, startRow = startRow, startCol = 1, tableStyle = "TableStyleMedium20")
+    startRow <- startRow + n + 3
+  }
+  return(wb)
+}
+
+addDataScreenWb <- function(list_df, wb, sheetname){
+  ind <- which(regexpr(sheetname,wb$sheet_names)>-1)
+  if (length(ind)>0){
+    sheetname <- paste(sheetname,"(",length(ind)+1,")",sep="")
+  } 
+  addWorksheet(wb=wb, sheetName=sheetname, gridLines = FALSE)
+  if (!is.null(list_df)){
+    addDataWb(list_df, wb, sheetname)
+    col <- max(unlist(lapply(list_df,ncol))) + 2
+  } else {
+    col <- 1
+  }
+  
+  results <- list(wb=wb,col=col, sheetname=sheetname)
+  return(results)
+}
+
+addGgplotsWb <- function(list_plot, wb, sheetname, col, width=10, height=7, dpi=75){
+  l <- length(list_plot)
+  startRow <- 1
+  for (i in 1:l){
+    fileName <- tempfile(pattern = "figureImage",
+                         fileext = ".png")
+    if (inherits(list_plot[[i]], "ggplot")){
+      ggsave(plot = list_plot[[i]], filename = fileName, width = width, height = height,
+             units = "in", dpi = dpi)
+    }
+    if (inherits(list_plot[[i]], "igraph")){
+      igraph2PNG(x = list_plot[[i]], filename = fileName, width = width, height = height, dpi=dpi)
+    }  
+    insertImage(wb = wb, sheet = sheetname, file = fileName, width = width, 
+                height = height, startRow = startRow, startCol = col, 
+                units = "in", dpi = dpi)
+    startRow <- startRow + (height*6)+1
+  }
+  return(wb)
+}
+
+screenSh <- function(selector){
+  fileName <- tempfile(pattern = "figureImage",
+                       tmpdir = "",
+                       fileext = "") %>% substr(.,2,nchar(.))
+  if (is.null(selector)){
+    shinyscreenshot::screenshot(filename=fileName, download=FALSE, server_dir = tempdir())
+  } else {
+    shinyscreenshot::screenshot(selector=selector, filename=fileName, download=FALSE, server_dir = tempdir())
+  }
+  file <- paste(tempdir(),"/",fileName,".png",sep="")
+  return(file)
+}
+
+addScreenWb <- function(df, wb, width=14, height=8, dpi=75){
+  names(df) <- c("sheet","file","n")
+  if (nrow(df)>0){
+    sheet <- unique(df$sheet)
+    for (i in 1:length(sheet)){
+      sh <- sheet[i]
+      df_sh <- df %>% dplyr::filter(.data$sheet==sh)
+      l <- nrow(df_sh)
+      startRow <- 1
+      for (j in 1:l){
+        fileName <- df_sh$file[j]
+        insertImage(wb = wb, sheet = sh, file = fileName, width = width, 
+                    height = height, startRow = startRow, startCol = df_sh$n[j], 
+                    units = "in", dpi = dpi)
+        startRow <- startRow + (height*10)+3
+      }
+    }
+  }
+  return(wb)
+}
+
+addSheetToReport <- function(list_df, list_plot, sheetname, wb, dpi=75){
+  ind <- which(regexpr(sheetname,wb$sheet_names)>-1)
+  if (length(ind)>0){
+    sheetname <- paste(sheetname,"(",length(ind)+1,")",sep="")
+  } 
+  addWorksheet(wb, sheetname, gridLines = FALSE)
+  
+  if (!is.null(list_df)) {
+    col <- max(unlist(lapply(list_df,ncol))) + 2
+    wb <- addDataWb(list_df, wb = wb, sheetname = sheetname)
+  } else {col <- 1}
+  
+    if (!is.null(list_plot)){
+      wb <- addGgplotsWb(list_plot, wb = wb, sheetname = sheetname, col = col, dpi = dpi)
+    }
+  #values$sheet_name <- sheetname
+  return(wb)
+}
+
+short2long <- function(df, myC){
+  z <- unlist(lapply(myC, function(x){
+    y <- gsub(r"{\s*\([^\)]+\)}","",x)
+    gsub(y,df$long[df$short==y],x)
+  }))
+  names(myC) <- z
+  return(myC)
+}
+
+dfLabel <- function(){
+  short <- c("Empty Report", "MainInfo",            "AnnualSciProd",       "AnnualCitPerYear",    "ThreeFieldsPlot",     "MostRelSources",      "MostLocCitSources",   "BradfordLaw",         "SourceLocImpact",    
+             "SourceProdOverTime",  "MostRelAuthors",      "MostLocCitAuthors",   "AuthorProdOverTime",  "LotkaLaw",            "AuthorLocImpact",     "MostRelAffiliations", "AffOverTime",        
+             "CorrAuthCountries",   "CountrySciProd",      "CountryProdOverTime", "MostCitCountries",    "MostGlobCitDocs",     "MostLocCitDocs",      "MostLocCitRefs",      "RPYS",               
+             "MostFreqWords",       "WordCloud",           "TreeMap",             "WordFreqOverTime",        "TrendTopics",         "CouplingMap", "CoWordNet",           "ThematicMap",         "ThematicEvolution",  
+             "TE_Period_1","TE_Period_2", "TE_Period_3","TE_Period_4","TE_Period_5",       "FactorialAnalysis",   "CoCitNet",            "Historiograph",       "CollabNet",           "CollabWorldMap")
+  
+  long <- c("Empty Report", "Main Information", "Annual Scientific Production", "Annual Citation Per Year", "Three-Field Plot", "Most Relevant Sources","Most Local Cited Sources","Bradfords Law","Sources Local Impact",
+            "Sources Production over Time", "Most Relevant Authors","Most Local Cited Authors","Authors Production over Time", "Lotkas Law","Authors Local Impact","Most Relevant Affiliations","Affiliations Production over Time",
+            "Corresponding Authors Countries","Countries Scientific Production","Countries Production over Time","Most Cited Countries", "Most Global Cited Documents","Most Local Cited Documents","Most Local Cited References","Reference Spectroscopy",
+            "Most Frequent Words","WordCloud", "TreeMap", "Words Frequency over Time", "Trend Topics", "Clustering by Coupling","Co-occurence Network", "Thematic Map", "Thematic Evolution", 
+            "TE_Period_1","TE_Period_2", "TE_Period_3","TE_Period_4","TE_Period_5","Factorial Analysis", "Co-citation Network", "Historiograph", "Collaboration Network", "Countries Collaboration World Map")
+  data.frame(short=short,long=long)
+}
+
+## Ad to Report PopUp
+popUp <- function(title=NULL, type="success", btn_labels="OK"){
+  switch(type,
+         success={
+           title <- paste(title,"\n added to report",sep="")
+           subtitle <- ""
+           btn_colors = "#1d8fe1"
+           showButton = TRUE
+           timer = 3000
+         },
+         error={
+           title <- "No results to add to the report "
+           subtitle <- "Please Run the analysis and then Add it to the report"
+           btn_colors = "#913333"
+           showButton = TRUE
+           timer = 3000
+         },
+         waiting={
+           title <- "Please wait... "
+           subtitle <- "Adding results to report"
+           btn_colors = "#FFA800"
+           showButton = FALSE
+           btn_labels = NA
+           timer = NA
+         })
+  
+show_alert(
+    title = title,
+    text = subtitle,
+    type = type,
+    size = "s", 
+    closeOnEsc = TRUE,
+    closeOnClickOutside = TRUE,
+    html = FALSE,
+    showConfirmButton = showButton,
+    showCancelButton = FALSE,
+    btn_labels = btn_labels,
+    btn_colors = btn_colors,
+    timer = timer,
+    imageUrl = "",
+    animation = TRUE
+  )
 }
 

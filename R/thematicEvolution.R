@@ -11,7 +11,7 @@
 #' 
 #' @param M is a bibliographic data frame obtained by the converting function \code{\link{convert2df}}.
 #' @param field is a character object. It indicates the content field to use. Field can be one of c=("ID","DE","TI","AB"). Default value is \code{field="ID"}.
-#' @param years is a numeric vector of two or more unique cut points.
+#' @param years is a numeric vector of one or more unique cut points.
 #' @param n is numerical. It indicates the number of words to use in the network analysis
 #' @param minFreq is numerical. It indicates the min frequency of words included in to a cluster.
 #' @param ngrams is an integer between 1 and 4. It indicates the type of n-gram to extract from texts. 
@@ -44,19 +44,20 @@
 #'
 #' @export
 
-thematicEvolution <- function(M, field = "ID", years, n = 250, minFreq = 2, size = 0.5, ngrams=1, stemming = FALSE, n.labels = 1, repel = TRUE, remove.terms = NULL, synonyms = NULL, cluster="leading_eigen") 
+thematicEvolution <- function(M, field = "ID", years, n = 250, minFreq = 2, size = 0.5, ngrams=1, stemming = FALSE, n.labels = 1, repel = TRUE, remove.terms = NULL, synonyms = NULL, cluster="walktrap") 
 {
   list_df <-  timeslice(M, breaks = years)
   K <-  length(list_df)
   S <-  net <-  res <-  list()
   Y <-  NULL
-  pdf(file = NULL)
+  pdf(file = NULL) ## to improve adding graph=FALSE in thematicMap
   for (k in 1:K) {
     Mk <-  list_df[[k]]
     Y[k] <-  paste(min(Mk$PY), "-", max(Mk$PY), sep = "", collapse = "")
     resk <- thematicMap(Mk, field = field, n = n, minfreq = minFreq, ngrams=ngrams,
                         stemming = stemming, size = size, n.labels = n.labels, 
                         repel = repel, remove.terms = remove.terms, synonyms = synonyms, cluster=cluster)
+    resk$params <- resk$params %>% dplyr::filter(.data$params!="minfreq")
     res[[k]] <-  resk
     net[[k]] <-  resk$net
   }
@@ -139,8 +140,22 @@ thematicEvolution <- function(M, field = "ID", years, n = 250, minFreq = 2, size
   }
   ################ 
   
+  params <- list(field = field, 
+                 years = years, 
+                 n = n, 
+                 minFreq = minFreq, 
+                 size = size, 
+                 ngrams=ngrams, 
+                 stemming = stemming, 
+                 n.labels = n.labels, 
+                 repel = repel, 
+                 remove.terms = remove.terms, 
+                 synonyms = synonyms, 
+                 cluster=cluster)
   
-  results <-  list(Nodes = Nodes, Edges = edges, Data = INC[, 
-                                                          -c(1, 2)], check = TRUE, TM = res, Net = net)
+  params <- data.frame(params=names(unlist(params)),values=unlist(params), row.names = NULL)
+  
+  results <-  list(Nodes = Nodes, Edges = edges, Data = INC[, -c(1, 2)], 
+                   check = TRUE, TM = res, Net = net, params=params)
   return(results)
 }

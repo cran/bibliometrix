@@ -79,18 +79,15 @@ cocMatrix<-function(M, Field = "AU", type = "sparse", n=NULL, sep = ";",binary=T
   # etc.
   #crossprod <- Matrix::crossprod
   size<-dim(M)
+  RowNames <- row.names(M)
   
   ### REMOVE TERMS AND MERGE SYNONYMS
   if (Field %in% c("ID", "DE", "TI", "TI_TM", "AB", "AB_TM")){
     # Crete df with all terms
     
     Fi <- strsplit(M[,Field], sep)
-    TERMS <- data.frame(item = unlist(Fi), SR = rep(M$SR,lengths(Fi)))
-    TERMS <- TERMS %>% 
-      anti_join(data.frame(item=trimws(toupper(remove.terms))), by="item") %>% 
-      mutate(item = trimws(.data$item))
-    
-    
+    TERMS <- data.frame(item = trimws(unlist(Fi)), SR = rep(M$SR,lengths(Fi)))
+
     # Merge synonyms in the vector synonyms
     if (length(synonyms)>0 & is.character(synonyms)){
       s <- strsplit(toupper(synonyms),";")
@@ -102,6 +99,12 @@ cocMatrix<-function(M, Field = "AU", type = "sparse", n=NULL, sep = ";",binary=T
       for (i in 1:length(s)){
         TERMS$item[TERMS$item %in% unlist(sold[[i]])] <- snew[i]
       }
+    }
+    
+    TERMS <- TERMS %>% 
+      anti_join(data.frame(item=trimws(toupper(remove.terms))), by="item") %>% 
+      mutate(item = trimws(.data$item))
+    
       TERMS <- TERMS %>% 
         group_by(.data$SR) %>%
         summarize(item = paste(.data$item, collapse=";"))
@@ -109,9 +112,9 @@ cocMatrix<-function(M, Field = "AU", type = "sparse", n=NULL, sep = ";",binary=T
       M <- M %>% 
         left_join(TERMS, by="SR")
       M[,Field] <- M$item
-    }
+    
   }
-  
+  row.names(M) <- RowNames
   if (Field=="CR"){M$CR<-gsub("DOI;","DOI ",as.character(M$CR))}
   
   if (Field %in% names(M)){
@@ -176,8 +179,13 @@ cocMatrix<-function(M, Field = "AU", type = "sparse", n=NULL, sep = ";",binary=T
   
   if (type=="matrix" | !isTRUE(binary)){
     # Initialization of WA matrix
-    WF<-matrix(0,size[1],length(uniqueField))} else if (type=="sparse"){
-      WF<-Matrix(0,size[1],length(uniqueField))} else {print("error in type argument");return()}
+    WF<-matrix(0,size[1],length(uniqueField))
+    } else if (type=="sparse"){
+      WF<-Matrix(0,size[1],length(uniqueField))
+    } else {
+        print("error in type argument")
+      return()
+      }
   colnames(WF)<-uniqueField
   rownames(WF)<-rownames(M)
   # Population of WA matrix

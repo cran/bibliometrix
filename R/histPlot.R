@@ -38,6 +38,12 @@
 #' @export
 histPlot<-function(histResults, n=20, size = 5, labelsize = 5, title_as_label = FALSE, label = "short", verbose = TRUE){
   
+  params <- list(n = n,
+                 size = size,
+                 labelsize = labelsize,
+                 title_as_label = title_as_label,
+                 label = label)
+  
   colorlist <-  c(brewer.pal(9, 'Set1')[-6], brewer.pal(8, 'Set2')[-7], brewer.pal(12, 'Paired')[-11],brewer.pal(12, 'Set3')[-c(2,8,12)])
   ## legacy with old argument size
   if (isTRUE(size)){
@@ -68,14 +74,14 @@ histPlot<-function(histResults, n=20, size = 5, labelsize = 5, title_as_label = 
   
   switch(label,
          title={
-           title <- strsplit(stringr::str_to_title(V(bsk.network)$title), " ")
+           title <- strsplit(stringi::stri_trans_totitle(V(bsk.network)$title), " ")
            V(bsk.network)$id <- unlist(lapply(title, function(l){
              n <- floor(length(l)/2)
              paste0(paste(l[1:n], collapse=" ", sep=""),"\n",paste(l[(n+1):length(l)], collapse=" ", sep=""))
            }))
          },
          keywords={
-           kw <- strsplit(stringr::str_to_title(V(bsk.network)$keywords), ";")
+           kw <- strsplit(stringi::stri_trans_totitle(V(bsk.network)$keywords), ";")
            kw[is.na(kw)] <- "Not Available"
            V(bsk.network)$id <- unlist(lapply(kw, function(l){
              if (length(l)>1){
@@ -86,7 +92,7 @@ histPlot<-function(histResults, n=20, size = 5, labelsize = 5, title_as_label = 
            }))
          },
          keywordsplus={
-           kw <- strsplit(stringr::str_to_title(V(bsk.network)$keywordsplus), ";")
+           kw <- strsplit(stringi::stri_trans_totitle(V(bsk.network)$keywordsplus), ";")
            kw[is.na(kw)] <- "Not Available"
            V(bsk.network)$id <- unlist(lapply(kw, function(l){
              if (length(l)>1){
@@ -101,24 +107,13 @@ histPlot<-function(histResults, n=20, size = 5, labelsize = 5, title_as_label = 
          }
   )
   
-  # if (isTRUE(title_as_label)){
-  #   title <- strsplit(stringr::str_to_title(V(bsk.network)$title), " ")
-  #   V(bsk.network)$id <- unlist(lapply(title, function(l){
-  #     n <- floor(length(l)/2)
-  #     paste0(paste(l[1:n], collapse=" ", sep=""),"\n",paste(l[(n+1):length(l)], collapse=" ", sep=""))
-  #   }))
-  #   #V(bsk.network)$id <- tolower(paste(substr(V(bsk.network)$title,1,50),"...",sep=""))
-  # } else {
-  #   V(bsk.network)$id <- tolower(unlist(RR))
-  # }
-  
   # Compute node degrees (#links) and use that to set node size:
   deg <- LCS
   V(bsk.network)$size <- size
     #rep(size,length(V(bsk.network)))}
   
   #Years=histResults$histData$Year[ind]
-  Years <- as.numeric(unlist(str_extract_all(unlist(RR),"[[:digit:]]{4}$")))
+  Years <- as.numeric(unlist(stringi::stri_extract_all_regex(unlist(RR),"[[:digit:]]{4}$")))
   V(bsk.network)$years <- Years
   
   # Remove loops
@@ -237,21 +232,20 @@ histPlot<-function(histResults, n=20, size = 5, labelsize = 5, title_as_label = 
   g <- g +
     annotation_custom(logo, xmin = x[1], xmax = x[2], ymin = y[1], ymax = y[2]) 
 
+  label <- data.frame(Label = names(V(bsk.network)), stringsAsFactors = FALSE)
+  Data <-  histResults$histData
+  
+  Data <- left_join(label,Data, by = c("Label" = "Paper"))
   
   if (isTRUE(verbose)) {
     plot(g)
     
     cat("\n Legend\n\n")
     
-    label <- data.frame(Label = names(V(bsk.network)), stringsAsFactors = FALSE)
-    Data <-  histResults$histData
-    
-    Data <- left_join(label,Data, by = c("Label" = "Paper"))
-    
     print(Data[,-2])
   }
   
-  results <- list(net=bsk.network, g=g, graph.data=df_net, layout=layout_m, axis=data.frame(label=Ylabel,values=Breaks))
+  results <- list(net=bsk.network, g=g, graph.data=Data, layout=layout_m, axis=data.frame(label=Ylabel,values=Breaks), params=params)
   return(results)
 }
 

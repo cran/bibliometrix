@@ -90,7 +90,7 @@ wos <- function(M, min.citations, sep, network, verbose){
     trimws(unlist(lapply(
       strsplit(CR$ref, 'DOI', fixed = TRUE), '[', 2
     )))
-  CR$DI[is.na(CR$DI)] <- ""
+  CR$DI[is.na(CR$DI) | CR$DI=="NA"] <- ""
   CR$AU <-
     trimws(gsub("[ ]{2,}", "", (gsub(
       "\\.", " ", unlist(lapply(strsplit(CR$ref, ',', fixed = TRUE), '[', 1))
@@ -203,20 +203,23 @@ scopus <- function(M, min.citations, sep, network, verbose){
   nCum <- c(1, cumsum(n[-length(n)]))
   CR <- paste(CR, collapse = " ")
   
-  L <- str_locate_all(CR, TIpost)
-  
+  #L <- str_locate_all(CR, TIpost)
+  L <- stringi::stri_locate_all_regex(CR,TIpost, omit_no_match = TRUE)
   
   LCS <- lengths(L) / 2
   
   M$LCS <- 0
   M$LCS[papers] <- LCS
   
+
   ### HistData
   histData <- M %>%
-    select(.data$SR_FULL, .data$TI,.data$DI, .data$PY, .data$LCS, .data$TC) %>%
+    select(.data$SR_FULL, .data$TI,.data$DE,.data$ID,.data$DI, .data$PY, .data$LCS, .data$TC) %>%
     rename(
       Paper = .data$SR_FULL,
       Title = .data$TI,
+      Author_Keywords = .data$DE,
+      KeywordsPlus = .data$ID,
       DOI = .data$DI,
       Year = .data$PY,
       GCS = .data$TC
