@@ -2191,7 +2191,7 @@ server <- function(input, output,session){
     
     g=ggplot2::ggplot(AuProd, aes(x = .data$N.Articles, y = .data$Freq*100, text=paste("N.Articles: ",.data$N.Articles,"\n% of production: ",round(.data$Freq*100,1)))) +
       geom_line(aes(group="NA")) +
-      geom_area(aes(group="NA"),fill = 'grey90', alpha = .5) +
+      #geom_area(aes(group="NA"),fill = 'grey90', alpha = .5) +
       geom_line(data=AuProd, aes(y=.data$Theoretical*100, group="NA"),linetype = "dashed",color="black",alpha=0.8)+
       xlim(0,max(AuProd$N.Articles)+1)+
       labs(x = 'Documents written'
@@ -2698,7 +2698,7 @@ server <- function(input, output,session){
     } else {
       xx=xx[order(-xx[,3]),]
       xx=xx[1:k,c(1,3)]
-      laby="N. of Citations per Year"
+      laby="Average Article Citations"
     }
     
     g <- freqPlot(xx,x=2,y=1, textLaby = "Countries", textLabx = laby, title = "Most Cited Countries", values)
@@ -5347,6 +5347,7 @@ server <- function(input, output,session){
     }
   })
   
+  # REPORT ----
   ### Report Save xlsx ----
   output$report.save <- downloadHandler(
     filename = function() {
@@ -5431,21 +5432,7 @@ server <- function(input, output,session){
   }, ignoreNULL = TRUE
   )
   
-  
-  
-  # OPTIONS MENU ----
-  # observe({
-  #   if (!(input$sidebarmenu %in% c("biblioshinyy","mainInfo", "report")) & !isTRUE(values$checkControlBar)){
-  #     updateControlbar("controlbar2")
-  #     values$checkControlBar <- TRUE
-  #   }
-  #   if ((input$sidebarmenu %in% c("biblioshinyy","mainInfo", "report")) & isTRUE(values$checkControlBar)){
-  #     updateControlbar("controlbar2")
-  #     values$checkControlBar <- FALSE
-  #   }
-  # })
-  
-  ### screenshot buttons
+  ### screenshot buttons ----
   observeEvent(input$screenTFP,{
     screenshot(
       filename = paste("ThreeFieldPlot-", Sys.Date(), ".png", sep=""),

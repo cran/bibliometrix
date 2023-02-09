@@ -42,13 +42,13 @@ summary.bibliometrix<-function(object, ...){
   options(width=130)
   
   arguments <- list(...)
-  if (sum(names(arguments)=="k")==0){k=10} else {k=arguments$k}
-  if (sum(names(arguments)=="pause")==0){pause=FALSE} else {pause=arguments$pause}
-  if (sum(names(arguments)=="width")==0){options(width=120)} else {options(width=arguments$width)}
-  if (sum(names(arguments)=="verbose")==0){verbose=TRUE} else {verbose=FALSE}
-  K=k
-  Co=NULL
-  AC=NULL
+  if (sum(names(arguments)=="k")==0){k=10} else {k <- arguments$k}
+  if (sum(names(arguments)=="pause")==0){pause <- FALSE} else {pause <- arguments$pause}
+  if (sum(names(arguments)=="width")==0){options(width = 120)} else {options(width = arguments$width)}
+  if (sum(names(arguments)=="verbose")==0){verbose <- TRUE} else {verbose <- FALSE}
+  K <- k
+  Co <- NULL
+  AC <- NULL
   
   TCm <- format(mean(as.numeric(object$TotalCitation), na.rm=TRUE),digits = 4)
   TCmy <- format(mean(as.numeric(object$MostCitedPapers$TCperYear), na.rm = TRUE), digits = 4) 
@@ -116,9 +116,9 @@ summary.bibliometrix<-function(object, ...){
   names(Y)=c("Year   ", "Articles")
   if (isTRUE(verbose)) {print(Y,row.names=FALSE);cat("\n")}
   #  ny=dim(Y)[1]
-  ny=max(as.numeric(levels(Y[,1])),na.rm=TRUE)-min(as.numeric(levels(Y[,1])),na.rm=TRUE)
-  GR=((Y[nrow(Y),2]/Y[1,2])^(1/(ny))-1)*100
-  if (isTRUE(verbose)){cat("Annual Percentage Growth Rate",GR,"\n\n")}
+  # ny=max(as.numeric(levels(Y[,1])),na.rm=TRUE)-min(as.numeric(levels(Y[,1])),na.rm=TRUE)
+  # GR=((Y[nrow(Y),2]/Y[1,2])^(1/(ny))-1)*100
+  if (isTRUE(verbose)){cat("Annual Percentage Growth Rate",CAGR,"\n\n")}
 
 
   if (pause==TRUE & isTRUE(verbose)){
@@ -238,7 +238,7 @@ summary.bibliometrix<-function(object, ...){
   if (isTRUE(verbose)){print(AAA,row.names=TRUE);cat("\n")}
   } else (AAA=NULL)
 
-  summaryresults=list(MainInformation=MainInfo,MainInformationDF=MainInfoDF, AnnualProduction=Y,AnnualGrowthRate=GR,MostProdAuthors=A,MostCitedPapers=MostCitedPapers,MostProdCountries=Co,TCperCountries=AC,MostRelSources=AA,MostRelKeywords=AAA)
+  summaryresults=list(MainInformation=MainInfo,MainInformationDF=MainInfoDF, AnnualProduction=Y,AnnualGrowthRate=CAGR,MostProdAuthors=A,MostCitedPapers=MostCitedPapers,MostProdCountries=Co,TCperCountries=AC,MostRelSources=AA,MostRelKeywords=AAA)
 
   invisible(summaryresults)
   }

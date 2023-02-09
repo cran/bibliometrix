@@ -1,7 +1,7 @@
 Package: bibliometrix
 Type: Package
 Title: Comprehensive Science Mapping Analysis
-Version: 4.1.0
+Version: 4.1.1
 Authors@R: c(
     person(given = "Massimo",
            family = "Aria",
@@ -36,9 +36,9 @@ Suggests: knitr, rmarkdown, openalexR, testthat (>= 3.0.0),
 RoxygenNote: 7.2.3
 NeedsCompilation: no
 Config/testthat/edition: 3
-Packaged: 2023-01-13 10:45:55 UTC; massimoaria
+Packaged: 2023-02-09 20:16:53 UTC; massimoaria
 Author: Massimo Aria [cre, aut, cph] (<https://orcid.org/0000-0002-8517-9411>),
   Corrado Cuccurullo [aut] (<https://orcid.org/0000-0002-7401-8575>)
 Maintainer: Massimo Aria <aria@unina.it>
 Repository: CRAN
-Date/Publication: 2023-01-13 11:20:02 UTC
+Date/Publication: 2023-02-09 20:40:07 UTC
