@@ -414,7 +414,7 @@ server <- function(input, output,session){
       switch(ext,
              ### excel format
              xlsx={
-               M <- readxl::read_excel(inFile$datapath, col_types = "text") %>% as.data.frame(stringsAsFactors=FALSE)
+               M <- readxl::read_excel(inFile$datapath, col_types = "text") %>% as.data.frame()
                M$PY <- as.numeric(M$PY)
                M$TC <- as.numeric(M$TC)
                class(M) <- c("bibliometrixDB", "data.frame")
@@ -466,7 +466,7 @@ server <- function(input, output,session){
     DATAloading()   
     MData = as.data.frame(apply(values$M, 2, function(x) {
       substring(x, 1, 150)
-    }), stringsAsFactors = FALSE)
+    }))
     MData$DOI <-
       paste0(
         '<a href=\"https://doi.org/',
@@ -942,7 +942,7 @@ server <- function(input, output,session){
   contentTable <- function(values){
     MData = as.data.frame(apply(values$M, 2, function(x) {
       substring(x, 1, 150)
-    }), stringsAsFactors = FALSE)
+    }))
     MData$DOI <-
       paste0(
         '<a href=\"https://doi.org/',
@@ -1051,8 +1051,10 @@ server <- function(input, output,session){
            "all"={SO=B$SO})
     M=M[M$SO %in% SO,]
     values<-initial(values)
+    row.names(M) <- M$SR
+    class(M) <- c("bibliometrixDB", "data.frame")
     values$M=M
-    Mdisp=as.data.frame(apply(values$M,2,function(x){substring(x,1,150)}),stringsAsFactors = FALSE)    
+    Mdisp=as.data.frame(apply(values$M,2,function(x){substring(x,1,150)}))    
     if (dim(Mdisp)[1]>0){
       DT::datatable(Mdisp, rownames = FALSE, extensions = c("Buttons"),
                     options = list(pageLength = 3, dom = 'Bfrtip',
@@ -1072,7 +1074,7 @@ server <- function(input, output,session){
                                    columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(Mdisp))-1)))),
                     class = 'cell-border compact stripe') %>%
         formatStyle(names(Mdisp),  backgroundColor = 'white',textAlign = 'center', fontSize = '70%')
-    }else{Mdisp=data.frame(Message="Empty collection",stringsAsFactors = FALSE, row.names = " ")}
+    }else{Mdisp=data.frame(Message="Empty collection", row.names = " ")}
   })
   
   output$dataFiltered <- DT::renderDT({
@@ -1518,7 +1520,7 @@ server <- function(input, output,session){
   MLCSources <- eventReactive(input$applyMLCSources,{
     values$M=metaTagExtraction(values$M,"CR_SO")
     TAB=tableTag(values$M,"CR_SO")
-    TAB=data.frame(Sources=names(TAB),Articles=as.numeric(TAB),stringsAsFactors = FALSE)
+    TAB=data.frame(Sources=names(TAB),Articles=as.numeric(TAB))
     values$TABSoCit<-TAB
     xx<- TAB
     if (input$MostRelCitSourcesK>dim(xx)[1]){
@@ -1728,7 +1730,7 @@ server <- function(input, output,session){
     term=rep(term,each=dim(values$PYSO)[1])
     n=dim(values$PYSO)[1]*(dim(values$PYSO)[2]-1)
     freq=matrix(as.matrix(values$PYSO[,-1]),n,1)
-    values$SODF=data.frame(Year=rep(values$PYSO$Year,(dim(values$PYSO)[2]-1)),Source=term, Freq=freq, stringsAsFactors = TRUE)
+    values$SODF=data.frame(Year=rep(values$PYSO$Year,(dim(values$PYSO)[2]-1)),Source=term, Freq=freq)
     
     Text <- paste(values$SODF$Source," (",values$SODF$Year,") ",values$SODF$Freq, sep="")
     
@@ -2863,7 +2865,7 @@ server <- function(input, output,session){
     
     xx=data.frame(Document=as.character(TAB[,1]), DOI=as.character(TAB[,2]), Year=TAB[,3], 
                   "Local Citations"=TAB[,4], "Global Citations"=TAB[,5],"LC/GC Ratio"=TAB[6], 
-                  "Normalized Local Citations"=TAB[,7],"Normalized Global Citations"=TAB[,8], stringsAsFactors = FALSE)
+                  "Normalized Local Citations"=TAB[,7],"Normalized Global Citations"=TAB[,8])
     values$TABLocDoc=xx
     
     if (input$MostLocCitDocsK>dim(xx)[1]){
@@ -2940,7 +2942,7 @@ server <- function(input, output,session){
   ### Most Local Cited References ----
   MLCReferences <- eventReactive(input$applyMLCReferences,{
     CR <- citations(values$M,sep=input$CitRefsSep)$Cited
-    TAB <- data.frame(names(CR),as.numeric(CR),stringsAsFactors = FALSE)
+    TAB <- data.frame(names(CR),as.numeric(CR))
     names(TAB) <- c("Cited References", "Citations")
     values$TABCitRef <- TAB %>% filter(.data$`Cited References`!="ANONYMOUS, NO TITLE CAPTURED")
     
@@ -3138,7 +3140,7 @@ server <- function(input, output,session){
     
     WR=wordlist(values$M,Field=input$MostRelWords,n=Inf,measure="identity", ngrams=ngrams, remove.terms = remove.terms, synonyms = synonyms)$v
     
-    TAB=data.frame(names(WR),as.numeric(WR),stringsAsFactors = FALSE)
+    TAB=data.frame(names(WR),as.numeric(WR))
     names(TAB)=c("Words", "Occurrences")
     values$TABWord=TAB
     
@@ -3468,7 +3470,7 @@ server <- function(input, output,session){
     term=rep(term,each=dim(values$KW)[1])
     n=dim(values$KW)[1]*(dim(values$KW)[2]-1)
     freq=matrix(as.matrix(values$KW[,-1]),n,1)
-    values$DF=data.frame(Year=rep(values$KW$Year,(dim(values$KW)[2]-1)),Term=term, Freq=freq, stringsAsFactors = TRUE)
+    values$DF=data.frame(Year=rep(values$KW$Year,(dim(values$KW)[2]-1)),Term=term, Freq=freq)
     
     width_scale <- 2.5 * 26 / length(unique(values$DF$Term))
     
@@ -3954,152 +3956,32 @@ server <- function(input, output,session){
       owd <- setwd(tempdir())
       on.exit(setwd(owd))
       files <- c(paste("FactorialMap_", Sys.Date(), ".png", sep=""),
-                 paste("Dendrogram_", Sys.Date(), ".png", sep=""),
-                 paste("MostContribDocuments_", Sys.Date(), ".png", sep=""),
-                 paste("MostCitedDocuments_", Sys.Date(), ".png", sep="")
+                 paste("Dendrogram_", Sys.Date(), ".png", sep="")
+                 #paste("MostContribDocuments_", Sys.Date(), ".png", sep=""),
+                 #paste("MostCitedDocuments_", Sys.Date(), ".png", sep="")
       )
       ggsave(filename = files[1], plot = values$CS$graph_terms, dpi = values$dpi, height = values$h, width = values$h*1.5, bg="white")
-      ggsave(filename = files[2], plot = values$CS$graph_dendogram,dpi = values$dpi, height = values$h, width = values$h*2, bg="white")
-      ggsave(filename = files[3], plot = values$CS$graph_documents_Contrib, dpi = values$dpi, height = values$h, width = values$h*1.5, bg="white")
-      ggsave(filename = files[4], plot = values$CS$graph_documents_TC, dpi = values$dpi, height = values$h, width = values$h*1.5, bg="white")
-      
+      png(filename = files[2],  height = values$h, width = values$h*2, units="in", res = values$dpi)
+          plot(values$CS$graph_dendogram)
+      dev.off()
       zip(file,files)
     },
     contentType = "zip"
   )
-  
-  # saveFAModal <- function(session) {
-  #   ns <- session$ns
-  #   modalDialog(
-  #     h3(strong("Download Plots in PNG")),
-  #     br(),
-  #     h4("Factorial Map"),
-  #     div(style ="border-radius: 10px; border-width: 3px; font-size: 10px;",
-  #         #align = "center",
-  #         width="100%",
-  #         downloadBttn(outputId = "FA1plot.save", label = ("   "),
-  #                      style = "pill", color = "primary")),
-  #     br(),
-  #     h4("Dendrogram"),
-  #     div(style ="border-radius: 10px; border-width: 3px; font-size: 10px;",
-  #         #align = "center",
-  #         width="100%",
-  #         downloadBttn(outputId = "FA2plot.save", label = ("   "),
-  #                      style = "pill", color = "primary")),
-  #     br(),
-  #     h4("Most Contributing Docs"),
-  #     div(style ="border-radius: 10px; border-width: 3px; font-size: 10px;",
-  #         #align = "center",
-  #         width="100%",
-  #         downloadBttn(outputId = "FA3plot.save", label = ("   "),
-  #                      style = "pill", color = "primary")),
-  #     br(),
-  #     h4("Most Cited Docs"),
-  #     div(style ="border-radius: 10px; border-width: 3px; font-size: 10px;",
-  #         #align = "center",
-  #         width="100%",
-  #         downloadBttn(outputId = "FA4plot.save", label = ("   "),
-  #                      style = "pill", color = "primary")),
-  #     size = "s",
-  #     easyClose = TRUE,
-  #     footer = tagList(
-  #       modalButton("Close")),
-  #   )
-  # }
-  # 
-  # observeEvent(input$FAplot.save, {
-  #   if (input$sidebarmenu=="factorialAnalysis"){
-  #     showModal(saveFAModal(session))
-  #   }
-  # })
-  
-  # output$FA1plot.save <- downloadHandler(
-  #   filename = function() {
-  #     paste("FactorialMap-", Sys.Date(), ".png", sep="")
-  #   },
-  #   content <- function(file) {
-  #     ggsave(filename = file, plot = values$CS$graph_terms, dpi = values$dpi, height = values$h, width = values$h*1.5, bg="white")
-  #   },
-  #   contentType = "png"
-  # )
-  # 
-  # output$FA2plot.save <- downloadHandler(
-  #   filename = function() {
-  #     paste("Dendrogram-", Sys.Date(), ".png", sep="")
-  #   },
-  #   content <- function(file) {
-  #     ggsave(filename = file, plot = values$CS$graph_dendogram,dpi = values$dpi, height = values$h, width = values$h*2, bg="white")
-  #   },
-  #   contentType = "png"
-  # )
-  # 
-  # output$FA3plot.save <- downloadHandler(
-  #   filename = function() {
-  #     paste("MostContribDocuments-", Sys.Date(), ".png", sep="")
-  #   },
-  #   content <- function(file) {
-  #     ggsave(filename = file, plot = values$CS$graph_documents_Contrib, dpi = values$dpi, height = values$h, width = values$h*1.5, bg="white")
-  #   },
-  #   contentType = "png"
-  # )
-  # 
-  # output$FA4plot.save <- downloadHandler(
-  #   filename = function() {
-  #     paste("MostCitedDocuments-", Sys.Date(), ".png", sep="")
-  #   },
-  #   content <- function(file) {
-  #     ggsave(filename = file, plot = values$CS$graph_documents_TC, dpi = values$dpi, height = values$h, width = values$h*1.5, bg="white")
-  #   },
-  #   contentType = "png"
-  # )
-  
-  output$CSPlot1 <- renderPlot({
+
+  output$CSPlot1 <- renderPlotly({
     CSfactorial()
-    plot(values$CS$graph_terms)
-  },  width = exprToFunction(as.numeric(input$dimension[1])*0.6), 
-  height = exprToFunction(as.numeric(input$dimension[2])*0.85),
-  res = 150)
+    #CS=values$CS
+    #save(CS,file="provaCS.rdata")
+    values$plotCS <- ca2plotly(values$CS, method=input$method ,dimX = 1, dimY = 2, topWordPlot = Inf, threshold=0.05, labelsize = input$CSlabelsize*2, size=input$CSlabelsize*1.5)
+  })
   
-  output$CSPlot2 <- renderPlot({
+
+  output$CSPlot4 <- renderVisNetwork({
     CSfactorial()
-    if (input$method!="MDS"){
-      if (values$CS[[1]][1]!="NA"){
-        plot(values$CS$graph_documents_Contrib)
-      }else{
-        emptyPlot("Selected field is not included in your data collection")
-      }
-    }else{
-      emptyPlot("This plot is available only for CA or MCA analyses")
-    }
-  }, width = exprToFunction(as.numeric(input$dimension[1])*0.6), 
-  height = exprToFunction(as.numeric(input$dimension[2])*0.85),
-  res = 150)
-  
-  output$CSPlot3 <- renderPlot({
-    CSfactorial()
-    if (input$method!="MDS"){
-      if (values$CS[[1]][1]!="NA"){
-        plot(values$CS$graph_documents_TC)
-      }else{
-        emptyPlot("Selected field is not included in your data collection")
-      }
-    }else{
-      emptyPlot("This plot is available only for CA or MCA analyses")
-    }
-  }, width = exprToFunction(as.numeric(input$dimension[1])*0.6), 
-  height = exprToFunction(as.numeric(input$dimension[2])*0.85),
-  res = 150)
-  
-  output$CSPlot4 <- renderPlot({
-    CSfactorial()
-    if (values$CS[[1]][1]!="NA"){
-      plot(values$CS$graph_dendogram)
-    }else{
-      emptyPlot("Selected field is not included in your data collection")
-    }
-  }, width = exprToFunction(as.numeric(input$dimension[1])*0.6), 
-  height = exprToFunction(as.numeric(input$dimension[2])*0.85),
-  res = 150)
+      dend2vis(values$CS$km.res, labelsize=input$CSlabelsize, nclusters=as.numeric(input$nClustersCS), community=FALSE)
+      #values$CS$graph_dendogram)
+  })
   
   output$CSTableW <- DT::renderDT({
     CSfactorial()
@@ -4155,7 +4037,7 @@ server <- function(input, output,session){
   observeEvent(input$reportFA,{
     if(!is.null(values$CS$params)){
       list_df <- list(values$CS$params, values$CS$WData, values$CS$CSData)
-      list_plot <- list(values$CS$graph_terms, values$CS$graph_dendogram, values$CS$graph_documents_Contrib, values$CS$graph_documents_TC)
+      list_plot <- list(values$CS$graph_terms, values$CS$graph_dendogram)
       wb <- addSheetToReport(list_df,list_plot,sheetname = "FactorialAnalysis", wb=values$wb)
       values$wb <- wb
       popUp(title="Factorial Analysis", type="success")
@@ -5208,7 +5090,13 @@ server <- function(input, output,session){
                                labelsize=input$collabelsize, opacity=input$colAlpha,type=input$collayout,
                                shape=input$col.shape, net=values$colnet, shadow=(input$col.shadow=="Yes"))
     values$degreePlot <-degreePlot(values$colnet)
-    names(values$colnet$cluster_res) <- c("Node", "Cluster", "Betweenness", "Closeness", "PageRank")
+    if (is.null(dim(values$colnet$cluster_res))){
+      values$colnet$cluster_res <- data.frame(Node=NA, Cluster=NA, Betweenness=NA, 
+                                                                             Closeness = NA, PageRank = NA)
+    }else{
+      names(values$colnet$cluster_res) <- c("Node", "Cluster", "Betweenness", "Closeness", "PageRank")
+    }
+    
   })
   output$colPlot <- renderVisNetwork({  
     COLnetwork()

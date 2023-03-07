@@ -1,7 +1,7 @@
 Package: bibliometrix
 Type: Package
 Title: Comprehensive Science Mapping Analysis
-Version: 4.1.1
+Version: 4.1.2
 Authors@R: c(
     person(given = "Massimo",
            family = "Aria",
@@ -28,17 +28,17 @@ LazyData: true
 Encoding: UTF-8
 Depends: R (>= 3.3.0)
 Imports: stats, grDevices, bibliometrixData, dimensionsR, dplyr, DT,
-        factoextra, FactoMineR, forcats, ggplot2, ggrepel, igraph,
-        Matrix, plotly, openxlsx, pubmedR, RColorBrewer, readr, readxl,
-        rscopus, shiny, SnowballC, stringdist, stringi, tidyr, tidytext
+        FactoMineR, forcats, ggplot2, ggrepel, igraph, Matrix, plotly,
+        openxlsx, pubmedR, readr, readxl, rscopus, shiny, SnowballC,
+        stringdist, stringi, tidyr, tidytext
 Suggests: knitr, rmarkdown, openalexR, testthat (>= 3.0.0),
         shinycssloaders, visNetwork, wordcloud2
 RoxygenNote: 7.2.3
 NeedsCompilation: no
 Config/testthat/edition: 3
-Packaged: 2023-02-09 20:16:53 UTC; massimoaria
+Packaged: 2023-03-07 15:30:07 UTC; massimoaria
 Author: Massimo Aria [cre, aut, cph] (<https://orcid.org/0000-0002-8517-9411>),
   Corrado Cuccurullo [aut] (<https://orcid.org/0000-0002-7401-8575>)
 Maintainer: Massimo Aria <aria@unina.it>
 Repository: CRAN
-Date/Publication: 2023-02-09 20:40:07 UTC
+Date/Publication: 2023-03-07 16:00:03 UTC
