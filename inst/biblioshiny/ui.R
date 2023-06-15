@@ -2877,6 +2877,8 @@ body <- dashboardBody(
                 tabsetPanel(type = "tabs",
                             tabPanel("Network", 
                                      shinycssloaders::withSpinner(visNetworkOutput("cocPlot", height = "75vh"))),
+                            tabPanel("Overlay", 
+                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "cocOverlay", height = "75vh"))),
                             tabPanel("Table", 
                                      shinycssloaders::withSpinner(DT::DTOutput(
                                        outputId = "cocTable"))),
@@ -3462,11 +3464,9 @@ body <- dashboardBody(
               fluidRow(
                 tabsetPanel(type = "tabs",
                             tabPanel("Word Map", 
-                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "CSPlot1", height = "75vh",width ="98.9%"),
-                                                                  color = getOption("spinner.color", default = "#4F7942"))),
+                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "CSPlot1", height = "75vh",width ="98.9%"))),
                             tabPanel("Topic Dendrogram", 
-                                     shinycssloaders::withSpinner(visNetworkOutput("CSPlot4", width="auto", height = "75vh"),
-                                                                  color = getOption("spinner.color", default = "#4F7942"))),
+                                     shinycssloaders::withSpinner(visNetworkOutput("CSPlot4", width="auto", height = "75vh"))),
                             # tabPanel("Most Contributing Papers", 
                             #          shinycssloaders::withSpinner(plotOutput(
                             #            outputId = "CSPlot2"))),
@@ -3688,7 +3688,9 @@ body <- dashboardBody(
               fluidRow(
                 tabsetPanel(type = "tabs",
                             tabPanel("Network", 
-                                     shinycssloaders::withSpinner(visNetworkOutput("cocitPlot", height = "75vh"))),        
+                                     shinycssloaders::withSpinner(visNetworkOutput("cocitPlot", height = "75vh"))),       
+                            tabPanel("Overlay", 
+                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "cocitOverlay", height = "75vh"))),
                             tabPanel("Table", 
                                      shinycssloaders::withSpinner(DT::DTOutput(
                                        outputId = "cocitTable"))),
@@ -3991,7 +3993,9 @@ body <- dashboardBody(
               fluidRow(
                 tabsetPanel(type = "tabs",
                             tabPanel("Network", 
-                                     shinycssloaders::withSpinner(visNetworkOutput("colPlot", height = "75vh"))), 
+                                     shinycssloaders::withSpinner(visNetworkOutput("colPlot", height = "75vh"))),
+                            tabPanel("Overlay", 
+                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "colOverlay", height = "75vh"))),
                             tabPanel("Table", 
                                      shinycssloaders::withSpinner(DT::DTOutput(
                                        outputId = "colTable"))),
@@ -4060,7 +4064,9 @@ body <- dashboardBody(
               fluidRow(
                 tabsetPanel(type = "tabs",
                             tabPanel("Plot", 
-                                     shinycssloaders::withSpinner(plotOutput(outputId = "WMPlot"))),
+                                     #shinycssloaders::withSpinner(plotOutput(outputId = "WMPlot"))
+                                     shinycssloaders::withSpinner(plotlyOutput(outputId = "WMPlot", height = "75vh"))
+                                     ),
                             tabPanel("Table", 
                                      shinycssloaders::withSpinner(DT::DTOutput(
                                        outputId = "WMTable")))
