@@ -13,6 +13,14 @@ getFileNameExtension <- function (fn) {
   ext
 }
 
+#Initial to upper case
+firstup <- function(x) {
+  x <- tolower(x)
+  substr(x, 1, 1) <- toupper(substr(x, 1, 1))
+  x
+}
+
+
 # string preview (stopwords)
 strPreview <- function(string, sep=","){
   str1 <- unlist(strsplit(string, sep))
@@ -65,11 +73,14 @@ plot.ly <- function(g, flip=FALSE, side="r", aspectratio=1, size=0.15,data.type=
 
 freqPlot <- function(xx,x,y, textLaby,textLabx, title, values){
   
-  
   xl <- c(max(xx[,x])-0.02-diff(range(xx[,x]))*0.125, max(xx[,x])-0.02)+1
   yl <- c(1,1+length(unique(xx[,y]))*0.125)
   
   Text <- paste(textLaby,": ",xx[,y],"\n",textLabx, ": ",xx[,x])
+  
+  if (title=="Most Local Cited References" & values$M$DB[1]=="SCOPUS"){
+    xx[,y] <- gsub("^(.+?)\\.,.*\\((\\d{4})\\)$", paste0("\\1","., ", "\\2"), xx[,y])
+  }
   
   g <- ggplot(xx, aes(x =xx[,x], y = xx[,y], label = xx[,x], text=Text)) +
     geom_segment(aes(x = 0, y = xx[,y], xend = xx[,x], yend = xx[,y]), color = "grey50") +
@@ -121,10 +132,10 @@ notifications <- function(){
   if (isTRUE(is_online())){
     ## add check to avoid blocked app when internet connection is to slow
     envir <- environment()
-    setTimeLimit(cpu = 1, elapsed = 1, transient = TRUE)
-    on.exit({
-      setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
-    })
+    # setTimeLimit(cpu = 1, elapsed = 1, transient = TRUE)
+    # on.exit({
+    #   setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
+    # })
     tryCatch({
       eval(expr=suppressWarnings(notifOnline <- read.csv(location, header=TRUE, sep=",")), envir = envir)
     }, error = function(ex) {notifOnLine <- NULL}
@@ -188,19 +199,23 @@ notifications <- function(){
   return(notifTot)
 }
 
-is_online <- function(){
-  ## add check to avoid blocked app when internet connection is to slow
-  envir <- environment()
-  setTimeLimit(cpu = 1, elapsed = 1, transient = TRUE)
-  on.exit({
-    setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
-  })
-  tryCatch({
-    eval(expr=suppressWarnings(resp <- curl::has_internet()), envir = envir)
-  }, error = function(ex) {resp <- FALSE}
-  )
-  return(resp)
+is_online <- function(timeout=3){
+  RCurl::url.exists("www.bibliometrixs.org", timeout=timeout)
 }
+
+# is_online <- function(){
+#   ## add check to avoid blocked app when internet connection is to slow
+#   envir <- environment()
+#   setTimeLimit(cpu = 1, elapsed = 1, transient = TRUE)
+#   on.exit({
+#     setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
+#   })
+#   tryCatch({
+#     eval(expr=suppressWarnings(resp <- curl::has_internet()), envir = envir)
+#   }, error = function(ex) {resp <- FALSE}
+#   )
+#   return(resp)
+# }
 
 initial <- function(values){
   values$results <- list("NA")
@@ -240,8 +255,10 @@ ValueBoxes <- function(M){
   df[2,] <- c("Authors",length(listAU))
   
   ## VB  3 - Author's Keywords (DE)
+  if (!"DE" %in% names(M)){M$DE <- ""}
   DE <- unique(trimws(gsub("\\s+|\\.|\\,"," ",unlist(strsplit(M$DE, ";")))))
   DE <- DE[!is.na(DE)]
+  
   df[3,] <- c("Author's Keywords (DE)",length(DE))
   
   ## VB  4 - Sources
@@ -254,7 +271,11 @@ ValueBoxes <- function(M){
   ## VB  6 - References
   CR <- trimws(gsub("\\s+|\\.|\\,"," ",unlist(strsplit(M$CR,";"))))
   CR <- CR[nchar(CR)>0 & !is.na(CR)]
-  df[6,] <- c("References",length(unique(CR)))
+  nCR <- length(unique(CR))
+  if (nCR==1){
+    nCR <- 0
+  }
+  df[6,] <- c("References",nCR)
   
   ## VB  7 - Documents
   df[7,] <- c("Documents", nrow(M))
@@ -479,12 +500,13 @@ descriptive <- function(values,type){
              drop_na(.data$Affiliation) %>% 
              arrange(desc(.data$n)) %>% 
              rename(Articles = .data$n) %>% 
+             filter(.data$Affiliation!="NA") %>%
              as.data.frame()
          },
          "tab12"={
-           TAB=tableTag(values$M,"C1")
-           TAB=data.frame(Affiliations=names(TAB), Articles=as.numeric(TAB))
-           TAB=TAB[nchar(TAB[,1])>4,]
+           TAB <- tableTag(values$M,"C1")
+           TAB <- data.frame(Affiliations=names(TAB), Articles=as.numeric(TAB))
+           TAB <- TAB[nchar(TAB[,1])>4,]
            #names(TAB)=c("Affiliations", "Articles")
            
          },
@@ -505,6 +527,7 @@ AffiliationOverTime <- function(values,n){
   nAFF <- lengths(AFF)
   
   AFFY <- data.frame(Affiliation=unlist(AFF),Year=rep(values$M$PY,nAFF)) %>% 
+    filter(.data$Affiliation!="NA") %>%
     drop_na(.data$Affiliation,.data$Year) %>% 
     group_by(.data$Affiliation, .data$Year) %>% 
     count() %>% 
@@ -816,7 +839,7 @@ CAmap <- function(input, values){
 
 historiograph <- function(input,values){
   
-  min.cit <- 1
+  min.cit <- 0
 
   #if (values$Histfield=="NA"){
     values$histResults <- histNetwork(values$M, min.citations=min.cit, sep = ";")
@@ -824,7 +847,7 @@ historiograph <- function(input,values){
   #}
   
   #titlelabel <- input$titlelabel
-  values$histlog<- (values$histPlot <- histPlot(values$histResults, n=input$histNodes, size =input$histsize, labelsize = input$histlabelsize, label = input$titlelabel, verbose=FALSE))
+  values$histlog<- (values$histPlot <- histPlot(values$histResults, n=input$histNodes, size =input$histsize, remove.isolates=(input$hist.isolates=="yes"), labelsize = input$histlabelsize, label = input$titlelabel, verbose=FALSE))
   values$histResults$histData$DOI<- paste0('<a href=\"https://doi.org/',values$histResults$histData$DOI,'\" target=\"_blank\">',values$histResults$histData$DOI,'</a>')
   values$histResults$histData <- values$histResults$histData %>% 
     left_join(
@@ -1221,7 +1244,7 @@ igraph2vis<-function(g,curved,labelsize,opacity,type,shape, net, shadow=TRUE, ed
       visNetwork::visIgraphLayout(layout = "layout.norm", layoutMatrix = coords, type = "full") %>%
       visNetwork::visEdges(smooth = list(type="horizontal")) %>%
       visNetwork::visOptions(highlightNearest =list(enabled = T, hover = T, degree=1), nodesIdSelection = T) %>%
-      visNetwork::visInteraction(dragNodes = TRUE, navigationButtons = F, hideEdgesOnDrag = TRUE) %>%
+      visNetwork::visInteraction(dragNodes = TRUE, navigationButtons = F, hideEdgesOnDrag = TRUE, zoomSpeed = 0.4) %>%
       visNetwork::visOptions(manipulation = curved, height ="100%", width = "100%")
     
     return(list(VIS=VIS,vn=vn, type=type, l=l, curved=curved))
@@ -1363,7 +1386,7 @@ igraph2visClust<-function(g,curved=FALSE,labelsize=3,opacity=0.7,shape="dot",sha
       visNetwork::visIgraphLayout(layout = "layout_nicely", type = "full") %>%
       visNetwork::visEdges(smooth = list(type="horizontal")) %>%
       visNetwork::visOptions(highlightNearest =list(enabled = T, hover = T, degree=1), nodesIdSelection = T) %>%
-      visNetwork::visInteraction(dragNodes = TRUE, navigationButtons = F, hideEdgesOnDrag = TRUE) %>%
+      visNetwork::visInteraction(dragNodes = TRUE, navigationButtons = F, hideEdgesOnDrag = TRUE, zoomSpeed = 0.4) %>%
       visNetwork::visOptions(manipulation = curved, height ="100%", width = "100%")
     
     return(list(VIS=VIS,vn=vn))
@@ -1495,11 +1518,52 @@ hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", o
     visNetwork::visNodes(shadow=vn$nodes$shadow, shape=shape, size = vn$nodes$size, font=list(color=vn$nodes$font.color, size=vn$nodes$font.size,vadjust=vn$nodes$font.vadjust)) %>%
     visNetwork::visIgraphLayout(layout = "layout.norm", layoutMatrix = coords, type = "full") %>%
     visNetwork::visEdges(smooth = list(type="horizontal"), arrows=list(to = list(enabled = TRUE, scaleFactor = 0.5))) %>% 
-    visNetwork::visInteraction(dragNodes = T, navigationButtons = F, hideEdgesOnDrag =F, tooltipStyle = tooltipStyle) %>% 
+    visNetwork::visInteraction(dragNodes = T, navigationButtons = F, hideEdgesOnDrag =F, tooltipStyle = tooltipStyle, zoomSpeed = 0.2) %>% 
     visNetwork::visOptions(highlightNearest =list(enabled = T, hover = T, degree = list(from = 1), algorithm = "hierarchical"), nodesIdSelection = F,
                            manipulation = FALSE, height = "100%", width = "100%")
 
   return(list(VIS=VIS,vn=vn, type="historiograph", curved=curved))
+}
+
+
+## Pajek Export
+graph2Pajek <- function(graph, filename="my_pajek_network"){
+  
+  nodes <- igraph::as_data_frame(graph, what = c("vertices")) %>% 
+    mutate(id = row_number())
+  
+  edges <- igraph::as_data_frame(graph, what = c("edges"))
+  edges <- edges %>% 
+    left_join(nodes %>% select(id, name), by=c("from" = "name")) %>% 
+    rename(id_from = id) %>% 
+    left_join(nodes %>% select(id, name), by=c("to" = "name")) %>% 
+    rename(id_to = id)
+  
+  ### Creation of NET file
+  file <- paste0(filename,".net")
+  
+  # Nodes
+  write(paste0("*Vertices ",nrow(nodes)), file=file)
+  write(paste0(nodes$id, ' "', nodes$name,'"'), file=file, append = T)
+  
+  # Edges
+  write(paste0("*Edges ",nrow(nodes)), file=file, append = T)
+  write(paste0(edges$id_from, " ",edges$id_to," ",edges$weight), file=file, append = T)
+  
+  ### Creation of VEC file
+  file <- paste0(filename,".vec")
+  
+  # Nodes
+  write(paste0("*Vertices ",nrow(nodes)), file=file)
+  write(paste0(nodes$deg), file=file, append = T)
+  
+  ### Creation of CLU file
+  file <- paste0(filename,".clu")
+  
+  # Nodes
+  write(paste0("*Vertices ",nrow(nodes)), file=file)
+  write(paste0(nodes$community), file=file, append = T)
+  
 }
 
 
@@ -1851,13 +1915,15 @@ screenSh <- function(p, zoom = 2, type="vis"){
 
 screenShot <- function(p, filename, type){
   switch(Sys.info()[['sysname']],
-         Windows= {home <- Sys.getenv('R_USER')},
+         Windows= {home <- Sys.getenv('R_USER')
+         home <- gsub("/Documents","",home)
+         },
          Linux  = {home <- Sys.getenv('HOME')},
          Darwin = {home <- Sys.getenv('HOME')})
   
   # setting up the main directory
-  filename <- paste0(file.path(home,"downloads/"),filename)
-  
+  #filename <- paste0(file.path(home,"downloads/"),filename)
+  filename <- paste0(file.path(home,"downloads"),"/",filename)
   plot2png(p, filename, zoom = 2, type=type, tmpdir = tempdir())
   
 }
@@ -1925,13 +1991,13 @@ short2long <- function(df, myC){
 }
 
 dfLabel <- function(){
-  short <- c("Empty Report", "MainInfo",            "AnnualSciProd",       "AnnualCitPerYear",    "ThreeFieldsPlot",     "MostRelSources",      "MostLocCitSources",   "BradfordLaw",         "SourceLocImpact",    
+  short <- c("Empty Report", "MissingData","MainInfo",            "AnnualSciProd",       "AnnualCitPerYear",    "ThreeFieldsPlot",     "MostRelSources",      "MostLocCitSources",   "BradfordLaw",         "SourceLocImpact",    
              "SourceProdOverTime",  "MostRelAuthors",      "MostLocCitAuthors",   "AuthorProdOverTime",  "LotkaLaw",            "AuthorLocImpact",     "MostRelAffiliations", "AffOverTime",        
              "CorrAuthCountries",   "CountrySciProd",      "CountryProdOverTime", "MostCitCountries",    "MostGlobCitDocs",     "MostLocCitDocs",      "MostLocCitRefs",      "RPYS",               
              "MostFreqWords",       "WordCloud",           "TreeMap",             "WordFreqOverTime",        "TrendTopics",         "CouplingMap", "CoWordNet",           "ThematicMap",         "ThematicEvolution",  
              "TE_Period_1","TE_Period_2", "TE_Period_3","TE_Period_4","TE_Period_5",       "FactorialAnalysis",   "CoCitNet",            "Historiograph",       "CollabNet",           "CollabWorldMap")
   
-  long <- c("Empty Report", "Main Information", "Annual Scientific Production", "Annual Citation Per Year", "Three-Field Plot", "Most Relevant Sources","Most Local Cited Sources","Bradfords Law","Sources Local Impact",
+  long <- c("Empty Report", "Missing Data Table", "Main Information", "Annual Scientific Production", "Annual Citation Per Year", "Three-Field Plot", "Most Relevant Sources","Most Local Cited Sources","Bradfords Law","Sources Local Impact",
             "Sources Production over Time", "Most Relevant Authors","Most Local Cited Authors","Authors Production over Time", "Lotkas Law","Authors Local Impact","Most Relevant Affiliations","Affiliations Production over Time",
             "Corresponding Authors Countries","Countries Scientific Production","Countries Production over Time","Most Cited Countries", "Most Global Cited Documents","Most Local Cited Documents","Most Local Cited References","Reference Spectroscopy",
             "Most Frequent Words","WordCloud", "TreeMap", "Words Frequency over Time", "Trend Topics", "Clustering by Coupling","Co-occurence Network", "Thematic Map", "Thematic Evolution", 
@@ -2063,4 +2129,169 @@ overlayPlotly <- function(VIS){
              'hoverCompareCartesian'
            ))
   return(p)
+}
+
+
+menuList <- function(values){
+  
+  TC <- ISI <- MLCS <- AFF <- MCC <- DB_TC <- DB_CR <- CR <- FALSE
+  if (!"TC" %in% values$missTags) TC <- TRUE
+  if ("ISI" %in% values$M$DB[1] & !"CR" %in% values$missTags) MLCS <- TRUE
+  if ("ISI" %in% values$M$DB[1]) ISI <- TRUE
+  if (!"C1" %in% values$missTags) AFF <- TRUE
+  if (!"CR" %in% values$missTags) CR <- TRUE
+  if (!"TC" %in% values$missTags & !"C1" %in% values$missTags) MCC <- TRUE
+  if( sum(c("SCOPUS","ISI") %in% values$M$DB[1])>0) DB_CR <- TRUE
+  if( sum(c("SCOPUS","ISI","OPENALEX","LENS") %in% values$M$DB[1])>0) DB_TC <- TRUE
+  
+ # out <- list(TC,ISI,MLCS,AFF,MCC,DB_TC,DB_CR,CR)
+  out <- NULL
+  
+  L <- list()
+  
+  L[[length(L)+1]] <- 
+    menuItem("Filters",tabName = "filters",icon = fa_i(name ="filter"))
+  
+  L[[length(L)+1]] <-
+    menuItem("Overview",tabName = "overview",icon=fa_i(name = "table"),startExpanded = FALSE,
+             menuSubItem("Main Information",tabName="mainInfo",icon = icon("chevron-right",lib = "glyphicon")),
+             menuSubItem("Annual Scientific Production",tabName = "annualScPr",icon = icon("chevron-right",lib = "glyphicon")),
+             if (isTRUE(TC)){
+               menuSubItem("Average Citations per Year",tabName = "averageCitPerYear",icon = icon("chevron-right",lib = "glyphicon"))
+             },
+             menuSubItem("Three-Field Plot", tabName ="threeFieldPlot",icon = icon("chevron-right",lib = "glyphicon")))
+  
+  L[[length(L)+1]] <- 
+    menuItem("Sources", tabName = "sources",icon = fa_i(name ="book"), startExpanded = FALSE,
+             menuSubItem("Most Relevant Sources", tabName = "relevantSources",icon = icon("chevron-right",lib = "glyphicon")),
+             if (isTRUE(MLCS)){
+               menuSubItem("Most Local Cited Sources",tabName = "localCitedSources",icon = icon("chevron-right",lib = "glyphicon"))
+             },
+             menuSubItem("Bradford's Law",tabName = "bradford",icon = icon("chevron-right",lib = "glyphicon")),
+             if (isTRUE(TC)){
+               menuSubItem("Sources' Local Impact",tabName = "sourceImpact",icon = icon("chevron-right",lib = "glyphicon"))
+             }, 
+             menuSubItem("Sources' Production over Time",tabName = "sourceDynamics",icon = icon("chevron-right",lib = "glyphicon")))
+  
+  AU <- 
+    menuItem("Authors", tabName = "authors",icon = fa_i(name="user"),startExpanded = FALSE,
+             "Authors",
+             menuSubItem("Most Relevant Authors", tabName = "mostRelAuthors",icon = icon("chevron-right", lib = "glyphicon")),
+             if (isTRUE(ISI)){
+               menuSubItem("Most Local Cited Authors",tabName = "mostLocalCitedAuthors",icon = icon("chevron-right", lib = "glyphicon"))
+             },
+             menuSubItem("Authors' Production over Time",tabName = "authorsProdOverTime",icon = icon("chevron-right", lib = "glyphicon")),
+             menuSubItem("Lotka's Law",tabName = "lotka",icon = icon("chevron-right", lib = "glyphicon")),
+             if (isTRUE(TC)){
+               menuSubItem("Authors' Local Impact",tabName = "authorImpact",icon = icon("chevron-right", lib = "glyphicon"))
+             },
+             if (isTRUE(AFF)){
+               "Affiliations"
+             },
+             if (isTRUE(AFF)){
+               menuSubItem("Most Relevant Affiliations",tabName = "mostRelAffiliations",icon = icon("chevron-right", lib = "glyphicon"))
+             },
+             if (isTRUE(AFF)){
+               menuSubItem("Affiliations' Production over Time",tabName = "AffOverTime",icon = icon("chevron-right", lib = "glyphicon"))
+             },
+             if (isTRUE(AFF)){
+               "Countries"
+             },
+             if (isTRUE(AFF)){
+               menuSubItem("Corresponding Author's Countries",tabName = "correspAuthorCountry",icon = icon("chevron-right", lib = "glyphicon"))
+             },
+             if (isTRUE(AFF)){
+               menuSubItem("Countries' Scientific Production",tabName = "countryScientProd",icon = icon("chevron-right", lib = "glyphicon"))
+             },
+             if (isTRUE(AFF)){
+               menuSubItem("Countries' Production over Time",tabName = "COOverTime",icon = icon("chevron-right", lib = "glyphicon"))
+             },
+             if (isTRUE(MCC)){
+               menuSubItem("Most Cited Countries",tabName = "mostCitedCountries",icon = icon("chevron-right", lib = "glyphicon"))
+             }
+    )
+  
+  L[[length(L)+1]] <- AU
+  
+  DOC <- 
+    menuItem("Documents", tabName = "documents",icon = fa_i(name="layer-group"), startExpanded = FALSE,
+             if (isTRUE(TC) | isTRUE(DB_TC)){
+               "Documents"
+             },
+             if (isTRUE(TC)){
+               menuSubItem("Most Global Cited Documents",tabName = "mostGlobalCitDoc",icon = icon("chevron-right", lib = "glyphicon"))
+             },
+             if (isTRUE(DB_TC) & isTRUE(CR) & isTRUE(TC)){
+               menuSubItem("Most Local Cited Documents",tabName = "mostLocalCitDoc",icon = icon("chevron-right", lib = "glyphicon"))
+             },
+             if (isTRUE(DB_CR)){
+               "Cited References"
+             },
+             if (isTRUE(DB_CR)){
+               menuSubItem("Most Local Cited References",tabName = "mostLocalCitRef",icon = icon("chevron-right", lib = "glyphicon"))
+             },
+             if (isTRUE(DB_CR)){
+               menuSubItem("References Spectroscopy",tabName = "ReferenceSpect",icon = icon("chevron-right", lib = "glyphicon"))
+             },
+             "Words",
+             menuSubItem("Most Frequent Words",tabName = "mostFreqWords",icon = icon("chevron-right", lib = "glyphicon")),
+             menuSubItem("WordCloud", tabName = "wcloud",icon = icon("chevron-right", lib = "glyphicon")),
+             menuSubItem("TreeMap",tabName = "treemap",icon = icon("chevron-right", lib = "glyphicon")),
+             menuSubItem("Words' Frequency over Time",tabName = "wordDynamics",icon = icon("chevron-right", lib = "glyphicon")),
+             menuSubItem("Trend Topics",tabName = "trendTopic",icon = icon("chevron-right", lib = "glyphicon"))
+    )
+  
+  L[[length(L)+1]] <- DOC
+  
+  L[[length(L)+1]] <- 
+    menuItem("Clustering", tabName = "clustering",icon = fa_i(name ="spinner"),startExpanded = FALSE,
+             menuSubItem("Clustering by Coupling",tabName = "coupling",icon = icon("chevron-right", lib = "glyphicon")))
+  
+  L[[length(L)+1]] <- 
+    menuItem("Conceptual Structure",tabName = "concepStructure",icon = fa_i(name="spell-check"),startExpanded = FALSE,
+             "Network Approach",
+             menuSubItem("Co-occurence Network",tabName = "coOccurenceNetwork",icon = icon("chevron-right", lib = "glyphicon") ),
+             menuSubItem("Thematic Map",tabName = "thematicMap", icon = icon("chevron-right", lib = "glyphicon")),
+             menuSubItem("Thematic Evolution",tabName = "thematicEvolution", icon = icon("chevron-right", lib = "glyphicon")),
+             "Factorial Approach",
+             menuSubItem("Factorial Analysis", tabName = "factorialAnalysis", icon = icon("chevron-right", lib = "glyphicon")))
+  
+  if (!"CR" %in% values$missTags){
+    L[[length(L)+1]] <- 
+      menuItem("Intellectual Structure",tabName = "intStruct",icon = fa_i(name="gem"), startExpanded = FALSE,
+               menuSubItem("Co-citation Network",tabName = "coCitationNetwork", icon = icon("chevron-right", lib = "glyphicon")),
+               if (isTRUE(DB_TC) & isTRUE(CR)){
+                 menuSubItem("Historiograph",tabName = "historiograph", icon = icon("chevron-right", lib = "glyphicon"))
+               }
+      )
+  } 
+  
+  L[[length(L)+1]] <- 
+    menuItem("Social Structure",tabName = "socialStruct", icon = fa_i("users"),startExpanded = FALSE,
+             menuSubItem("Collaboration Network",tabName = "collabNetwork",icon = icon("chevron-right", lib = "glyphicon")),
+             if (isTRUE(AFF)){
+               menuSubItem("Countries' Collaboration World Map", tabName = "collabWorldMap",icon = icon("chevron-right", lib = "glyphicon"))
+             }
+    )
+  
+  L[[length(L)+1]] <- menuItem("Report",tabName = "report",icon = fa_i(name ="list-alt"))
+  
+  L[[length(L)+1]] <- menuItem("Settings",tabName = "settings",icon = fa_i(name ="sliders"))
+  
+  if (!isTRUE(TC)){out <- c(out, "Average Citations per Year", "Sources' Local Impact", "Authors' Local Impact", 
+                            "Most Global Cited Documents")}
+  if (!isTRUE(MLCS)){out <- c(out, "Most Local Cited Sources")}
+  if (!isTRUE(ISI)){out <- c(out, "Most Local Cited Authors")}
+  if (!isTRUE(AFF)){out <- c(out, "Most Relevant Affiliations", "Affiliations' Production over Time", 
+                             "Corresponding Author's Countries", "Countries' Scientific Production", 
+                             "Countries' Production over Time", "Countries' Collaboration World Map")}
+  if (!isTRUE(MCC)){out <- c(out, "Most Cited Countries")}
+  if (!(isTRUE(DB_TC) & isTRUE(CR) & isTRUE(TC))){out <- c(out, "Most Local Cited Documents")}
+  if (!isTRUE(DB_CR)){out <- c(out, "Most Local Cited References", "References Spectroscopy")}
+  if (!isTRUE(CR)){out <- c(out, "Co-citation Network")}
+  if (!(isTRUE(DB_TC) & isTRUE(CR))){out <- c(out, "Historiograph")}
+  
+  values$out <- out
+  
+  return(L)
 }

@@ -9,7 +9,7 @@ server <- function(input, output,session){
   ## suppress warnings
   options(warn = -1)
   
-  ## chrome configration for shinyapps server
+  ## chrome configuration for shinyapps server
   #message(curl::curl_version()) # check curl is installed
   if (identical(Sys.getenv("R_CONFIG_ACTIVE"), "shinyapps")) {
     chromote::set_default_chromote_object(
@@ -28,9 +28,9 @@ server <- function(input, output,session){
     showModal(modalDialog(
       title = strong("Warning message!"),
       HTML("Chrome or a Chromium-based browser is not installed on your computer.<br>
-If you do not have either of these browsers installed, TALL will be unable to export graphs.<br>
-To ensure the functionality of TALL,
-           please download Chrome by <a href='https://www.google.com/intl/it_it/chrome/' target='_blank' > <b>clicking here</b></a>."),
+If you do not have either of these browsers installed, Biblioshiny will be unable to export graphs.<br>
+To ensure the functionality of Biblioshiny,
+           please download Chrome by <a href='https://www.google.com/chrome/' target='_blank' > <b>clicking here</b></a>."),
       footer = modalButton("Dismiss"),
       easyClose = TRUE
     ))
@@ -52,6 +52,7 @@ To ensure the functionality of TALL,
   values$myChoices <- "Empty Report"
   values$logo <- logo
   values$logoGrid <- grid::rasterGrob(logo,interpolate = TRUE)
+  values$out <- NULL
   
   ### setting values
   values$dpi <- 300
@@ -139,69 +140,10 @@ To ensure the functionality of TALL,
   
   ## SIDEBAR MENU ----
   ### Apply Data----
+  
   output$rest_of_sidebar <- renderMenu({
     if (isTRUE(values$rest_sidebar)){
-      sidebarMenu(
-        menuItem("Filters",tabName = "filters",icon = fa_i(name ="filter")),
-        menuItem("Overview",tabName = "overview",icon=fa_i(name = "table"),startExpanded = FALSE,
-                 menuSubItem("Main Information",tabName="mainInfo",icon = icon("chevron-right",lib = "glyphicon")),
-                 menuSubItem("Annual Scientific Production",tabName = "annualScPr",icon = icon("chevron-right",lib = "glyphicon")),
-                 menuSubItem("Average Citations per Year",tabName = "averageCitPerYear",icon = icon("chevron-right",lib = "glyphicon")),
-                 menuSubItem("Three-Field Plot", tabName ="threeFieldPlot",icon = icon("chevron-right",lib = "glyphicon"))),
-        menuItem("Sources", tabName = "sources",icon = fa_i(name ="book"), startExpanded = FALSE,
-                 menuSubItem("Most Relevant Sources", tabName = "relevantSources",icon = icon("chevron-right",lib = "glyphicon")),
-                 menuSubItem("Most Local Cited Sources",tabName = "localCitedSources",icon = icon("chevron-right",lib = "glyphicon")),
-                 menuSubItem("Bradford's Law",tabName = "bradford",icon = icon("chevron-right",lib = "glyphicon")),
-                 menuSubItem("Sources' Local Impact",tabName = "sourceImpact",icon = icon("chevron-right",lib = "glyphicon")),
-                 menuSubItem("Sources' Production over Time",tabName = "sourceDynamics",icon = icon("chevron-right",lib = "glyphicon"))),
-        menuItem("Authors", tabName = "authors",icon = fa_i(name="user"),startExpanded = FALSE,
-                 "Authors",
-                 menuSubItem("Most Relevant Authors", tabName = "mostRelAuthors",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Most Local Cited Authors",tabName = "mostLocalCitedAuthors",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Authors' Production over Time",tabName = "authorsProdOverTime",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Lotka's Law",tabName = "lotka",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Authors' Local Impact",tabName = "authorImpact",icon = icon("chevron-right", lib = "glyphicon")),
-                 "Affiliations",
-                 menuSubItem("Most Relevant Affiliations",tabName = "mostRelAffiliations",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Affiliations' Production over Time",tabName = "AffOverTime",icon = icon("chevron-right", lib = "glyphicon")),
-                 "Countries",
-                 menuSubItem("Corresponding Author's Countries",tabName = "correspAuthorCountry",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Countries' Scientific Production",tabName = "countryScientProd",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Countries' Production over Time",tabName = "COOverTime",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Most Cited Countries",tabName = "mostCitedCountries",icon = icon("chevron-right", lib = "glyphicon"))
-        ),
-        menuItem("Documents", tabName = "documents",icon = fa_i(name="layer-group"), startExpanded = FALSE,
-                 "Documents",
-                 menuSubItem("Most Global Cited Documents",tabName = "mostGlobalCitDoc",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Most Local Cited Documents",tabName = "mostLocalCitDoc",icon = icon("chevron-right", lib = "glyphicon")),
-                 "Cited References",
-                 menuSubItem("Most Local Cited References",tabName = "mostLocalCitRef",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("References Spectroscopy",tabName = "ReferenceSpect",icon = icon("chevron-right", lib = "glyphicon")),
-                 "Words",
-                 menuSubItem("Most Frequent Words",tabName = "mostFreqWords",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("WordCloud", tabName = "wcloud",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("TreeMap",tabName = "treemap",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Words' Frequency over Time",tabName = "wordDynamics",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Trend Topics",tabName = "trendTopic",icon = icon("chevron-right", lib = "glyphicon"))
-        ),
-        menuItem("Clustering", tabName = "clustering",icon = fa_i(name ="spinner"),startExpanded = FALSE,
-                 menuSubItem("Clustering by Coupling",tabName = "coupling",icon = icon("chevron-right", lib = "glyphicon"))),
-        menuItem("Conceptual Structure",tabName = "concepStructure",icon = fa_i(name="spell-check"),startExpanded = FALSE,
-                 "Network Approach",
-                 menuSubItem("Co-occurence Network",tabName = "coOccurenceNetwork",icon = icon("chevron-right", lib = "glyphicon") ),
-                 menuSubItem("Thematic Map",tabName = "thematicMap", icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Thematic Evolution",tabName = "thematicEvolution", icon = icon("chevron-right", lib = "glyphicon")),
-                 "Factorial Approach",
-                 menuSubItem("Factorial Analysis", tabName = "factorialAnalysis", icon = icon("chevron-right", lib = "glyphicon"))),
-        menuItem("Intellectual Structure",tabName = "intStruct",icon = fa_i(name="gem"), startExpanded = FALSE,
-                 menuSubItem("Co-citation Network",tabName = "coCitationNetwork", icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Historiograph",tabName = "historiograph", icon = icon("chevron-right", lib = "glyphicon"))),
-        menuItem("Social Structure",tabName = "socialStruct", icon = fa_i("users"),startExpanded = FALSE,
-                 menuSubItem("Collaboration Network",tabName = "collabNetwork",icon = icon("chevron-right", lib = "glyphicon")),
-                 menuSubItem("Countries' Collaboration World Map", tabName = "collabWorldMap",icon = icon("chevron-right", lib = "glyphicon"))),
-        menuItem("Report",tabName = "report",icon = fa_i(name ="list-alt")),
-        menuItem("Settings",tabName = "settings",icon = fa_i(name ="sliders"))
-      )
+      sidebarMenu(.list=values$menu)
     } else {
       sidebarMenu()
     }
@@ -213,6 +155,10 @@ To ensure the functionality of TALL,
   
   observeEvent(input$apiApply, {
     updateTabItems(session, "sidebarmenu", "gathData")
+  })
+  
+  observeEvent(values$missTags, {
+    updateTabItems(session, "sidebarmenu", "loadData")
   })
   
   ## Load Menu ----
@@ -272,6 +218,8 @@ To ensure the functionality of TALL,
       values$Histfield = "NA"
       values$results = list("NA")
       values$rest_sidebar <- TRUE
+      values$missTags <- NULL
+      values$menu <- menuList(values)
       #showModal(missingModal(session))
       return()
     }
@@ -332,6 +280,9 @@ To ensure the functionality of TALL,
                                                   format = "bibtex")
                                 })
                  })
+        },
+        openalex = {
+          M <- smart_load(inFile$datapath)
         },
         lens = {
           switch(ext,
@@ -533,6 +484,8 @@ To ensure the functionality of TALL,
   ### Missing Data in Metadata ----
   output$missingDataTable <- DT::renderDT({
     values$missingdf <- df <- missingData(values$M)$mandatoryTags
+    values$missTags <- df$tag[df$missing_pct>50]
+    values$menu <- menuList(values)
     
     names(df) <- c("Metadata", "Description", "Missing Counts", "Missing %", "Status")
     values$missingDataTable <- DT::datatable(df,escape = FALSE,rownames = FALSE, #extensions = c("Buttons"),
@@ -582,9 +535,9 @@ To ensure the functionality of TALL,
   
   observeEvent(input$missingMessage,{
     tag <- values$missingdf$description[values$missingdf$status %in% c("Critical", "Completely missing")]
-    if (length(tag)>0){
-      text <- paste("Analyses that require the following information:<br><br>",paste("- ","<em>",tag,"</em>","<br>", collapse=""),
-                    "<br>cannot be performed!",collapse="")
+    if (length(values$out)>0){
+      text <- paste("The following analyses could not be performed: <br><br>",paste("- ","<em>",values$out,"</em>","<br>", collapse=""),
+                    "<br>These menu will be hidden in the Biblioshiny dashboard!",collapse="")
       type <- "warning"
     }else{
       text <- "Your metadata have no critical issues"
@@ -614,27 +567,55 @@ To ensure the functionality of TALL,
     )
   })
   
+  output$missingTitle <- renderUI({
+    ndocs <- nrow(values$M)
+    txt1 <- paste0("Completeness of bibliographic metadata - ", strong(ndocs)," documents from ", strong(firstup(values$M$DB[1])))
+    tagList(
+      div(
+        h3(HTML(txt1)),
+        style="text-align:center")
+    )
+  })
+  
   missingModal <- function(session) {
     ns <- session$ns
     modalDialog(
-      h3(strong(("Completeness of bibliographic metadata"))),
+      uiOutput("missingTitle"),
       DT::DTOutput(ns("missingDataTable")),
-      # br(),
-      # verbatimTextOutput("missingMessage"),
       size = "l",
       easyClose = TRUE,
       footer = tagList(
         actionButton(label="Advice", inputId = "missingMessage",
                      icon = icon("exclamation-sign", lib = "glyphicon")),
+        actionButton(label="Report", inputId = "missingReport",
+                     icon = icon("plus", lib = "glyphicon")),
         actionButton(label="Save", inputId = "missingDataTable",
                      icon = icon("camera", lib = "glyphicon")),
-        modalButton("Close")),
+        modalButton(label="Close")),
     )
   }
   
   observeEvent(input$missingDataTable,{
     filename = paste("missingDataTable-", "_",  gsub(" |:","",Sys.time()), ".png", sep="")
     screenShot(values$missingDataTable, filename=filename, type="plotly")
+  })
+  
+  observeEvent(input$missingReport,{
+    if (!is.null(values$missingDataTable)){
+      sheetname <- "MissingData"
+      ind <- which(regexpr(sheetname,values$wb$sheet_names)>-1)
+      if (length(ind)>0){
+        sheetname <- paste(sheetname,length(ind)+1,sep="")
+      } 
+      addWorksheet(wb=values$wb, sheetName=sheetname, gridLines = FALSE)
+      #values$fileTFP <- screenSh(selector = "#ThreeFieldsPlot") ## screenshot
+      values$fileMissingData <- screenSh(values$missingDataTable, zoom = 2, type="plotly")
+      values$list_file <- rbind(values$list_file, c(sheetname,values$fileMissingData,1))
+      popUp(title="Missing Data Table", type="success")
+      values$myChoices <- sheets(values$wb)
+    } else {
+      popUp(type="error")
+    }
   })
   
   ## export functions ----
@@ -3391,7 +3372,7 @@ To ensure the functionality of TALL,
   output$wordTable <- DT::renderDT({
     WordCloud()
     
-    DT::datatable(values$Words, rownames = FALSE,
+    DT::datatable(values$Words, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 10, dom = 'Bfrtip',
                                  buttons = list('pageLength',
                                                 list(extend = 'copy'),
@@ -3417,7 +3398,7 @@ To ensure the functionality of TALL,
   output$treeTable <- DT::renderDT({
     WordsT <- TreeMap()
     
-    DT::datatable(values$WordsT, rownames = FALSE,
+    DT::datatable(values$WordsT, rownames = FALSE, extensions = c("Buttons"),
                   options = list(pageLength = 10, dom = 'Bfrtip',
                                  buttons = list('pageLength',
                                                 list(extend = 'copy'),
@@ -3895,11 +3876,23 @@ To ensure the functionality of TALL,
   })
   
   output$network.coc <- downloadHandler(
-    filename = "Co_occurrence_network.net",
-    content <- function(file) {
-      igraph::write.graph(values$cocnet$graph_pajek,file=file, format="pajek")
+    filename = function() {
+      paste("Co_occurrence_network-", Sys.Date(), ".zip", sep="")
     },
-    contentType = "net"
+    content <- function(file) {
+      tmpdir <- tempdir()
+      owd <- setwd(tmpdir)
+      on.exit(setwd(owd))
+      print(tmpdir)
+      #igraph::write.graph(values$obj$graph_pajek,file=file, format="pajek")
+      myfile <- paste("mynetwork-", Sys.Date(), sep="")
+      files <- paste0(myfile, c(".net",".vec",".clu"))
+      graph2Pajek(values$cocnet$graph, file=myfile)
+      print(files)
+      print(dir())
+      zip(file,files)
+    },
+    contentType = "zip"
   )
   
   ##### save coc network image as html ####
@@ -4996,11 +4989,23 @@ To ensure the functionality of TALL,
   })
   
   output$network.cocit <- downloadHandler(
-    filename = "Co_citation_network.net",
-    content <- function(file) {
-      igraph::write.graph(values$cocitnet$graph_pajek,file=file, format="pajek")
+    filename = function() {
+      paste("Co_citation_network-", Sys.Date(), ".zip", sep="")
     },
-    contentType = "net"
+    content <- function(file) {
+      tmpdir <- tempdir()
+      owd <- setwd(tmpdir)
+      on.exit(setwd(owd))
+      print(tmpdir)
+      #igraph::write.graph(values$obj$graph_pajek,file=file, format="pajek")
+      myfile <- paste("mynetwork-", Sys.Date(), sep="")
+      files <- paste0(myfile, c(".net",".vec",".clu"))
+      graph2Pajek(values$cocitnet$graph, file=myfile)
+      print(files)
+      print(dir())
+      zip(file,files)
+    },
+    contentType = "zip"
   )
   
   output$cocitTable <- DT::renderDT({
@@ -5168,11 +5173,23 @@ To ensure the functionality of TALL,
   })
   
   output$network.col <- downloadHandler(
-    filename = "Collaboration_network.net",
-    content <- function(file) {
-      igraph::write.graph(values$colnet$graph_pajek,file=file, format="pajek")
+    filename = function() {
+      paste("Collaboration_network-", Sys.Date(), ".zip", sep="")
     },
-    contentType = "net"
+    content <- function(file) {
+      tmpdir <- tempdir()
+      owd <- setwd(tmpdir)
+      on.exit(setwd(owd))
+      print(tmpdir)
+      #igraph::write.graph(values$obj$graph_pajek,file=file, format="pajek")
+      myfile <- paste("mynetwork-", Sys.Date(), sep="")
+      files <- paste0(myfile, c(".net",".vec",".clu"))
+      graph2Pajek(values$colnet$graph, file=myfile)
+      print(files)
+      print(dir())
+      zip(file,files)
+    },
+    contentType = "zip"
   )
   
   output$colTable <- DT::renderDT({

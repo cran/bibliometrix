@@ -15,6 +15,7 @@
 #' @import readxl
 #' @import stringi
 #' @import tidytext
+#' @import openalexR
 #' @importFrom dplyr %>%
 #' @importFrom dplyr across
 #' @importFrom dplyr row_number
@@ -24,6 +25,8 @@
 ## @importFrom dplyr filter
 #' @importFrom dplyr arrange
 #' @importFrom dplyr do
+#' @importFrom dplyr distinct
+#' @importFrom dplyr join_by
 #' @importFrom dplyr n
 #' @importFrom dplyr slice
 #' @importFrom dplyr slice_max
@@ -52,6 +55,7 @@
 #' @importFrom dplyr relocate
 #' @importFrom dplyr slice_head
 #' @importFrom dplyr slice_tail
+#' @importFrom dplyr reframe
 #' @importFrom plotly add_annotations
 #' @importFrom plotly add_lines
 #' @importFrom plotly config
@@ -195,7 +199,6 @@
 #' @importFrom Matrix format
 #' @importFrom Matrix formatSparseM
 #' @importFrom Matrix formatSpMatrix
-#' @importFrom Matrix graph2T
 #' @importFrom Matrix head
 #' @importFrom Matrix image
 #' @importFrom Matrix invPerm
@@ -249,7 +252,6 @@
 #' @importFrom Matrix Summary
 #' @importFrom Matrix symmpart
 #' @importFrom Matrix t
-#' @importFrom Matrix T2graph
 #' @importFrom Matrix tail
 #' @importFrom Matrix tcrossprod
 #' @importFrom Matrix tril

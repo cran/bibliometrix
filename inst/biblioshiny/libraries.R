@@ -17,15 +17,30 @@ libraries <- function(){
     if (!require(shinydashboardPlus, quietly=TRUE)){install.packages("shinydashboardPlus"); require(shinydashboardPlus, quietly=TRUE)}
     if (!require(shinydashboard, quietly=TRUE)){install.packages("shinydashboard"); require(shinydashboard, quietly=TRUE)}
     if (!require(shinyjs, quietly=TRUE)){install.packages("shinyjs"); require(shinyjs, quietly=TRUE)}
-    #if (!require(shinyscreenshot, quietly=TRUE)){install.packages("shinyscreenshot"); require(shinyscreenshot, quietly=TRUE)}
+    if (!require(RCurl, quietly=TRUE)){install.packages("RCurl")}
     if (!require(openxlsx, quietly=TRUE)){install.packages("openxlsx"); require(openxlsx, quietly=TRUE)}
     if (!require(shinyWidgets, quietly=TRUE)){install.packages("shinyWidgets"); require(shinyWidgets, quietly=TRUE)}
-    if (!require(webshot2,quietly=TRUE)){install.packages("webshot2")}
+    
+    ## Currently "webshot2" 0.1.1 generates empty screenshots on windows 10 for graphics created with visnetwork.
+    ## This workaround installs the previous version 0.1.0 to temporarily fix the problem.
+    if (!require(webshot2,quietly=TRUE)){
+      install.packages("https://cran.r-project.org/src/contrib/Archive/webshot2/webshot2_0.1.0.tar.gz", repos = NULL, type = "source")
+    }else{
+      pkgs <- installed.packages()[, "Version"]
+      vers <- pkgs["webshot2"]
+      if (vers!="0.1.0"){
+        detach("package:webshot2", unload = TRUE, force=TRUE)
+        install.packages("https://cran.r-project.org/src/contrib/Archive/webshot2/webshot2_0.1.0.tar.gz", repos = NULL, type = "source")
+      }
+    }
+    ##
+    
     if (!(require(chromote, quietly=TRUE))){install.packages("chromote"); require(chromote, quietly=TRUE)}
     
     ### workaround for webshot2 on shinyapps.io
     if (!(require(curl, quietly=TRUE))){install.packages("curl"); require(curl, quietly=TRUE)}
     if (!(require(pagedown, quietly=TRUE))){install.packages("pagedown"); require(pagedown, quietly=TRUE)}
+    ##
     require(Matrix, quietly = TRUE)
     require(dimensionsR, quietly = TRUE)
     require(pubmedR, quietly = TRUE)
