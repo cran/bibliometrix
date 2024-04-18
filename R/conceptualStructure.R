@@ -1,3 +1,5 @@
+utils::globalVariables(c("clust","Dim1","Dim2","label","id","shape",
+                         "color", "contrib","dim1","dim2","nomi", "TC"))
 #' Creating and plotting conceptual structure map of a scientific field
 #'
 #' The function \code{conceptualStructure} creates a conceptual structure map of 
@@ -21,7 +23,7 @@
 #' An n-gram is a contiguous sequence of n terms. The function can extract n-grams composed by 1, 2, 3 or 4 terms. Default value is \code{ngrams=1}.
 #' @param method is a character object. It indicates the factorial method used to create the factorial map. Use \code{method="CA"} for Correspondence Analysis,
 #'  \code{method="MCA"} for Multiple Correspondence Analysis or \code{method="MDS"} for Metric Multidimensional Scaling. The default is \code{method="MCA"}
-#' @param minDegree is an integer. It indicates the minimum occurrences of terms to analize and plot. The default value is 2.
+#' @param minDegree is an integer. It indicates the minimum occurrences of terms to analyze and plot. The default value is 2.
 #' @param clust is an integer or a character. If clust="auto", the number of cluster is chosen automatically, otherwise clust can be an integer between 2 and 8.
 #' @param k.max is an integer. It indicates the maximum number of cluster to keep. The default value is 5. The max value is 20.
 #' @param stemming is logical. If TRUE the Porter's Stemming algorithm is applied to all extracted terms. The default is \code{stemming = FALSE}.
@@ -64,17 +66,17 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
   #cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
   cbPalette <- colorlist()#c(brewer.pal(9, 'Set1')[-6], brewer.pal(8, 'Set2')[-7], brewer.pal(12, 'Paired')[-11],brewer.pal(12, 'Set3')[-c(2,8,12)])
   
-  if (!is.null(quali.supp)){
-    QSUPP=data.frame(M[,quali.supp])
-    names(QSUPP)=names(M)[quali.supp]
-    row.names(QSUPP)=tolower(row.names(M))
-  }
-  
-  if (!is.null(quanti.supp)){
-    SUPP=data.frame(M[,quanti.supp])
-    names(SUPP)=names(M)[quanti.supp]
-    row.names(SUPP)=tolower(row.names(M))
-  }
+  # if (!is.null(quali.supp)){
+  #   QSUPP=data.frame(M[,quali.supp])
+  #   names(QSUPP)=names(M)[quali.supp]
+  #   row.names(QSUPP)=tolower(row.names(M))
+  # }
+  # 
+  # if (!is.null(quanti.supp)){
+  #   SUPP=data.frame(M[,quanti.supp])
+  #   names(SUPP)=names(M)[quanti.supp]
+  #   row.names(SUPP)=tolower(row.names(M))
+  # }
   binary=FALSE
   if (method=="MCA"){binary=TRUE}
   
@@ -157,20 +159,20 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
   quali=NULL
   quanti=NULL
   # Perform Multiple Correspondence Analysis (MCA)
-  if (!is.null(quali.supp)){
-    ind=which(row.names(QSUPP) %in% row.names(CW))
-    QSUPP=as.data.frame(QSUPP[ind,])
-    CW=cbind(CW,QSUPP)
-    quali=(p+1):dim(CW)[2]
-    names(CW)[quali]=names(M)[quali.supp]
-  }
-  if (!is.null(quanti.supp)){
-    ind=which(row.names(SUPP) %in% row.names(CW))
-    SUPP=as.data.frame(SUPP[ind,])
-    CW=cbind(CW,SUPP)
-    quanti=(p+1+length(quali)):dim(CW)[2]
-    names(CW)[quanti]=names(M)[quanti.supp]
-  }
+  # if (!is.null(quali.supp)){
+  #   ind=which(row.names(QSUPP) %in% row.names(CW))
+  #   QSUPP=as.data.frame(QSUPP[ind,])
+  #   CW=cbind(CW,QSUPP)
+  #   quali=(p+1):dim(CW)[2]
+  #   names(CW)[quali]=names(M)[quali.supp]
+  # }
+  # if (!is.null(quanti.supp)){
+  #   ind=which(row.names(SUPP) %in% row.names(CW))
+  #   SUPP=as.data.frame(SUPP[ind,])
+  #   CW=cbind(CW,SUPP)
+  #   quanti=(p+1+length(quali)):dim(CW)[2]
+  #   names(CW)[quanti]=names(M)[quanti.supp]
+  # }
   
   results <- factorial(CW,method=method,quanti=quanti,quali=quali)
   res.mca <- results$res.mca
@@ -193,10 +195,9 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
   
   km.res$data=df
   km.res$cluster=cutree(km.res,k=clust)
-  km.res$data.clust=cbind(km.res$data,km.res$cluster)
-  names(km.res$data.clust)[3]="clust"
-  centers<- km.res$data.clust %>% group_by(.data$clust) %>% 
-    summarise("Dim.1"=mean(.data$Dim.1),"Dim.2"=mean(.data$Dim.2)) %>% 
+  km.res$data.clust=data.frame(km.res$data,clust=km.res$cluster)
+  centers<- km.res$data.clust %>% group_by(clust) %>% 
+    summarise("Dim1"=mean(Dim1),"Dim2"=mean(Dim2)) %>% 
     as.data.frame()
   
   km.res$centers=centers[,c(2,3,1)]
@@ -208,30 +209,30 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
     mutate(shape = "1",
            label = row.names(.)) %>% 
     bind_rows(km.res$centers %>% mutate(shape = "0", label="")) %>% 
-    mutate(color = colorlist()[.data$clust])
+    mutate(color = colorlist()[clust])
   
   hull_data <- 
     df_clust %>%
-    group_by(.data$clust) %>% 
-    slice(chull(.data$Dim.1, .data$Dim.2))
+    group_by(clust) %>% 
+    slice(chull(Dim1, Dim2))
   
   hull_data <- hull_data %>%
     bind_rows(
       hull_data %>% group_by(clust) %>% slice_head(n=1)
     ) %>%
     mutate(id = row_number()) %>%
-    arrange(.data$clust,.data$id)
+    arrange(clust,id)
   
   size <- labelsize
   
-  b <- ggplot(df_clust, aes(x=.data$Dim.1, y=.data$Dim.2, shape=.data$shape, color=.data$color)) +
+  b <- ggplot(df_clust, aes(x=Dim1, y=Dim2, shape=shape, color=color)) +
     geom_point() + 
     geom_polygon(data = hull_data,
-                 aes(fill = .data$color,
-                     colour = .data$color),
+                 aes(fill = color,
+                     colour = color),
                  alpha = 0.3,
                  show.legend = FALSE) +
-    ggrepel::geom_text_repel(aes(label=.data$label)) +
+    ggrepel::geom_text_repel(aes(label=label)) +
     theme_minimal()+
     labs(title= paste("Conceptual Structure Map - method: ",method,collapse="",sep="")) +
     geom_hline(yintercept=0, linetype="dashed", color = adjustcolor("grey40",alpha.f = 0.7))+
@@ -250,28 +251,7 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
       ylab(paste("Dim 2 (",round(res.mca$eigCorr$perc[2],2),"%)",sep=""))
   }else{b=b+xlab("Dim 1")+ylab("Dim 2")}
   
-  if (!is.null(quali.supp)){
-    s_df_quali=df_quali[(abs(df_quali[,1]) >= quantile(abs(df_quali[,1]),0.75) | abs(df_quali[,2]) >= quantile(abs(df_quali[,2]),0.75)),]
-    names(s_df_quali)=c("x","y")
-    s_df_quali$label=row.names(s_df_quali)
-    x=s_df_quali$x
-    y=s_df_quali$y
-    label=s_df_quali$label
-    b=b+geom_point(aes(x=x,y=y),data=s_df_quali,colour="red",size=1) +
-      geom_label_repel(aes(x=x,y=y,label=label,size=1),data=s_df_quali)
-  }
-  
-  if (!is.null(quanti.supp)){
-    names(df_quanti)=c("x","y")
-    df_quanti$label=row.names(df_quanti)
-    x=df_quanti$x
-    y=df_quanti$y
-    label=df_quanti$label
-    b=b+geom_point(aes(x=x,y=y),data=df_quanti,colour="blue",size=1) +
-      geom_label_repel(aes(x=x,y=y,label=label,size=1),data=df_quanti) +
-      geom_segment(data=df_quanti,aes(x=0,y=0,xend = x, yend = y), size=1.5,arrow = arrow(length = unit(0.3,"cm")))
-  }
-  b=b + theme(legend.position="none")
+  b <- b + theme(legend.position="none")
   
   ## logo coordinates
   coord_b <- plotCoord(b)
@@ -303,8 +283,8 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
     A$contrib <- docCoord$contrib
     A <- A %>%
       mutate(names=row.names(A)) %>%
-      group_by(.data$color) %>%
-      top_n(n=documents,wt=.data$contrib) %>%
+      group_by(color) %>%
+      top_n(n=documents,wt=contrib) %>%
       select(!"contrib")%>%
       as.data.frame() 
     
@@ -323,7 +303,7 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
     rangex=c(min(df_all[,1]),max(df_all[,1]))
     rangey=c(min(df_all[,2]),max(df_all[,2]))
 
-    b_doc <- ggplot(aes(x=.data$dim1,y=.data$dim2,label=.data$nomi),data=A)+
+    b_doc <- ggplot(aes(x=dim1,y=dim2,label=nomi),data=A)+
       geom_point(size = 2, color = A$color)+
       labs(title= "Factorial map of the documents with the highest contributes") +
       geom_label_repel(box.padding = unit(0.5, "lines"),size=(log(labelsize*3)), fontface = "bold", 
@@ -339,8 +319,8 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
         plot.title=element_text(size=labelsize+1,face="bold"),
         panel.background = element_rect(fill = "white", colour = "white"),
         #panel.grid.major = element_line(size = 0.3, linetype = 'dashed', colour = adjustcolor("gray60",alpha.f = 0.7)),
-        axis.line.x = element_line(color="black",size=0.5),
-        axis.line.y = element_line(color="black",size=0.5),
+        axis.line.x = element_line(color="black",linewidth=0.5),
+        axis.line.y = element_line(color="black",linewidth=0.5),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank())
       
@@ -368,8 +348,8 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
     B$TC <- docCoord$TC
     B <- B %>%
       mutate(names=row.names(B)) %>%
-      group_by(.data$color) %>%
-      top_n(n=documents, wt=.data$TC) %>%
+      group_by(color) %>%
+      top_n(n=documents, wt=TC) %>%
       select(!"TC")%>%
       as.data.frame() 
     
@@ -384,7 +364,7 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
     rangex=c(min(df_all_TC[,1]),max(df_all_TC[,1]))
     rangey=c(min(df_all_TC[,2]),max(df_all_TC[,2]))
     
-    b_doc_TC=ggplot(aes(x=.data$dim1,y=.data$dim2,label=.data$nomi),data=B)+
+    b_doc_TC=ggplot(aes(x=dim1,y=dim2,label=nomi),data=B)+
       geom_point(size = 2, color = B$color)+
       labs(title= "Factorial map of the most cited documents") +
       geom_label_repel(box.padding = unit(0.5, "lines"),size=(log(labelsize*3)), fontface = "bold", 
@@ -402,8 +382,8 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
         plot.title=element_text(size=labelsize+1,face="bold"),
         panel.background = element_rect(fill = "white", colour = "white"),
         #panel.grid.major = element_line(size = 0.3, linetype = 'dashed', colour = adjustcolor("gray60",alpha.f = 0.7)),
-        axis.line.x = element_line(color="black",size=0.5),
-        axis.line.y = element_line(color="black",size=0.5),
+        axis.line.x = element_line(color="black",linewidth=0.5),
+        axis.line.y = element_line(color="black",linewidth=0.5),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank())
       
@@ -417,12 +397,12 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
     if (isTRUE(graph)){plot(b_doc_TC)}
 
     semanticResults=list(net=CW,res=res.mca,km.res=km.res,graph_terms=b,graph_dendogram=b_dend,
-                         graph_documents_Contrib=b_doc,graph_documents_TC=b_doc_TC,docCoord=docCoord, hull_data=hull_data)
+                         graph_documents_Contrib=b_doc,graph_documents_TC=b_doc_TC,docCoord=docCoord, coord=results$coord, hull_data=hull_data)
     
   }else{
 
     semanticResults=list(net=CW,res=res.mca,km.res=km.res,graph_terms=b,graph_dendogram=b_dend,
-                         graph_documents_Contrib=NULL,graph_documents_TC=NULL,docCoord=NULL, hull_data=hull_data)
+                         graph_documents_Contrib=NULL,graph_documents_TC=NULL,docCoord=NULL, coord=NA, hull_data=hull_data)
     }
   
   params <- list(field = field, 
@@ -447,53 +427,54 @@ conceptualStructure<-function(M,field="ID", ngrams=1, method="MCA", quali.supp=N
 }
 
 
-factorial<-function(X,method,quanti,quali){
+factorial<-function(X,method,quanti=NULL,quali=NULL){
   df_quali=data.frame()
   df_quanti=data.frame()
   
   switch(method,
          ### CORRESPONDENCE ANALYSIS ###
          CA={
-           res.mca <- CA(X, quanti.sup=quanti, quali.sup=quali, ncp=2, graph=FALSE)
-           
+           res.mca <- ca::ca(X, nd=2)
            # Get coordinates of keywords 
-           #coord=get_ca_col(res.mca)
-           #df=data.frame(coord$coord)
-           coord <- list(coord=res.mca$col$coord, contrib=res.mca$col$contrib, cos2=res.mca$col$cos2)
-           df <- data.frame(coord$coord)
-           if (!is.null(quali)){
-             df_quali=data.frame(res.mca$quali.sup$coord)
-           }
-           if (!is.null(quanti)){
-             df_quanti=data.frame(res.mca$quanti.sup$coord)
-           }
-           #coord_doc=get_ca_row(res.mca)
-           #df_doc=data.frame(coord_doc$coord)
-           coord_doc <- list(coord=res.mca$row$coord, contrib=res.mca$row$contrib, cos2=res.mca$row$cos2)
-           df_doc <- data.frame(coord_doc$coord)
+           coord <- list(coord=res.mca$colcoord, 
+                         contrib =data.frame((res.mca$colcoord[,1:2]^2)*res.mca$colmass), 
+                         cos2=data.frame(((res.mca$colcoord[,1:2]^2)/(res.mca$coldist))))
+           #df <- data.frame(coord$coord)
+           coord_doc <- list(coord=res.mca$rowcoord, 
+                             contrib=data.frame((res.mca$rowcoord[,1:2]^2)*res.mca$rowmass), 
+                             cos2=data.frame(((res.mca$rowcoord[,1:2]^2)/(res.mca$rowdist))))
+           #df_doc <- data.frame(coord_doc$coord)
            },
          ### MULTIPLE CORRESPONDENCE ANALYSIS ###
          MCA={
-           if(length(quanti)>0){
-           X[,-quanti]=data.frame(apply(X[,-quanti],2,factor))} else{X=data.frame(apply(X,2,factor))}
-           res.mca <- MCA(X, quanti.sup=quanti, quali.sup=quali, ncp=2, graph=FALSE)
+             X=data.frame(apply(X,2,factor))
+           res.mca <- ca::mjca(X, nd=2, lambda="indicator", ps="_")
            # Get coordinates of keywords (we take only categories "1"")
-           #coord=get_mca_var(res.mca)
-           #df=data.frame(coord$coord)[seq(2,dim(coord$coord)[1],by=2),]
-           df <- data.frame(res.mca$var$coord)[seq(2,dim(res.mca$var$coord)[1],by=2),]
-           row.names(df)=gsub("_1","",row.names(df))
-           if (!is.null(quali)){
-             df_quali=data.frame(res.mca$quali.sup$coord)[seq(1,dim(res.mca$quali.sup$coord)[1],by=2),]
-             row.names(df_quali)=gsub("_1","",row.names(df_quali))
-           }
-           if (!is.null(quanti)){
-             df_quanti=data.frame(res.mca$quanti.sup$coord)[seq(1,dim(res.mca$quanti.sup$coord)[1],by=2),]
-             row.names(df_quanti)=gsub("_1","",row.names(df_quanti))
-           } 
-           #coord_doc=get_mca_ind(res.mca)
-           #df_doc=data.frame(coord_doc$coord)
-           coord_doc <- list(coord=res.mca$ind$coord, contrib=res.mca$ind$contrib, cos2=res.mca$ind$cos2)
-           df_doc=data.frame(res.mca$ind$coord)
+           K      <- 2
+           I      <- dim(res.mca$rowcoord)[1] ; J <- dim(res.mca$colcoord)[1]
+           evF    <- matrix(rep(res.mca$sv[1:K], I), I, K, byrow = TRUE)
+           evG    <- matrix(rep(res.mca$sv[1:K], J), J, K, byrow = TRUE)
+           rpc    <- res.mca$rowcoord[,1:2] * evF
+           cpc    <- res.mca$colcoord[,1:2] * evG
+           
+           coord <- list(coord=data.frame(Dim1=cpc[,1],Dim2=cpc[,2], label=res.mca$levelnames,row.names = res.mca$levelnames) %>% 
+                           dplyr::filter(substr(label,nchar(label)-1,nchar(label))=="_1") %>% 
+                           select(-"label"), 
+                         contrib = data.frame(cpc^2*res.mca$colmass/res.mca$sv[1:2], label=res.mca$levelnames,row.names = res.mca$levelnames) %>% 
+                           dplyr::filter(substr(label,nchar(label)-1,nchar(label))=="_1") %>% 
+                           select(-"label"), 
+                         cos2=data.frame(((cpc^2)/(res.mca$coldist)),label=res.mca$levelnames,row.names = res.mca$levelnames) %>% 
+                           dplyr::filter(substr(label,nchar(label)-1,nchar(label))=="_1") %>% 
+                           select(-"label")
+                         )
+           row.names(coord$coord) <- row.names(coord$contrib) <- row.names(coord$cos2) <- substr(row.names(coord$coord),1,nchar(row.names(coord$coord))-2)
+           #df <- coord$coord
+           
+           coord_doc <- list(coord=data.frame(Dim1=rpc[,1],Dim2=rpc[,1], row.names=row.names(X)),
+                             contrib=data.frame((rpc[,1:2]^2)*res.mca$rowmass/res.mca$sv[1:2]), 
+                             cos2=data.frame(res.mca$rowmass*rpc^2 / res.mca$rowinertia)
+                             )
+           #df_doc <- coord_doc$coord
            },
          MDS={
            NetMatrix=Matrix::crossprod(X,X)
@@ -503,7 +484,7 @@ factorial<-function(X,method,quanti,quali){
            res.mca <- Net %>%
              #dist() %>%          
              cmdscale()  
-           colnames(res.mca) <- c("Dim.1", "Dim.2")
+           colnames(res.mca) <- c("Dim1", "Dim2")
            df=data.frame(res.mca)
            row.names(df)=row.names(Net)
          }
@@ -511,18 +492,20 @@ factorial<-function(X,method,quanti,quali){
   
   if (method!="MDS"){
   #
-    docCoord=as.data.frame(cbind(df_doc,rowSums(coord_doc$contrib)))
+    docCoord=as.data.frame(cbind(coord_doc$coord,rowSums(coord_doc$contrib)))
     names(docCoord)=c("dim1","dim2","contrib")
     docCoord=docCoord[order(-docCoord$contrib),]
     
     # Benzecrì eigenvalue correction
     res.mca <- eigCorrection(res.mca)
     
-    results=list(res.mca=res.mca,df=df,df_doc=df_doc,df_quali=df_quali,df_quanti=df_quanti,docCoord=docCoord)
+    res.mca$coord_doc <- coord_doc
+    
+    results=list(res.mca=res.mca,df=coord$coord,df_doc=coord_doc$coord,df_quali=df_quali,df_quanti=df_quanti,docCoord=docCoord, coord=coord)
     
     
   }else{
-    results=list(res.mca=res.mca,df=df,df_doc=NA,df_quali=NA,df_quanti=NA,docCoord=NA)
+    results=list(res.mca=res.mca,df=df,df_doc=NA,df_quali=NA,df_quanti=NA,docCoord=NA, coord=NA)
   }
   return(results)
 }
@@ -543,11 +526,10 @@ euclDist<-function(x,y){
 
 eigCorrection <- function(res) {
   # Benzecri correction calculation
-  
-  n <- nrow(res$eig)
-  
-  
-  e <- res$eig[,1]
+  n <- length(res$sv)
+  e <- res$sv^2
+  #n <- nrow(res$eig)
+  #e <- res$eig[,1]
   eigBenz <- ((n / (n - 1)) ^ 2) * ((e - (1 / n)) ^ 2)
   eigBenz[e< 1/n] <- 0
   perc <- eigBenz / sum(eigBenz) * 100

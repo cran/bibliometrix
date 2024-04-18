@@ -1,3 +1,4 @@
+utils::globalVariables(c("degree"))
 #' Plotting Bibliographic networks
 #'
 #' \code{networkPlot} plots a bibliographic network.
@@ -20,7 +21,7 @@
 #' \code{type="kamada"}\tab   \tab  Kamada-Kawai layout}
 #'  
 #' @param Title is a character indicating the plot title. 
-#' @param vos.path is a character indicating the full path whre VOSviewer.jar is located.
+#' @param vos.path is a character indicating the full path where VOSviewer.jar is located.
 #' @param size is integer. It defines the size of each vertex. Default is \code{size=3}. 
 #' @param size.cex is logical. If TRUE the size of each vertex is proportional to its degree.  
 #' @param noloops is logical. If TRUE loops in the network are deleted.
@@ -131,8 +132,8 @@ networkPlot <-
     #deg <- igraph::degree_distribution(bsk.network, cumulative=T, mode="all")
     deg <- degree(bsk.network, mode = "all")
     deg.dist <- data.frame(node=V(bsk.network)$name, degree=deg) %>% 
-      arrange(desc(.data$degree)) %>% 
-      mutate(degree = .data$degree/max(.data$degree))
+      arrange(desc(degree)) %>% 
+      mutate(degree = degree/max(degree))
     
     
     # Compute node degrees (#links) and use that to set node size:

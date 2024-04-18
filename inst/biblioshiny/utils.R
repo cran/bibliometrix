@@ -1,5 +1,209 @@
 ### COMMON FUNCTIONS ####
 
+# DATA TABLE FORMAT ----
+DTformat <- function(df, nrow=10, filename="Table", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, size='85%', filter="top",
+                     columnShort=NULL, columnSmall=NULL, round=2, title="", button=FALSE, escape=FALSE, selection=FALSE, scrollX=FALSE, scrollY=FALSE){
+  
+  if ("text" %in% names(df)){
+    df <- df %>%
+      mutate(text = gsub("<|>","",text))
+  }
+  
+  if (length(columnShort)>0){
+    columnDefs = list(list(
+      className = 'dt-center', targets = 0:(length(names(df)) - 1)),
+      list(
+        targets = columnShort-1,
+        render = JS(
+          "function(data, type, row, meta) {",
+          "return type === 'display' && data.length > 500 ?",
+          "'<span title=\"' + data + '\">' + data.substr(0, 500) + '...</span>' : data;",
+          "}")
+      ))
+  } else{
+    columnDefs = list(list(
+      className = 'dt-center', targets = 0:(length(names(df)) - 1)
+    ))
+  }
+  if (isTRUE(button)){
+    if (isTRUE(pagelength)){
+      buttons = list(
+        list(extend = 'pageLength'),
+        list(extend = 'excel',
+             filename = paste0(filename,"_tall_",Sys.Date()),
+             title = " ",
+             header = TRUE,
+             exportOptions = list(
+               modifier = list(page = "all")
+             ))
+      )
+    } else{
+      buttons = list(
+        list(extend = 'excel',
+             filename = paste0(filename,"_tall_",Sys.Date()),
+             title = " ",
+             header = TRUE,
+             exportOptions = list(
+               modifier = list(page = "all")
+             )))
+    }
+  } else{
+    buttons = list(list(extend = 'pageLength'))
+  }
+  
+  if (isTRUE(dom)){
+    dom <- "Brtip"
+  } else if (dom==FALSE){
+    dom <- "Bt"
+  } else {
+    dom <- "t"
+  }
+  
+  if (nchar(title)>0){
+    caption = htmltools::tags$caption( style = 'caption-side: top; text-align: center; color:black;  font-size:140% ;',title)
+  } else {
+    caption = htmltools::tags$caption( style = 'caption-side: top; text-align: center; color:black;  font-size:140% ;',"")
+  }
+  
+  if (isTRUE(selection)){
+    extensions = c("Buttons", "Select", "ColReorder", "FixedHeader")
+    buttons <- c(buttons, c('selectAll', 'selectNone'))
+    select <- list(style='multiple', items='row', selected = 1:nrow(df))
+    #selection = list(mode = 'multiple', selected = 1:nrow(df), target = 'row')
+  } else {
+    extensions = c("Buttons", "ColReorder", "FixedHeader")
+    select <- NULL
+    #selection = "none"
+  }
+  
+  tab <- DT::datatable(df, escape = escape,rownames = FALSE,
+                       caption = caption,
+                       selection= "none",
+                       extensions = extensions,
+                       filter = filter,
+                       options = list(
+                         headerCallback = DT::JS(
+                           "function(thead) {",
+                           "  $(thead).css('font-size', '1em');",
+                           "}"
+                         ),
+                         colReorder = TRUE,
+                         fixedHeader = TRUE,
+                         pageLength = nrow,
+                         autoWidth = TRUE, scrollX = scrollX,scrollY=scrollY,
+                         dom = dom,
+                         buttons = buttons,
+                         select = select,
+                         lengthMenu = list(c(10, 25, 50, -1),
+                                           c('10 rows', '25 rows', '50 rows', 'Show all')),
+                         columnDefs = columnDefs
+                       ),
+                       class = 'cell-border compact stripe'
+  ) %>%
+    DT::formatStyle(
+      names(df),
+      backgroundColor = 'white',
+      textAlign = 'center',
+      fontSize = size
+    )
+  
+  ## left aligning
+  
+  if (!is.null(left)){
+    tab <- tab %>%
+      DT::formatStyle(
+        names(df)[left],
+        backgroundColor = 'white',
+        textAlign = 'left',
+        fontSize = size
+      )
+  }
+  
+  # right aligning
+  if (!is.null(right)){
+    tab <- tab %>%
+      DT::formatStyle(
+        names(df)[right],
+        backgroundColor = 'white',
+        textAlign = 'right',
+        fontSize = size
+      )
+  }
+  
+  # numeric round
+  if (!is.null(numeric)){
+    tab <- tab %>%
+      formatRound(names(df)[c(numeric)], digits=round)
+  }
+  
+  tab
+}
+
+
+authorNameFormat <- function(M, format){
+  if (format=="AF" & "AF" %in% names(M)){
+    M <- M %>% 
+      rename(AU_IN = AU,
+             AU = AF)
+  }
+  return(M)
+}
+
+split_text_numbers <- function(input_str, UT) {
+  # Split the string into components based on "; "
+  components <- unlist(strsplit(input_str, "; ", fixed = TRUE))
+  
+  # Initialize two vectors to store the separated parts
+  texts <- character(length(components))
+  numbers <- numeric(length(components))
+  
+  # Iterate through each component to separate text and numbers
+  for (i in seq_along(components)) {
+    # Extract the text using regex, matching everything up to " ("
+    texts[i] <- gsub("\\s\\(.*$", "", components[i])
+    
+    # Extract the numbers using regex, matching digits inside parentheses
+    numbers[i] <- as.numeric(gsub(".*\\((\\d+)\\).*", "\\1", components[i]))
+  }
+  
+  # Return a list with texts and numbers separated
+  data.frame(Texts = texts, Numbers = numbers, UT=UT)
+}
+
+
+AuthorNameMerge <- function(M){
+  
+  df_list <- list()
+  for (i in 1:nrow(M)){
+    if(nchar(M$AU[i])>0){
+      df_list[[i]] <- split_text_numbers(M$AU[i],M$UT[i])
+    }
+  }
+  
+  df <- do.call(rbind,df_list)
+  
+  AU <- df %>% 
+    group_by(Numbers, Texts) %>% 
+    count() %>% 
+    group_by(Numbers) %>%
+    arrange(desc(n)) %>% 
+    mutate(AU = Texts[1]) %>% 
+    select(-"n", - "Texts") %>% 
+    ungroup() %>% 
+    distinct()
+  
+  df <- df %>% 
+    left_join(AU, by = "Numbers") %>% 
+    group_by(UT) %>% 
+    summarize(AU = paste0(AU,collapse=";"),
+              AU_ID = paste0(Numbers, collapse=";"))
+  
+  M <- M %>% 
+    rename(AU_original = AU) %>% 
+    left_join(df, by="UT")
+  return(M)
+}
+
 getFileNameExtension <- function (fn) {
   # remove a path
   splitted    <- strsplit(x=fn, split='/')[[1]]   
@@ -42,7 +246,7 @@ strSynPreview <- function(string){
 igraph2PNG <- function(x, filename, width = 10, height = 7, dpi=75){
   V(x)$centr <- centr_betw(x)$res
   df <- data.frame(name=V(x)$label,cluster=V(x)$color, centr=V(x)$centr) %>% 
-    group_by(.data$cluster) %>% 
+    group_by(cluster) %>% 
     slice_head(n=3)
   V(x)$label[!(V(x)$label %in% df$name)] <- ""
   png(filename = filename, width = width, height = height, unit="in", res=dpi) 
@@ -71,7 +275,7 @@ plot.ly <- function(g, flip=FALSE, side="r", aspectratio=1, size=0.15,data.type=
   return(gg)
 }
 
-freqPlot <- function(xx,x,y, textLaby,textLabx, title, values){
+freqPlot <- function(xx,x,y, textLaby,textLabx, title, values, string.max=70){
   
   xl <- c(max(xx[,x])-0.02-diff(range(xx[,x]))*0.125, max(xx[,x])-0.02)+1
   yl <- c(1,1+length(unique(xx[,y]))*0.125)
@@ -81,6 +285,8 @@ freqPlot <- function(xx,x,y, textLaby,textLabx, title, values){
   if (title=="Most Local Cited References" & values$M$DB[1]=="SCOPUS"){
     xx[,y] <- gsub("^(.+?)\\.,.*\\((\\d{4})\\)$", paste0("\\1","., ", "\\2"), xx[,y])
   }
+  
+  xx[,y] <- substr(xx[,y],1,string.max)
   
   g <- ggplot(xx, aes(x =xx[,x], y = xx[,y], label = xx[,x], text=Text)) +
     geom_segment(aes(x = 0, y = xx[,y], xend = xx[,x], yend = xx[,y]), color = "grey50") +
@@ -171,27 +377,27 @@ notifications <- function(){
          },
          # missing online file. The local one exists.
          noAB={
-           notifTot <- notifLocal %>% filter(.data$action == TRUE) %>% mutate(status = "info")
+           notifTot <- notifLocal %>% filter(action == TRUE) %>% mutate(status = "info")
          },
          # missing the local file. The online one exists.
          AnoB={
            notifOnline <- notifOnline %>% 
              dplyr::slice_head(n=5)
-           notifTot <- notifOnline %>% filter(.data$action == TRUE) %>% mutate(status = "danger") 
-           notifOnline %>% filter(.data$action == TRUE) %>% write.csv(file=file, quote = FALSE, row.names = FALSE)
+           notifTot <- notifOnline %>% filter(action == TRUE) %>% mutate(status = "danger") 
+           notifOnline %>% filter(action == TRUE) %>% write.csv(file=file, quote = FALSE, row.names = FALSE)
          },
          # both files exist.
          AB={
            notifTot <- left_join(notifOnline %>% mutate(status = "danger"),
                                  notifLocal%>% mutate(status = "info"), by="nots") %>% 
-             mutate(status = tidyr::replace_na(.data$status.y,"danger")) %>% 
-             rename(href = .data$href.x,
-                    action = .data$action.x) %>% 
-             select(.data$nots, .data$href, .data$action, .data$status) %>% 
-             arrange(.data$status) %>% 
-             filter(.data$action == TRUE) %>% 
+             mutate(status = tidyr::replace_na(status.y,"danger")) %>% 
+             rename(href = href.x,
+                    action = action.x) %>% 
+             select(nots, href, action, status) %>% 
+             arrange(status) %>% 
+             filter(action == TRUE) %>% 
              dplyr::slice_head(n=5)
-           notifTot %>% select(-.data$status) %>% write.csv(file=file, quote = FALSE, row.names = FALSE)   
+           notifTot %>% select(-status) %>% write.csv(file=file, quote = FALSE, row.names = FALSE)   
            
          })
   
@@ -200,7 +406,7 @@ notifications <- function(){
 }
 
 is_online <- function(timeout=3){
-  RCurl::url.exists("www.bibliometrixs.org", timeout=timeout)
+  RCurl::url.exists("www.bibliometrix.org", timeout=timeout)
 }
 
 # is_online <- function(){
@@ -307,10 +513,10 @@ ValueBoxes <- function(M){
   ## VB 12 - Average citations per doc
   df[12,] <- c("Average citations per doc", format(mean(M$TC, na.rm=T), digit = 4))
   
-  DT <- M %>% mutate(DT = tolower(.data$DT)) %>% 
-    count(.data$DT) %>% 
-    rename(Description = .data$DT,
-           Results = .data$n)
+  DT <- M %>% mutate(DT = tolower(DT)) %>% 
+    count(DT) %>% 
+    rename(Description = DT,
+           Results = n)
   
   # Indexed Keywords (ID)
   ID <- unique(trimws(gsub("\\s+|\\.|\\,"," ",unlist(strsplit(M$ID, ";")))))
@@ -327,7 +533,7 @@ ValueBoxes <- function(M){
                                     "AUTHORS COLLABORATION","Single-authored docs","Co-Authors per Doc","International co-authorships %", "DOCUMENT TYPES"))
   
   df <- left_join(df2,df,by = "Description") %>% rbind(DT) %>% 
-    mutate(Results = replace_na(.data$Results, ""))
+    mutate(Results = replace_na(Results, ""))
   
   return(df)
 }
@@ -350,13 +556,13 @@ countryCollab<-function(M){
   M$AU1_CO=gsub("WALES","UNITED KINGDOM",M$AU1_CO)
   M$AU1_CO=gsub("NORTH IRELAND","UNITED KINGDOM",M$AU1_CO)
   
-  df <- M %>% group_by(.data$AU1_CO) %>% 
-    select(.data$AU1_CO,.data$nCO) %>% 
+  df <- M %>% group_by(AU1_CO) %>% 
+    select(AU1_CO,nCO) %>% 
     summarize(Articles=n(),
-              SCP=sum(.data$nCO==0),
-              MCP=sum(.data$nCO==1)) %>% 
-    rename(Country = .data$AU1_CO) %>% 
-    arrange(desc(.data$Articles))
+              SCP=sum(nCO==0),
+              MCP=sum(nCO==1)) %>% 
+    rename(Country = AU1_CO) %>% 
+    arrange(desc(Articles))
   
   return(df)
 }
@@ -367,14 +573,14 @@ Hindex_plot <- function(values, type, input){
     
     switch(type,
            author={
-             AU <- trim(gsub(",","",names(tableTag(values$M,"AU"))))
-             values$H <- Hindex(values$M, field = "author", elements = AU, sep = ";", years=Inf)$H %>% 
-               arrange(desc(.data$h_index))
+             #AU <- trim(gsub(",","",names(tableTag(values$M,"AU"))))
+             values$H <- Hindex(values$M, field = "author", elements = NULL, sep = ";", years=Inf)$H %>% 
+               arrange(desc(h_index))
            },
            source={
-             SO <- names(sort(table(values$M$SO),decreasing = TRUE))
-             values$H <- Hindex(values$M, field = "source", elements = SO, sep = ";", years=Inf)$H %>% 
-               arrange(desc(.data$h_index))
+             #SO <- names(sort(table(values$M$SO),decreasing = TRUE))
+             values$H <- Hindex(values$M, field = "source", elements = NULL, sep = ";", years=Inf)$H %>% 
+               arrange(desc(h_index))
            }
     )
     
@@ -420,13 +626,13 @@ descriptive <- function(values,type){
   
   switch(type,
          "tab2"={
-           TAB <- values$M %>% group_by(.data$PY) %>% 
+           TAB <- values$M %>% group_by(PY) %>% 
              count() %>% 
-             rename(Year = .data$PY,
-                    Articles = .data$n) %>% 
+             rename(Year = PY,
+                    Articles = n) %>% 
              right_join(data.frame(Year=seq(min(values$M$PY,na.rm=TRUE),max(values$M$PY, na.rm=TRUE))), by="Year") %>% 
-             mutate(Articles = replace_na(.data$Articles,0)) %>% 
-             arrange(.data$Year) %>% as.data.frame()
+             mutate(Articles = replace_na(Articles,0)) %>% 
+             arrange(Year) %>% as.data.frame()
            
            ny=diff(range(TAB$Year))
            values$GR=round(((TAB[nrow(TAB),2]/TAB[1,2])^(1/(ny))-1)*100, digits = 2)
@@ -436,25 +642,25 @@ descriptive <- function(values,type){
            nAU <- lengths(listAU)
            fracAU <- rep(1/nAU,nAU)
            TAB <- tibble(Author=unlist(listAU), fracAU=fracAU) %>% 
-             group_by(.data$Author) %>% 
+             group_by(Author) %>% 
              summarize(
                Articles = n(),
-               AuthorFrac = sum(.data$fracAU)
+               AuthorFrac = sum(fracAU)
              ) %>% 
-             arrange(desc(.data$Articles)) %>% as.data.frame()
+             arrange(desc(Articles)) %>% as.data.frame()
            names(TAB)=c("Authors","Articles","Articles Fractionalized")
            #print(S$MostProdAuthors)
          },
          "tab4"={
            y <- as.numeric(substr(Sys.Date(),1,4))
            TAB <- values$M %>% 
-             mutate(TCperYear = .data$TC/(y+1-.data$PY)) %>% 
-             select(.data$SR,.data$DI, .data$TC, .data$TCperYear, .data$PY) %>% 
-             group_by(.data$PY) %>%
-             mutate(NTC = .data$TC/mean(.data$TC)) %>%
+             mutate(TCperYear = TC/(y+1-PY)) %>% 
+             select(SR,DI, TC, TCperYear, PY) %>% 
+             group_by(PY) %>%
+             mutate(NTC = TC/mean(TC)) %>%
              ungroup() %>% 
-             select(-.data$PY) %>%
-             arrange(desc(.data$TC)) %>%
+             select(-PY) %>%
+             arrange(desc(TC)) %>%
              as.data.frame()
            names(TAB)=c("Paper", "DOI","Total Citations","TC per Year","Normalized TC")
          },
@@ -462,30 +668,30 @@ descriptive <- function(values,type){
            
            TAB <- countryCollab(values$M)
            TAB <- TAB %>% 
-             mutate(Freq = .data$Articles/sum(.data$Articles)) %>% 
-             mutate(MCP_Ratio = .data$MCP/.data$Articles)
+             mutate(Freq = Articles/sum(Articles)) %>% 
+             mutate(MCP_Ratio = MCP/Articles)
          },
          "tab6"={
            if (!"AU1_CO" %in% names(values$M)){
              values$M <- metaTagExtraction(values$M, "AU1_CO")
            }
            TAB <- values$M %>% 
-             select(.data$AU1_CO, .data$TC) %>% 
-             drop_na(.data$AU1_CO) %>% 
-             rename(Country = .data$AU1_CO,
-                    TotalCitation = .data$TC) %>% 
-             group_by(.data$Country) %>% 
-             summarise("TC"=sum(.data$TotalCitation),"Average Article Citations"=round(sum(.data$TotalCitation)/length(.data$TotalCitation),1)) %>%
-             arrange(-.data$TC) %>% as.data.frame(.data)
+             select(AU1_CO, TC) %>% 
+             drop_na(AU1_CO) %>% 
+             rename(Country = AU1_CO,
+                    TotalCitation = TC) %>% 
+             group_by(Country) %>% 
+             summarise("TC"=sum(TotalCitation),"Average Article Citations"=round(sum(TotalCitation)/length(TotalCitation),1)) %>%
+             arrange(-TC) %>% as.data.frame(.data)
          },
          "tab7"={
            TAB <- values$M %>% 
-             select(.data$SO) %>% 
-             group_by(.data$SO) %>% 
+             select(SO) %>% 
+             group_by(SO) %>% 
              count() %>% 
-             arrange(desc(.data$n)) %>% 
-             rename(Sources = .data$SO,
-                    Articles = .data$n) %>% 
+             arrange(desc(n)) %>% 
+             rename(Sources = SO,
+                    Articles = n) %>% 
              as.data.frame()
          },
          
@@ -495,12 +701,12 @@ descriptive <- function(values,type){
          "tab11"={
            if(!("AU_UN" %in% names(values$M))){values$M=metaTagExtraction(values$M,Field="AU_UN")}
            TAB <- data.frame(Affiliation=unlist(strsplit(values$M$AU_UN, ";"))) %>% 
-             group_by(.data$Affiliation) %>% 
+             group_by(Affiliation) %>% 
              count() %>% 
-             drop_na(.data$Affiliation) %>% 
-             arrange(desc(.data$n)) %>% 
-             rename(Articles = .data$n) %>% 
-             filter(.data$Affiliation!="NA") %>%
+             drop_na(Affiliation) %>% 
+             arrange(desc(n)) %>% 
+             rename(Articles = n) %>% 
+             filter(Affiliation!="NA") %>%
              as.data.frame()
          },
          "tab12"={
@@ -527,27 +733,27 @@ AffiliationOverTime <- function(values,n){
   nAFF <- lengths(AFF)
   
   AFFY <- data.frame(Affiliation=unlist(AFF),Year=rep(values$M$PY,nAFF)) %>% 
-    filter(.data$Affiliation!="NA") %>%
-    drop_na(.data$Affiliation,.data$Year) %>% 
-    group_by(.data$Affiliation, .data$Year) %>% 
+    filter(Affiliation!="NA") %>%
+    drop_na(Affiliation,Year) %>% 
+    group_by(Affiliation, Year) %>% 
     count() %>% 
-    group_by(.data$Affiliation) %>% 
-    arrange(.data$Year) %>% 
+    group_by(Affiliation) %>% 
+    arrange(Year) %>% 
     ungroup() %>% 
-    pivot_wider(.data$Affiliation, names_from = .data$Year, values_from = .data$n) %>% 
+    pivot_wider(Affiliation, names_from = Year, values_from = n) %>% 
     mutate_all(~replace(., is.na(.), 0)) %>% 
     pivot_longer(cols = !Affiliation, names_to = "Year", values_to = "Articles") %>% 
-    group_by(.data$Affiliation) %>% 
-    mutate(Articles = cumsum(.data$Articles))
+    group_by(Affiliation) %>% 
+    mutate(Articles = cumsum(Articles))
   
   Affselected <- AFFY %>% 
-    filter(.data$Year == max(.data$Year)) %>% 
+    filter(Year == max(Year)) %>% 
     ungroup() %>% 
-    slice_max(.data$Articles, n=n)
+    slice_max(Articles, n=n)
   
   values$AffOverTime <- AFFY %>% 
-    filter(.data$Affiliation %in% Affselected$Affiliation) %>% 
-    mutate(Year = .data$Year %>% as.numeric())
+    filter(Affiliation %in% Affselected$Affiliation) %>% 
+    mutate(Year = Year %>% as.numeric())
   
   Text <- paste(values$AffOverTime$Affiliation," (",values$AffOverTime$Year,") ",values$AffOverTime$Articles, sep="")
   width_scale <- 1.7 * 26 / length(unique(values$AffOverTime$Affiliation))
@@ -555,7 +761,7 @@ AffiliationOverTime <- function(values,n){
   y <- c(min(values$AffOverTime$Articles),min(values$AffOverTime$Articles)+diff(range(values$AffOverTime$Articles))*0.15)
   
   
-  values$AffOverTimePlot <- ggplot(values$AffOverTime, aes(x=.data$Year,y=.data$Articles, group=.data$Affiliation, color=.data$Affiliation, text=Text))+
+  values$AffOverTimePlot <- ggplot(values$AffOverTime, aes(x=Year,y=Articles, group=Affiliation, color=Affiliation, text=Text))+
     geom_line()+
     labs(x = 'Year'
          , y = "Articles"
@@ -580,8 +786,8 @@ AffiliationOverTime <- function(values,n){
           ,axis.title.y = element_text(vjust = 1, angle = 90)
           ,axis.title.x = element_text(hjust = 0.95, angle = 0)
           ,axis.text.x = element_text(size=10, angle = 90)
-          ,axis.line.x = element_line(color="black",size=0.5)
-          ,axis.line.y = element_line(color="black",size=0.5)
+          ,axis.line.x = element_line(color="black",linewidth=0.5)
+          ,axis.line.y = element_line(color="black",linewidth=0.5)
     ) + annotation_custom(values$logoGrid, xmin = x[1], xmax = x[2], ymin = y[1], ymax = y[2]) 
   return(values)
 }
@@ -592,27 +798,27 @@ CountryOverTime <- function(values,n){
   nAFF <- lengths(AFF)
   
   AFFY <- data.frame(Affiliation=unlist(AFF),Year=rep(values$M$PY,nAFF)) %>% 
-    drop_na(.data$Affiliation,.data$Year) %>% 
-    group_by(.data$Affiliation, .data$Year) %>% 
+    drop_na(Affiliation,Year) %>% 
+    group_by(Affiliation, Year) %>% 
     count() %>% 
-    group_by(.data$Affiliation) %>% 
-    arrange(.data$Year) %>% 
+    group_by(Affiliation) %>% 
+    arrange(Year) %>% 
     ungroup() %>% 
-    pivot_wider(.data$Affiliation, names_from = .data$Year, values_from = .data$n) %>% 
+    pivot_wider(Affiliation, names_from = Year, values_from = n) %>% 
     mutate_all(~replace(., is.na(.), 0)) %>% 
     pivot_longer(cols = !Affiliation, names_to = "Year", values_to = "Articles") %>% 
-    group_by(.data$Affiliation) %>% 
-    mutate(Articles = cumsum(.data$Articles))
+    group_by(Affiliation) %>% 
+    mutate(Articles = cumsum(Articles))
   
   Affselected <- AFFY %>% 
-    filter(.data$Year == max(.data$Year)) %>% 
+    filter(Year == max(Year)) %>% 
     ungroup() %>% 
-    slice_max(.data$Articles, n=n)
+    slice_max(Articles, n=n)
   
   values$CountryOverTime <- AFFY %>% 
-    filter(.data$Affiliation %in% Affselected$Affiliation) %>% 
-    mutate(Year = .data$Year %>% as.numeric()) %>% 
-    rename(Country = .data$Affiliation)
+    filter(Affiliation %in% Affselected$Affiliation) %>% 
+    mutate(Year = Year %>% as.numeric()) %>% 
+    rename(Country = Affiliation)
   
   Text <- paste(values$CountryOverTime$Country," (",values$CountryOverTime$Year,") ",values$CountryOverTime$Articles, sep="")
   width_scale <- 1.7 * 26 / length(unique(values$CountryOverTime$Country))
@@ -620,7 +826,7 @@ CountryOverTime <- function(values,n){
   y <- c(min(values$CountryOverTime$Articles),min(values$CountryOverTime$Articles)+diff(range(values$CountryOverTime$Articles))*0.15)
   
   
-  values$CountryOverTimePlot <- ggplot(values$CountryOverTime, aes(x=.data$Year,y=.data$Articles, group=.data$Country, color=.data$Country, text=Text))+
+  values$CountryOverTimePlot <- ggplot(values$CountryOverTime, aes(x=Year,y=Articles, group=Country, color=Country, text=Text))+
     geom_line()+
     labs(x = 'Year'
          , y = "Articles"
@@ -645,8 +851,8 @@ CountryOverTime <- function(values,n){
           ,axis.title.y = element_text(vjust = 1, angle = 90)
           ,axis.title.x = element_text(hjust = 0.95, angle = 0)
           ,axis.text.x = element_text(size=10, angle = 90)
-          ,axis.line.x = element_line(color="black",size=0.5)
-          ,axis.line.y = element_line(color="black",size=0.5)
+          ,axis.line.x = element_line(color="black",linewidth=0.5)
+          ,axis.line.y = element_line(color="black",linewidth=0.5)
     ) + annotation_custom(values$logoGrid, xmin = x[1], xmax = x[2], ymin = y[1], ymax = y[2]) 
   return(values)
 }
@@ -725,8 +931,8 @@ mapworld <- function(M, values){
   country.prod <- dplyr::left_join(map.world, CO, by = c('region' = 'Tab')) 
   
   tab=data.frame(country.prod %>%
-                   dplyr::group_by(.data$region) %>%
-                   dplyr::summarise(Freq=mean(.data$Freq)))
+                   dplyr::group_by(region) %>%
+                   dplyr::summarise(Freq=mean(Freq)))
   
   tab=tab[!is.na(tab$Freq),]
   
@@ -738,8 +944,8 @@ mapworld <- function(M, values){
   breaks <- as.numeric(cut(CO$Freq,breaks=10))
   names(breaks) <- breaks
   
-  g <- ggplot(country.prod, aes( x = .data$long, y = .data$lat, group=.data$group, text=paste("Country: ",.data$region,"\nN.of Documents: ",.data$Freq))) +
-    geom_polygon(aes(fill = .data$Freq, group=.data$group)) +
+  g <- ggplot(country.prod, aes( x = long, y = lat, group=group, text=paste("Country: ",region,"\nN.of Documents: ",Freq))) +
+    geom_polygon(aes(fill = Freq, group=group)) +
     scale_fill_continuous(low='#87CEEB', high='dodgerblue4',breaks=breaks, na.value="grey80") +
     guides(fill = guide_legend(reverse = T)) +
     #geom_text(data=centroids, aes(label = centroids$Tab, x = centroids$long, y = centroids$lat, group=centroids$Tab)) +
@@ -776,15 +982,16 @@ CAmap <- function(input, values){
     
     ### load file with terms to remove
     if (input$CSStopFile=="Y"){
-      remove.terms <- trimws(readStopwordsFile(file=input$CSStop, sep=input$CSSep))
+      remove.terms <- trimws(values$CSremove.terms$stopword)
     }else{remove.terms <- NULL}
-    values$CSremove.terms <- remove.terms
+    #values$CSremove.terms <- remove.terms
     ### end of block
     ### load file with synonyms
     if (input$FASynFile=="Y"){
-      synonyms <- trimws(readSynWordsFile(file=input$FASyn, sep=input$FASynSep))
+      synonyms <- values$FAsyn.terms %>% group_by(term) %>% mutate(term=paste0(term,";",synonyms)) %>% select(term)
+      synonyms <- synonyms$term
     }else{synonyms <- NULL}
-    values$FAsyn.terms <- synonyms
+    #values$FAsyn.terms <- synonyms
     ### end of block
     
     tab=tableTag(values$M,input$CSfield, ngrams=ngrams)
@@ -823,8 +1030,8 @@ CAmap <- function(input, values){
                                 cluster=values$CS$km.res$cluster)
              })
       
-      WData$Dim.1=round(WData$Dim.1,2)
-      WData$Dim.2=round(WData$Dim.2,2)
+      WData$Dim1=round(WData$Dim1,2)
+      WData$Dim2=round(WData$Dim2,2)
       values$CS$WData <- WData
       
     }else{emptyPlot("Selected field is not included in your data collection")
@@ -852,13 +1059,13 @@ historiograph <- function(input,values){
   values$histResults$histData <- values$histResults$histData %>% 
     left_join(
       values$histPlot$layout %>% 
-        select(.data$name,.data$color), by= c("Paper" = "name")
+        select(name,color), by= c("Paper" = "name")
     ) %>% 
-    drop_na(.data$color) %>% 
-    mutate(cluster = match(.data$color,unique(.data$color))) %>% 
-    select(!.data$color) %>% 
-    group_by(.data$cluster) %>% 
-    arrange(.data$Year, .by_group = TRUE)
+    drop_na(color) %>% 
+    mutate(cluster = match(color,unique(color))) %>% 
+    select(!color) %>% 
+    group_by(cluster) %>% 
+    arrange(Year, .by_group = TRUE)
   return(values)
 }
 
@@ -871,8 +1078,8 @@ degreePlot <- function(net){
   deg <- net$nodeDegree %>% 
     mutate(x = row_number())
  
-  p <- ggplot(data = deg, aes(x=.data$x, y=.data$degree, 
-                              text=paste(.data$node," - Degree ",round(.data$degree,3), sep="")))+
+  p <- ggplot(data = deg, aes(x=x, y=degree, 
+                              text=paste(node," - Degree ",round(degree,3), sep="")))+
     geom_point()+
     geom_line(aes(group="NA"),color = '#002F80', alpha = .5) +
     #geom_hline(yintercept=cutting$degree, linetype="dashed",color = '#002F80', alpha = .5)+
@@ -884,8 +1091,8 @@ degreePlot <- function(net){
           ,axis.title = element_text(size = 14, color = '#555555')
           ,axis.title.y = element_text(vjust = 1, angle = 0)
           ,axis.title.x = element_text(hjust = 0)
-          ,axis.line.x = element_line(color="black",size=0.5)
-          ,axis.line.y = element_line(color="black",size=0.5)
+          ,axis.line.x = element_line(color="black",linewidth=0.5)
+          ,axis.line.y = element_line(color="black",linewidth=0.5)
     ) +
     labs(x = "Node", y="Cumulative Degree", title = "Node Degrees")
   return(p)
@@ -898,15 +1105,16 @@ cocNetwork <- function(input,values){
   
   ### load file with terms to remove
   if (input$COCStopFile=="Y"){
-    remove.terms <- trimws(readStopwordsFile(file=input$COCStop, sep=input$COCSep))
+    remove.terms <- trimws(values$COCremove.terms$stopword)
   }else{remove.terms <- NULL}
-  values$COCremove.terms <- remove.terms
+  #values$COCremove.terms <- remove.terms
   ### end of block
   ### load file with synonyms
   if (input$COCSynFile=="Y"){
-    synonyms <- trimws(readSynWordsFile(file=input$COCSyn, sep=input$COCSynSep))
+    synonyms <- values$COCsyn.terms %>% group_by(term) %>% mutate(term=paste0(term,";",synonyms)) %>% select(term)
+    synonyms <- synonyms$term
   }else{synonyms <- NULL}
-  values$COCsyn.terms <- synonyms
+  #values$COCsyn.terms <- synonyms
   ### end of block
   
   if ((input$field %in% names(values$M))){
@@ -1097,17 +1305,17 @@ countrycollaboration <- function(M,label,edgesize,min.edges, values){
   COedges <- COedges[COedges$count>=min.edges,]
   COedges$region <- paste("\nCollaboration between\n",COedges$V1,"\n and \n",COedges$V2)
   
-  g <- ggplot(country.prod, aes( x = .data$long, y = .data$lat, group = .data$group, text=paste("Country: ",.data$region))) +
-    geom_polygon(aes(fill = .data$Freq)) +
+  g <- ggplot(country.prod, aes( x = long, y = lat, group = group, text=paste("Country: ",region))) +
+    geom_polygon(aes(fill = Freq)) +
     scale_fill_continuous(low='#87CEEB', high='dodgerblue4',breaks=breaks, na.value="grey80") +
     #guides(fill = guide_legend(reverse = T)) +
     guides(colour=FALSE, fill=FALSE)+
-    # geom_curve(data=COedges, aes(x = .data$Longitude.x , y = .data$Latitude.x, xend = .data$Longitude.y, yend = .data$Latitude.y,     # draw edges as arcs
-    #                              color = "firebrick4", size = .data$count, group=.data$continent.x),
+    # geom_curve(data=COedges, aes(x = Longitude.x , y = Latitude.x, xend = Longitude.y, yend = Latitude.y,     # draw edges as arcs
+    #                              color = "firebrick4", size = count, group=continent.x),
     #            curvature = 0.33,
     #            alpha = 0.5) +
-    geom_segment(data=COedges, aes(x = .data$Longitude.x , y = .data$Latitude.x, xend = .data$Longitude.y, yend = .data$Latitude.y,     # draw edges as arcs
-                                 size = .data$count, group=.data$continent.x),
+    geom_segment(data=COedges, aes(x = Longitude.x , y = Latitude.x, xend = Longitude.y, yend = Latitude.y,     # draw edges as arcs
+                                 size = count, group=continent.x),
                  color = "orangered4",#FFB347",
                #curvature = 0.33,
                alpha = 0.3) +
@@ -1128,10 +1336,10 @@ countrycollaboration <- function(M,label,edgesize,min.edges, values){
   if (isTRUE(label)){
     CO=dplyr::inner_join(CO,countries, by=c('Tab'='Tab'))
     g=g+
-      # ggrepel::geom_text_repel(data=CO, aes(x = .data$Longitude, y = .data$Latitude, label = .data$Tab, group=.data$continent),             # draw text labels
+      # ggrepel::geom_text_repel(data=CO, aes(x = Longitude, y = Latitude, label = Tab, group=continent),             # draw text labels
       #                          hjust = 0, nudge_x = 1, nudge_y = 4,
       #                          size = 3, color = "orange", fontface = "bold")
-    ggrepel::geom_text(data=CO, aes(x = .data$Longitude, y = .data$Latitude, label = .data$Tab, group=.data$continent),             # draw text labels
+    ggrepel::geom_text(data=CO, aes(x = Longitude, y = Latitude, label = Tab, group=continent),             # draw text labels
                              hjust = 0, nudge_x = 1, nudge_y = 4,
                              size = 3, color = "orange", fontface = "bold")
   }
@@ -1400,7 +1608,7 @@ hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", o
   LABEL[igraph::V(net$net)$labelsize==0] <- ""
   
   layout <- net$layout %>% 
-    dplyr::select(.data$x,.data$y,.data$color,.data$name) 
+    dplyr::select(x,y,color,name) 
   
   vn <- visNetwork::toVisNetworkData(net$net)
   
@@ -1443,9 +1651,9 @@ hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", o
   }
   
   text_data <- net$graph.data %>% 
-    select(.data$Label, .data$DOI, .data$LCS,.data$GCS) %>% 
-    rename(id = .data$Label) %>% 
-    filter(!duplicated(.data$id))
+    select(Label, DOI, LCS,GCS) %>% 
+    rename(id = Label) %>% 
+    filter(!duplicated(id))
   
   vn$nodes <- vn$nodes %>% left_join(text_data, by = "id")
   
@@ -1458,20 +1666,20 @@ hist2vis<-function(net, labelsize = 2, nodesize= 2, curved=FALSE, shape="dot", o
   }))
   
   vn$nodes <- vn$nodes %>%
-    #select(!.data$LCS.y) %>% 
-    #rename(LCS = .data$LCS.x) %>% 
+    #select(!LCS.y) %>% 
+    #rename(LCS = LCS.x) %>% 
     mutate(title = paste("<b>Title</b>: ",
-                         .data$title,
+                         title,
                          "<br><b>DOI</b>: ",
                          paste0(
                            '<a href=\"https://doi.org/',
-                           .data$DOI,
+                           DOI,
                            '\" target=\"_blank\">',
                            #"DOI: ",
-                           .data$DOI, '</a>'),
+                           DOI, '</a>'),
                          "<br><b>GCS</b>: ",
-                         .data$GCS, "<br><b>LCS</b>: ",
-                         .data$LCS, sep=""))
+                         GCS, "<br><b>LCS</b>: ",
+                         LCS, sep=""))
   
   ## add time line
   vn$nodes$group <- "normal"
@@ -1645,23 +1853,22 @@ ca2plotly <- function(CS, method="MCA", dimX = 1, dimY = 2, topWordPlot = Inf, t
   
   switch(method,
          CA={
-           contrib = rowSums(CS$res$col$contrib %>% as.data.frame())/2
-           wordCoord <- CS$res$col$coord[,1:2] %>%
+           contrib = rowSums(CS$coord$contrib %>% as.data.frame())/2
+           wordCoord <- CS$coord$coord[,1:2] %>%
              data.frame() %>%
-             mutate(label = row.names(CS$res$col$coord),
+             mutate(label = row.names(CS$coord$coord),
                     contrib = contrib) %>% 
              select(c(3,1,2,4))
            xlabel <- paste0("Dim 1 (",round(CS$res$eigCorr$perc[1],2),"%)")
            ylabel <- paste0("Dim 2 (",round(CS$res$eigCorr$perc[2],2),"%)")
          },
          MCA={
-           contrib =rowSums(CS$res$var$contrib)/2
-           wordCoord <- CS$res$var$coord[,1:2] %>%
+           contrib = rowSums(CS$coord$contrib %>% as.data.frame())/2
+           wordCoord <- CS$coord$coord[,1:2] %>%
              data.frame() %>%
-             mutate(label = row.names(CS$res$var$coord),
+             mutate(label = row.names(CS$coord$coord),
                     contrib = contrib) %>% 
-             select(c(3,1,2,4)) %>% 
-             filter(substr(label,nchar(label)-1,nchar(label))=="_1") 
+             select(c(3,1,2,4))
            xlabel <- paste0("Dim 1 (",round(CS$res$eigCorr$perc[1],2),"%)")
            ylabel <- paste0("Dim 2 (",round(CS$res$eigCorr$perc[2],2),"%)")
          },
@@ -1669,6 +1876,11 @@ ca2plotly <- function(CS, method="MCA", dimX = 1, dimY = 2, topWordPlot = Inf, t
            contrib = size
            xlabel <- "Dim 1"
            ylabel <- "Dim 2"
+           wordCoord <- CS$WData %>%
+             data.frame() %>%
+             select(1:3) %>% 
+             mutate(contrib = contrib/2) %>% 
+             rename(label = "word") 
          })
   
   dimContrLabel <- paste0("Contrib",c(dimX,dimY))
@@ -1720,12 +1932,19 @@ ca2plotly <- function(CS, method="MCA", dimX = 1, dimY = 2, topWordPlot = Inf, t
                         paper_bgcolor = "rgba(0, 0, 0, 0)")
   
   for (i in seq_len(max(wordCoord$groups))){
-    w <- wordCoord %>% dplyr::filter(groups == i) %>%
-      mutate(Dim1 = Dim1+dotSize*0.005,
-             Dim2 = Dim2+dotSize*0.01)
+    if (method=="MDS"){
+      w <- wordCoord %>% dplyr::filter(groups == i) %>%
+        mutate(Dim1 = Dim1+0.005,
+               Dim2 = Dim2+0.005)
+    } else {
+      w <- wordCoord %>% dplyr::filter(groups == i) %>%
+        mutate(Dim1 = Dim1+dotSize*0.005,
+               Dim2 = Dim2+dotSize*0.01)
+    }
+    
     if (max(CS$hull_data$clust)>1){
-      hull_df <- CS$hull_data %>% dplyr::filter(.data$clust==i)
-      fig <- fig %>% add_polygons(x = hull_df$Dim.1, y=hull_df$Dim.2, inherit = FALSE, showlegend = FALSE,
+      hull_df <- CS$hull_data %>% dplyr::filter(clust==i)
+      fig <- fig %>% add_polygons(x = hull_df$Dim1, y=hull_df$Dim2, inherit = FALSE, showlegend = FALSE,
                                   color = I(hull_df$color[1]), opacity=0.3, line=list(width=2),
                                   text=paste0("Cluster ",i), hoverinfo = 'text', hoveron="points")
     }
@@ -1760,7 +1979,7 @@ avoidOverlaps <- function(w,threshold=0.10, dimX=1, dimY=2){
   
   Ds <- dist(w %>%
                dplyr::filter(labelToPlot!="") %>%
-               select(.data$Dim1,.data$Dim2),
+               select(Dim1,Dim2),
              method="manhattan", upper=T) %>%
     dist2df() %>%
     rename(from = row,
@@ -1947,7 +2166,7 @@ addScreenWb <- function(df, wb, width=14, height=8, dpi=75){
     sheet <- unique(df$sheet)
     for (i in 1:length(sheet)){
       sh <- sheet[i]
-      df_sh <- df %>% dplyr::filter(.data$sheet==sh)
+      df_sh <- df %>% dplyr::filter(sheet==sh)
       l <- nrow(df_sh)
       startRow <- 1
       for (j in 1:l){
@@ -2004,6 +2223,31 @@ dfLabel <- function(){
             "TE_Period_1","TE_Period_2", "TE_Period_3","TE_Period_4","TE_Period_5","Factorial Analysis", "Co-citation Network", "Historiograph", "Collaboration Network", "Countries Collaboration World Map")
   data.frame(short=short,long=long)
 }
+
+## Generic PopUp
+popUpGeneric <- function(title=NULL, type="success", color=c("#1d8fe1","#913333","#FFA800"),
+                         subtitle="",
+                         btn_labels="OK", size="40%"){
+  showButton = TRUE
+  timer = NA
+  show_alert(
+    title = title,
+    text = subtitle,
+    type = type,
+    size=size,
+    closeOnEsc = TRUE,
+    closeOnClickOutside = TRUE,
+    html = FALSE,
+    showConfirmButton = showButton,
+    showCancelButton = FALSE,
+    btn_labels = btn_labels,
+    btn_colors = color,
+    timer = timer,
+    imageUrl = "",
+    animation = TRUE
+  )
+}
+
 
 ## Ad to Report PopUp
 popUp <- function(title=NULL, type="success", btn_labels="OK"){

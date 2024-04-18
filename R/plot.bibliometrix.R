@@ -1,3 +1,5 @@
+utils::globalVariables(c("AU", "Freq", "Country", "Collaboration", "Year",
+                         "MeanTCperYear", "MeanTCperArt"))
 #' Plotting bibliometric analysis results
 #'
 #' \code{plot} method for class '\code{bibliometrix}'
@@ -44,7 +46,7 @@ plot.bibliometrix<-function(x, ...){
   # Authors
 
   
-  g=ggplot(data=xx, aes(x=.data$AU, y=.data$Freq)) +
+  g=ggplot(data=xx, aes(x=AU, y=Freq)) +
     geom_bar(stat="identity", fill="grey90")+
     labs(title="Most productive Authors", x = "Authors")+
     labs(y = "N. of Documents")+
@@ -57,8 +59,8 @@ plot.bibliometrix<-function(x, ...){
           ,axis.title.y = element_text(vjust = 1, angle = 90)
           ,axis.title.x = element_text(hjust = 0)
           ,axis.text.x = element_text(size=10)
-          ,axis.line.x = element_line(color="black",size=0.5)
-          ,axis.line.y = element_line(color="black",size=0.5)
+          ,axis.line.x = element_line(color="black",linewidth=0.5)
+          ,axis.line.y = element_line(color="black",linewidth=0.5)
     ) +
     annotation_custom(logo, xmin = xcoord[1], xmax = xcoord[2], ymin = ycoord[1], ymax = ycoord[2]) +
     coord_flip()
@@ -86,7 +88,7 @@ plot.bibliometrix<-function(x, ...){
   xcoord <- c(1,max(st,3))
   ycoord <- c(max(Freq),max(Freq)-diff(range(Freq))*0.15)
 
-  g=suppressWarnings(ggplot(data=xx, aes(x=.data$Country, y=.data$Freq,fill=.data$Collaboration)) +
+  g=suppressWarnings(ggplot(data=xx, aes(x=Country, y=Freq,fill=Collaboration)) +
     geom_bar(stat="identity")+
     scale_x_discrete(limits = rev(levels(xx$Country)))+
     scale_fill_discrete(name="Collaboration",
@@ -102,8 +104,8 @@ plot.bibliometrix<-function(x, ...){
             ,axis.title.y = element_text(vjust = 1, angle = 90)
             ,axis.title.x = element_text(hjust = 0)
             ,axis.text.x = element_text(size=10)
-            ,axis.line.x = element_line(color="black",size=0.5)
-            ,axis.line.y = element_line(color="black",size=0.5)
+            ,axis.line.x = element_line(color="black",linewidth=0.5)
+            ,axis.line.y = element_line(color="black",linewidth=0.5)
       ) +
       annotation_custom(logo, xmin = xcoord[1], xmax = xcoord[2], ymin = ycoord[1], ymax = ycoord[2]) + 
       coord_flip()) 
@@ -131,7 +133,7 @@ plot.bibliometrix<-function(x, ...){
   xcoord <- c(max(Y$Year)-0.02-diff(range(Y$Year))*0.15, max(Y$Year)-0.02)+1
   ycoord <- c(min(Y$Freq),min(Y$Freq)+diff(range(Y$Freq))*0.15)
   
-  g=ggplot(Y, aes(x = .data$Year, y = .data$Freq)) +
+  g=ggplot(Y, aes(x = Year, y = Freq)) +
     geom_line() +
     geom_area(fill = 'grey90', alpha = .5) +
     labs(x = 'Year'
@@ -147,8 +149,8 @@ plot.bibliometrix<-function(x, ...){
           ,axis.title.y = element_text(vjust = 1, angle = 90)
           ,axis.title.x = element_text(hjust = 0)
           ,axis.text.x = element_text(size=10, angle = 90)
-          ,axis.line.x = element_line(color="black",size=0.5)
-          ,axis.line.y = element_line(color="black",size=0.5)
+          ,axis.line.x = element_line(color="black",linewidth=0.5)
+          ,axis.line.y = element_line(color="black",linewidth=0.5)
     ) + annotation_custom(logo, xmin = xcoord[1], xmax = xcoord[2], ymin = ycoord[1], ymax = ycoord[2]) 
   
   plot(g)
@@ -183,9 +185,10 @@ plot.bibliometrix<-function(x, ...){
   row.names(Table2)=Table2$Year}
   
   xcoord <- c(max(Table2$Year)-0.02-diff(range(Table2$Year))*0.15, max(Table2$Year)-0.02)+1
+  Table2$MeanTCperYear[is.nan(Table2$MeanTCperYear)] <- 0
   ycoord <- c(min(Table2$MeanTCperYear),min(Table2$MeanTCperYear)+diff(range(Table2$MeanTCperYear))*0.15)
   
-  g=ggplot(Table2, aes(x = .data$Year, y = .data$MeanTCperYear)) +
+  g=ggplot(Table2, aes(x = Year, y = MeanTCperYear)) +
     geom_line() +
     geom_area(fill = 'grey90', alpha = .5) +
     labs(x = 'Year'
@@ -201,8 +204,8 @@ plot.bibliometrix<-function(x, ...){
           ,axis.title.y = element_text(vjust = 1, angle = 90)
           ,axis.title.x = element_text(hjust = 0)
           ,axis.text.x = element_text(size=10, angle = 90)
-          ,axis.line.x = element_line(color="black",size=0.5)
-          ,axis.line.y = element_line(color="black",size=0.5)
+          ,axis.line.x = element_line(color="black",linewidth=0.5)
+          ,axis.line.y = element_line(color="black",linewidth=0.5)
     ) + annotation_custom(logo, xmin = xcoord[1], xmax = xcoord[2], ymin = ycoord[1], ymax = ycoord[2]) 
   
   plot(g)
@@ -215,7 +218,7 @@ plot.bibliometrix<-function(x, ...){
   xcoord <- c(max(Table2$Year)-0.02-diff(range(Table2$Year))*0.15, max(Table2$Year)-0.02)+1
   ycoord <- c(min(Table2$MeanTCperArt),min(Table2$MeanTCperArt)+diff(range(Table2$MeanTCperArt))*0.15)
   
-  g=ggplot(Table2, aes(x = .data$Year, y = .data$MeanTCperArt)) +
+  g=ggplot(Table2, aes(x = Year, y = MeanTCperArt)) +
     geom_line() +
     geom_area(fill = 'grey90', alpha = .5) +
     labs(x = 'Year'
@@ -231,8 +234,8 @@ plot.bibliometrix<-function(x, ...){
           ,axis.title.y = element_text(vjust = 1, angle = 90)
           ,axis.title.x = element_text(hjust = 0)
           ,axis.text.x = element_text(size=10, angle = 90)
-          ,axis.line.x = element_line(color="black",size=0.5)
-          ,axis.line.y = element_line(color="black",size=0.5)
+          ,axis.line.x = element_line(color="black",linewidth=0.5)
+          ,axis.line.y = element_line(color="black",linewidth=0.5)
     )  + annotation_custom(logo, xmin = xcoord[1], xmax = xcoord[2], ymin = ycoord[1], ymax = ycoord[2]) 
   plot(g)
   graphs$AverTotCitperYear=g

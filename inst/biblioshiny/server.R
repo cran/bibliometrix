@@ -9,6 +9,9 @@ server <- function(input, output,session){
   ## suppress warnings
   options(warn = -1)
   
+  Chrome_url <- pagedown::find_chrome() 
+  Sys.setenv (CHROMOTE_CHROME = Chrome_url)
+  
   ## chrome configuration for shinyapps server
   #message(curl::curl_version()) # check curl is installed
   if (identical(Sys.getenv("R_CONFIG_ACTIVE"), "shinyapps")) {
@@ -24,7 +27,7 @@ server <- function(input, output,session){
   ## end configuration
   
   ## Check if Chrome browser is installed on the computer
-  if(is.null(chromote::find_chrome())){
+  if(is.null(pagedown::find_chrome())){
     showModal(modalDialog(
       title = strong("Warning message!"),
       HTML("Chrome or a Chromium-based browser is not installed on your computer.<br>
@@ -233,12 +236,13 @@ To ensure the functionality of Biblioshiny,
           switch(ext,
                  ###  WoS ZIP Files
                  zip = {
-                   D <-  unzip(inFile$datapath)
+                   D <-  utils::unzip(inFile$datapath)
                    withProgress(message = 'Conversion in progress',
                                 value = 0, {
                                   M <- convert2df(D,
                                                   dbsource = input$dbsource,
                                                   format = format(D))
+                                  M <- authorNameFormat(M, input$authorName)
                                 })
                  },
                  ### WoS Txt/Bib Files
@@ -248,6 +252,7 @@ To ensure the functionality of Biblioshiny,
                                   M <- convert2df(inFile$datapath,
                                                   dbsource = input$dbsource,
                                                   format = format(inFile$datapath))
+                                  M <- authorNameFormat(M, input$authorName)
                                 })
                  })
         },
@@ -255,12 +260,14 @@ To ensure the functionality of Biblioshiny,
           switch(ext,
                  ###  Scopus ZIP Files
                  zip = {
-                   D <- unzip(inFile$datapath)
+                   D <- utils::unzip(inFile$datapath)
                    withProgress(message = 'Conversion in progress',
                                 value = 0, {
                                   M <- convert2df(D,
                                                   dbsource = input$dbsource,
                                                   format = format(D))
+                                  M <- authorNameFormat(M, input$authorName)
+                                  if (format(D)=="csv") M <- AuthorNameMerge(M)
                                 })
                  },
                  ### Scopus CSV/Bib Files
@@ -270,6 +277,8 @@ To ensure the functionality of Biblioshiny,
                                   M <- convert2df(inFile$datapath,
                                                   dbsource = input$dbsource,
                                                   format = "csv")
+                                  M <- authorNameFormat(M, input$authorName)
+                                  M <- AuthorNameMerge(M)
                                 })
                  },
                  bib = {
@@ -278,17 +287,27 @@ To ensure the functionality of Biblioshiny,
                                   M <- convert2df(inFile$datapath,
                                                   dbsource = input$dbsource,
                                                   format = "bibtex")
+                                  M <- authorNameFormat(M, input$authorName)
+                                  #M <- AuthorNameMerge(M)
                                 })
                  })
         },
-        openalex = {
+        openalex={
+          withProgress(message = 'Conversion in progress',
+                         value = 0, {
+                           M <- convert2df(inFile$datapath,
+                                           dbsource = input$dbsource,
+                                           format = "csv")
+                         })
+        },
+        openalex_api = {
           M <- smart_load(inFile$datapath)
         },
         lens = {
           switch(ext,
                  ###  Lens.org ZIP Files
                  zip = {
-                   D <-  unzip(inFile$datapath)
+                   D <-  utils::unzip(inFile$datapath)
                    withProgress(message = 'Conversion in progress',
                                 value = 0, {
                                   M <- convert2df(D,
@@ -310,7 +329,7 @@ To ensure the functionality of Biblioshiny,
           switch(ext,
                  ###  Cochrane ZIP Files
                  zip = {
-                   D <- unzip(inFile$datapath)
+                   D <- utils::unzip(inFile$datapath)
                    withProgress(message = 'Conversion in progress',
                                 value = 0, {
                                   M <- convert2df(D,
@@ -332,7 +351,7 @@ To ensure the functionality of Biblioshiny,
           switch(ext,
                  ###  Pubmed ZIP Files
                  zip = {
-                   D <- unzip(inFile$datapath)
+                   D <- utils::unzip(inFile$datapath)
                    withProgress(message = 'Conversion in progress',
                                 value = 0, {
                                   M <- convert2df(D,
@@ -354,7 +373,7 @@ To ensure the functionality of Biblioshiny,
           switch(ext,
                  ###  Dimensions ZIP Files
                  zip = {
-                   D = unzip(inFile$datapath)
+                   D = utils::unzip(inFile$datapath)
                    withProgress(message = 'Conversion in progress',
                                 value = 0, {
                                   M <-
@@ -458,27 +477,8 @@ To ensure the functionality of Biblioshiny,
       )
     nome = c("DOI", names(MData)[-length(names(MData))])
     MData = MData[nome]
-    DT::datatable(MData,escape = FALSE,rownames = FALSE, extensions = c("Buttons"),
-                  options = list(
-                    pageLength = 3,
-                    autoWidth = FALSE, scrollX = TRUE, 
-                    dom = 'Bfrtip',
-                    buttons = list(list(extend = 'pageLength'),
-                                   list(extend = 'print')),
-                    lengthMenu = list(c(10, 25, 50, -1),
-                                      c('10 rows', '25 rows', '50 rows', 'Show all')),
-                    columnDefs = list(list(
-                      className = 'dt-center', targets = 0:(length(names(MData)) - 1)
-                    ))
-                  ),
-                  class = 'cell-border compact stripe'
-    )  %>%
-      formatStyle(
-        names(MData),
-        backgroundColor = 'white',
-        textAlign = 'center',
-        fontSize = '70%'
-      ) 
+    DTformat(MData, nrow=3, filename="Table", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, size='70%', filter="top",
+             columnShort=NULL, columnSmall=NULL, round=2, title="", button=FALSE, escape=FALSE, selection=FALSE, scrollX=TRUE)
   })
   
   ### Missing Data in Metadata ----
@@ -525,11 +525,6 @@ To ensure the functionality of Biblioshiny,
         "Status",
         textAlign = 'center'
       )
-    # ) %>% 
-    # formatStyle(
-    #   "Missing %",
-    #   background = styleColorBar(df[,4], '#b22222')
-    # )
     values$missingDataTable
   })
   
@@ -962,27 +957,8 @@ To ensure the functionality of Biblioshiny,
       )
     nome = c("DOI", names(MData)[-length(names(MData))])
     MData = MData[nome]
-    DT::datatable(MData,escape = FALSE,rownames = FALSE, extensions = c("Buttons"),
-                  options = list(
-                    pageLength = 3,
-                    autoWidth = FALSE, scrollX = TRUE, 
-                    dom = 'Bfrtip',
-                    buttons = list(list(extend = 'pageLength'),
-                                   list(extend = 'print')),
-                    lengthMenu = list(c(10, 25, 50, -1),
-                                      c('10 rows', '25 rows', '50 rows', 'Show all')),
-                    columnDefs = list(list(
-                      className = 'dt-center', targets = 0:(length(names(MData)) - 1)
-                    ))
-                  ),
-                  class = 'cell-border compact stripe'
-    )  %>%
-      formatStyle(
-        names(MData),
-        backgroundColor = 'white',
-        textAlign = 'center',
-        fontSize = '70%'
-      )
+    DTformat(MData, nrow=3, filename="Table", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, size='70%', filter="top",
+             columnShort=NULL, columnSmall=NULL, round=2, title="", button=FALSE, escape=FALSE, selection=FALSE,scrollX=TRUE)
   }
   
   output$textDim <-  renderUI({
@@ -1028,10 +1004,10 @@ To ensure the functionality of Biblioshiny,
   output$sliderTCpY <- renderUI({
     Y <- as.numeric(substr(Sys.time(),1,4))
     values$Morig <- values$Morig %>% 
-      mutate(Age = Y - .data$PY+1,
-             TCpY = round(.data$TC/Age,2)) %>% 
-      group_by(.data$PY) %>% 
-      mutate(NTC = .data$TC/mean(.data$TC, na.rm=T)) %>% 
+      mutate(Age = Y - PY+1,
+             TCpY = round(TC/Age,2)) %>% 
+      group_by(PY) %>% 
+      mutate(NTC = TC/mean(TC, na.rm=T)) %>% 
       as.data.frame()
     sliderInput("sliderTCpY", "Average Citations per Year", min = floor(min(values$Morig$TCpY, na.rm=T)),
                 max = ceiling(max(values$Morig$TCpY,na.rm=T)), step=0.1,
@@ -1065,24 +1041,8 @@ To ensure the functionality of Biblioshiny,
     values$M=M
     Mdisp=as.data.frame(apply(values$M,2,function(x){substring(x,1,150)}))    
     if (dim(Mdisp)[1]>0){
-      DT::datatable(Mdisp, rownames = FALSE, extensions = c("Buttons"),
-                    options = list(pageLength = 3, dom = 'Bfrtip',
-                                   autoWidth = FALSE, scrollX = TRUE, 
-                                   buttons = list('pageLength',
-                                                  list(extend = 'copy'),
-                                                  list(extend = 'csv',
-                                                       filename = 'Filtered_DataTable',
-                                                       title = "My Title",
-                                                       header = TRUE),
-                                                  list(extend = 'excel',
-                                                       filename = 'Filtered_DataTable',
-                                                       title = "My Title",
-                                                       header = TRUE),
-                                                  list(extend = 'print')),
-                                   lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                   columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(Mdisp))-1)))),
-                    class = 'cell-border compact stripe') %>%
-        formatStyle(names(Mdisp),  backgroundColor = 'white',textAlign = 'center', fontSize = '70%')
+      DTformat(Mdisp, nrow=3, filename="Filtered_DataTable", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, size='70%', filter="top",
+               columnShort=NULL, columnSmall=NULL, round=2, title="", button=FALSE, escape=FALSE, selection=FALSE,scrollX=TRUE)
     }else{Mdisp=data.frame(Message="Empty collection", row.names = " ")}
   })
   
@@ -1093,28 +1053,8 @@ To ensure the functionality of Biblioshiny,
   # OVERVIEW ----
   ### Main Info ----
   output$MainInfo <- DT::renderDT({
-    DT::datatable(values$TABvb , rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 50, dom = 'Bfrtip',ordering=F,
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Main_Information',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Main_Information',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Main_Information',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')), 
-                                 columnDefs = list(list(className = 'dt-center', targets = "_all"),
-                                                   list(width = '350px', targets = 0))),
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(values$TABvb)[1],  backgroundColor = 'white',textAlign = 'left', fontSize = '110%') %>%
-      formatStyle(names(values$TABvb)[2],  backgroundColor = 'white',textAlign = 'right', fontSize = '110%')
+    DTformat(values$TABvb , nrow=50, filename="Main_Information", pagelength=TRUE, left=1, right=2, numeric=NULL, dom=TRUE, size='100%', filter="none",
+             columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, selection=FALSE)
   })
   
   #### box1 ---------------
@@ -1253,7 +1193,7 @@ To ensure the functionality of Biblioshiny,
     x <- c(max(Y$Year)-0.02-diff(range(Y$Year))*0.125, max(Y$Year)-0.02)+1
     y <- c(min(Y$Freq),min(Y$Freq)+diff(range(Y$Freq))*0.125)
     
-    g=ggplot2::ggplot(Y, aes(x = .data$Year, y = .data$Freq, text=paste("Year: ",.data$Year,"\nN .of Documents: ",.data$Freq))) +
+    g=ggplot2::ggplot(Y, aes(x = Year, y = Freq, text=paste("Year: ",Year,"\nN .of Documents: ",Freq))) +
       geom_line(aes(group="NA")) +
       #geom_area(aes(group="NA"),fill = 'grey90', alpha = .5) +
       labs(x = 'Year'
@@ -1269,8 +1209,8 @@ To ensure the functionality of Biblioshiny,
             ,axis.title.y = element_text(vjust = 1, angle = 0)
             ,axis.title.x = element_text(hjust = 0)
             ,axis.text.x = element_text(vjust = 1, angle = 90)
-            ,axis.line.x = element_line(color="black",size=0.5)
-            ,axis.line.y = element_line(color="black",size=0.5)
+            ,axis.line.x = element_line(color="black",linewidth=0.5)
+            ,axis.line.y = element_line(color="black",linewidth=0.5)
       ) +
       annotation_custom(values$logoGrid, xmin = x[1], xmax = x[2], ymin = y[1], ymax = y[2]) 
     values$ASPplot <- g
@@ -1305,27 +1245,8 @@ To ensure the functionality of Biblioshiny,
   
   output$AnnualProdTable <- DT::renderDT({
     TAB <- values$TAB
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Annual_Production',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Annual_Production',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Annual_Production',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')), 
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+    DTformat(TAB , nrow=10, filename="Annual_Production", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, size='100%', filter="none",
+             columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, selection=FALSE)
   })
   
   ## Annual Citation per Year ----
@@ -1335,7 +1256,7 @@ To ensure the functionality of Biblioshiny,
       group_by(PY) %>% 
       summarize(MeanTCperArt=round(mean(TC, na.rm=TRUE),2),
                 N =n()) %>% 
-      mutate(MeanTCperYear = round(MeanTCperArt/(current_year-.data$PY),2),
+      mutate(MeanTCperYear = round(MeanTCperArt/(current_year-PY),2),
              CitableYears = current_year-PY) %>% 
       rename(Year = PY) %>% 
       drop_na()
@@ -1345,9 +1266,9 @@ To ensure the functionality of Biblioshiny,
     x <- c(max(Table2$Year)-0.02-diff(range(Table2$Year))*0.125, max(Table2$Year)-0.02)+1
     y <- c(min(Table2$MeanTCperYear),min(Table2$MeanTCperYear)+diff(range(Table2$MeanTCperYear))*0.125)
     
-    g <- ggplot(Table2, aes(x = .data$Year, y =.data$MeanTCperYear,text=paste("Year: ",.data$Year,"\nAverage Citations per Year: ",round(.data$MeanTCperYear,1)))) +
-      geom_line(aes(x = .data$Year, y = .data$MeanTCperYear, group=.data$group)) +
-      #geom_area(aes(x = .data$Year, y = .data$MeanTCperYear, group=.data$group),fill = 'grey90', alpha = .5) +
+    g <- ggplot(Table2, aes(x = Year, y =MeanTCperYear,text=paste("Year: ",Year,"\nAverage Citations per Year: ",round(MeanTCperYear,1)))) +
+      geom_line(aes(x = Year, y = MeanTCperYear, group=group)) +
+      #geom_area(aes(x = Year, y = MeanTCperYear, group=group),fill = 'grey90', alpha = .5) +
       labs(x = 'Year'
            , y = 'Citations'
            , title = "Average Citations per Year")+
@@ -1360,8 +1281,8 @@ To ensure the functionality of Biblioshiny,
             ,axis.title = element_text(size = 14, color = '#555555')
             ,axis.title.y = element_text(vjust = 1, angle = 0)
             ,axis.title.x = element_text(hjust = 0)
-            ,axis.line.x = element_line(color="black",size=0.5)
-            ,axis.line.y = element_line(color="black",size=0.5)
+            ,axis.line.x = element_line(color="black",linewidth=0.5)
+            ,axis.line.y = element_line(color="black",linewidth=0.5)
       ) + 
       annotation_custom(values$logoGrid, xmin = x[1], xmax = x[2], ymin = y[1], ymax = y[2]) 
     values$ACpYplot <- g
@@ -1393,28 +1314,8 @@ To ensure the functionality of Biblioshiny,
   
   output$AnnualTotCitperYearTable <- DT::renderDT({
     TAB <- values$AnnualTotCitperYear
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Annual_Total_Citation_per_Year',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Annual_Total_Citation_per_Year',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Annual_Total_Citation_per_Year',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))),
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') %>% 
-      formatRound(names(TAB)[c(3:4)], digits=2)
+    DTformat(TAB , nrow=10, filename="Annual_Total_Citation_per_Year", pagelength=TRUE, left=NULL, right=NULL, numeric=c(2,4), dom=TRUE, size='100%', filter="none",
+             columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, selection=FALSE)
   })
   
   ## Three Fields Plot ---- 
@@ -1490,27 +1391,9 @@ To ensure the functionality of Biblioshiny,
     g <- MRSources()
     
     TAB <- values$TABSo %>% drop_na()
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Relevant_Sources',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Relevant_Sources',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Relevant_Sources',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+    DTformat(TAB , nrow=10, filename="Most_Relevant_Sources", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportMRS,{
@@ -1567,27 +1450,9 @@ To ensure the functionality of Biblioshiny,
     
     g <- MLCSources()
     TAB <- values$TABSoCit
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Cited_Sources',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Cited_Sources',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Cited_Sources',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+    DTformat(TAB , nrow=10, filename="Most_Cited_Sources", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportMLS,{
@@ -1620,28 +1485,9 @@ To ensure the functionality of Biblioshiny,
   )
   
   output$bradfordTable <- DT::renderDT({
-    
-    DT::datatable(values$bradford$table, rownames = FALSE,
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Bradford_Law',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Bradford_Law',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Bradford_Law',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$bradford$table))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(values$bradford$table),  backgroundColor = 'white',textAlign = 'center') 
+    DTformat(values$bradford$table , nrow=10, filename="Bradford_Law", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportBradford,{
@@ -1682,29 +1528,9 @@ To ensure the functionality of Biblioshiny,
   })
   
   output$SourceHindexTable <- DT::renderDT({
-    
-    DT::datatable(values$H, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Source_Impact',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Source_Impact',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Source_Impact',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$H))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(values$H),  backgroundColor = 'white',textAlign = 'center') %>% 
-      formatRound(names(values$H)[4], digits=3)
+    DTformat(values$H , nrow=10, filename="Source_Impact", pagelength=TRUE, left=NULL, right=NULL, numeric=4, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportSI,{
@@ -1774,8 +1600,8 @@ To ensure the functionality of Biblioshiny,
             ,axis.title.y = element_text(vjust = 1, angle = 90)
             ,axis.title.x = element_text(hjust = 0.95, angle = 0)
             ,axis.text.x = element_text(size=10, angle = 90)
-            ,axis.line.x = element_line(color="black",size=0.5)
-            ,axis.line.y = element_line(color="black",size=0.5)
+            ,axis.line.x = element_line(color="black",linewidth=0.5)
+            ,axis.line.y = element_line(color="black",linewidth=0.5)
       ) + annotation_custom(values$logoGrid, xmin = x[1], xmax = x[2], ymin = y[1], ymax = y[2]) 
     
     values$SDplot <- g
@@ -1827,27 +1653,9 @@ To ensure the functionality of Biblioshiny,
     
     g <- SOGrowth()
     soData=values$PYSO
-    
-    DT::datatable(soData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Source_Dynamics',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Source_Dynamics',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Source_Dynamics',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(soData))-1))))) %>%
-      formatStyle(names(soData),  backgroundColor = 'white') 
+    DTformat(soData , nrow=10, filename="Source_Prod_over_Time", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportSD,{
@@ -1921,28 +1729,9 @@ To ensure the functionality of Biblioshiny,
   output$MostRelAuthorsTable <- DT::renderDT({
     
     TAB <- values$TABAu
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Local_Cited_Authors',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Local_Cited_Authors',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Relevant_Authors',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') %>%
-      formatRound(names(TAB)[3], digits=2)
+    DTformat(TAB , nrow=10, filename="Most_Relevant_Authors", pagelength=TRUE, left=NULL, right=NULL, numeric=3, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportMRA,{
@@ -2001,27 +1790,9 @@ To ensure the functionality of Biblioshiny,
   output$MostCitAuthorsTable <- DT::renderDT({
     
     TAB <- values$TABAuCit
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Local_Cited_Authors',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Local_Cited_Authors',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Relevant_Authors',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') 
+    DTformat(TAB , nrow=10, filename="Most_Local_Cited_Authors", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportMLCA,{
@@ -2063,29 +1834,9 @@ To ensure the functionality of Biblioshiny,
   })
   
   output$AuthorHindexTable <- DT::renderDT({
-    
-    DT::datatable(values$H, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Author_Impact',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Author_Impact',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Author_Impact',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$H))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(values$H),  backgroundColor = 'white',textAlign = 'center') %>%
-      formatRound(names(values$H)[4], 3)
+    DTformat(values$H , nrow=10, filename="Author_Impact", pagelength=TRUE, left=NULL, right=NULL, numeric=4, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportAI,{
@@ -2125,57 +1876,41 @@ To ensure the functionality of Biblioshiny,
     AUoverTime()
     
     TAB <- values$AUProdOverTime$dfAU
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Author_Production_Over_Time',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Author_Production_Over_Time',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Author_Production_Over_Time',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') %>%
-      formatRound(names(TAB)[dim(TAB)[2]], 3)
+    DTformat(TAB , nrow=10, filename="Author_Prod_over_Time", pagelength=TRUE, left=NULL, right=NULL, numeric=5, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
+    # DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
+    #               options = list(pageLength = 10, dom = 'Bfrtip',
+    #                              buttons = list('pageLength',
+    #                                             list(extend = 'copy'),
+    #                                             list(extend = 'csv',
+    #                                                  filename = 'Author_Production_Over_Time',
+    #                                                  title = " ",
+    #                                                  header = TRUE),
+    #                                             list(extend = 'excel',
+    #                                                  filename = 'Author_Production_Over_Time',
+    #                                                  title = " ",
+    #                                                  header = TRUE),
+    #                                             list(extend = 'pdf',
+    #                                                  filename = 'Author_Production_Over_Time',
+    #                                                  title = " ",
+    #                                                  header = TRUE),
+    #                                             list(extend = 'print')),
+    #                              lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
+    #                              columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
+    #               class = 'cell-border compact stripe') %>%
+    #   formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') %>%
+    #   formatRound(names(TAB)[dim(TAB)[2]], 3)
   })
   
   output$TopAuthorsProdTablePapers <- DT::renderDT({
     AUoverTime()
     TAB <- values$AUProdOverTime$dfPapersAU
     TAB$DOI=paste0('<a href=\"https://doi.org/',TAB$DOI,'\" target=\"_blank\">',TAB$DOI,'</a>')
-    DT::datatable(TAB, rownames = FALSE, escape = FALSE,extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Author_Production_Over_Time_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Author_Production_Over_Time_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Author_Production_Over_Time_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') %>%
-      formatRound(names(TAB)[dim(TAB)[2]], 3)
-  })
+    DTformat(TAB , nrow=10, filename="Author_Prod_over_Time_Docs", pagelength=TRUE, left=NULL, right=NULL, numeric=7, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
+    })
   
   observeEvent(input$reportAPOT,{
     if(!is.null(values$AUProdOverTime$dfPapersAU)){
@@ -2201,10 +1936,10 @@ To ensure the functionality of Biblioshiny,
     x <- c(max(AuProd$N.Articles)-0.02-diff(range(AuProd$N.Articles))*0.125, max(AuProd$N.Articles)-0.02)+1
     y <- c(min(AuProd$Freq*100),min(AuProd$Freq*100)+diff(range(AuProd$Freq*100))*0.125)
     
-    g=ggplot2::ggplot(AuProd, aes(x = .data$N.Articles, y = .data$Freq*100, text=paste("N.Articles: ",.data$N.Articles,"\n% of production: ",round(.data$Freq*100,1)))) +
+    g=ggplot2::ggplot(AuProd, aes(x = N.Articles, y = Freq*100, text=paste("N.Articles: ",N.Articles,"\n% of production: ",round(Freq*100,1)))) +
       geom_line(aes(group="NA")) +
       #geom_area(aes(group="NA"),fill = 'grey90', alpha = .5) +
-      geom_line(data=AuProd, aes(y=.data$Theoretical*100, group="NA"),linetype = "dashed",color="black",alpha=0.8)+
+      geom_line(data=AuProd, aes(y=Theoretical*100, group="NA"),linetype = "dashed",color="black",alpha=0.8)+
       xlim(0,max(AuProd$N.Articles)+1)+
       labs(x = 'Documents written'
            , y = '% of Authors'
@@ -2217,8 +1952,8 @@ To ensure the functionality of Biblioshiny,
             ,axis.title = element_text(size = 14, color = '#555555')
             ,axis.title.y = element_text(vjust = 1, angle = 0)
             ,axis.title.x = element_text(hjust = 0)
-            ,axis.line.x = element_line(color="black",size=0.5)
-            ,axis.line.y = element_line(color="black",size=0.5)
+            ,axis.line.x = element_line(color="black",linewidth=0.5)
+            ,axis.line.y = element_line(color="black",linewidth=0.5)
       ) +
       annotation_custom(values$logoGrid, xmin = x[1], xmax = x[2], ymin = y[1], ymax = y[2]) 
     values$LLplot <- g
@@ -2237,28 +1972,9 @@ To ensure the functionality of Biblioshiny,
   
   output$lotkaTable <- DT::renderDT({
     names(values$lotka$AuthorProd)=c("Documents written","N. of Authors","Proportion of Authors")
-    DT::datatable(values$lotka$AuthorProd, rownames = FALSE,
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Lotka_Law',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Lotka_Law',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Lotka_Law',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$lotka$AuthorProd))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(values$lotka$AuthorProd),  backgroundColor = 'white',textAlign = 'center') %>%
-      formatRound(names(values$lotka$AuthorProd)[3], 3)
+    DTformat(values$lotka$AuthorProd, nrow=10, filename="Lotka_Law", pagelength=TRUE, left=NULL, right=NULL, numeric=3, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportLotka,{
@@ -2320,27 +2036,9 @@ To ensure the functionality of Biblioshiny,
     g <- MRAffiliations()
     
     TAB <- values$TABAff
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Relevant_Affiliations',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Relevant_Affiliations',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Relevant_Affiliations',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+    DTformat(TAB, nrow=10, filename="Most_Relevant_Affiliations", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportMRAFF,{
@@ -2405,27 +2103,9 @@ To ensure the functionality of Biblioshiny,
     
     AFFGrowth()
     afftimeData=values$AffOverTime
-    
-    DT::datatable(afftimeData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Affiliation_over_Time',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Affiliation_over_Time',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Affiliation_over_Time',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(afftimeData))-1))))) %>%
-      formatStyle(names(afftimeData),  backgroundColor = 'white') 
+    DTformat(afftimeDATA, nrow=10, filename="Affiliation_over_Time", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportAFFPOT,{
@@ -2450,7 +2130,7 @@ To ensure the functionality of Biblioshiny,
     
     k=input$MostRelCountriesK
     xx <- values$TABCo %>% slice_head(n=k) %>% 
-      select(.data$Country,.data$SCP,.data$MCP)
+      select(Country,SCP,MCP)
     xx=xx[order(-(xx$SCP+xx$MCP)),]
     xx1=cbind(xx[,1:2],rep("SCP",k))
     names(xx1)=c("Country","Freq","Collaboration")
@@ -2459,13 +2139,13 @@ To ensure the functionality of Biblioshiny,
     xx=rbind(xx2,xx1)
     xx$Country=factor(xx$Country,levels=xx$Country[1:dim(xx2)[1]])
     
-    xx2 <- xx %>% dplyr::group_by(.data$Country) %>%
-      dplyr::summarize(Freq = sum(.data$Freq))
+    xx2 <- xx %>% dplyr::group_by(Country) %>%
+      dplyr::summarize(Freq = sum(Freq))
     
     x <- c(0.5,0.5+length(levels(xx2$Country))*0.125)+1
     y <- c(max(xx2$Freq)-0.02-diff(range(xx2$Freq))*0.125,max(xx2$Freq)-0.02)
     
-    g=suppressWarnings(ggplot2::ggplot(data=xx, aes(x=.data$Country, y=.data$Freq,fill=.data$Collaboration, text=paste("Country: ",.data$Country,"\nN.of Documents: ",.data$Freq))) +
+    g=suppressWarnings(ggplot2::ggplot(data=xx, aes(x=Country, y=Freq,fill=Collaboration, text=paste("Country: ",Country,"\nN.of Documents: ",Freq))) +
                          geom_bar(aes(group="NA"),stat="identity")+
                          scale_x_discrete(limits = rev(levels(xx$Country)))+
                          scale_fill_discrete(name="Collaboration",
@@ -2480,7 +2160,7 @@ To ensure the functionality of Biblioshiny,
                                ,axis.title = element_text(size = 14, color = '#555555')
                                ,axis.title.y = element_text(vjust = 1, angle = 0)
                                ,axis.title.x = element_text(hjust = 0)
-                               ,axis.line.x = element_line(color="black",size=0.5)
+                               ,axis.line.x = element_line(color="black",linewidth=0.5)
                          ) +
                          coord_flip()) + 
       annotation_custom(values$logoGrid, xmin = x[1], xmax = x[2], ymin = y[1], ymax = y[2]) 
@@ -2508,29 +2188,9 @@ To ensure the functionality of Biblioshiny,
     g <- CAUCountries()
     
     TAB <- values$TABCo
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Relevant_Countries_By_Corresponding_Author',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Relevant_Countries_By_Corresponding_Author',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Relevant_Countries_By_Corresponding_Author',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') %>% 
-      formatRound(names(TAB)[5], digits=3) %>% 
-      formatRound(names(TAB)[6], digits=3)
+    DTformat(TAB, nrow=10, filename="Most_Relevant_Countries_By_Corresponding_Author", pagelength=TRUE, left=NULL, right=NULL, numeric=5:6, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportMRCO,{
@@ -2565,27 +2225,9 @@ To ensure the functionality of Biblioshiny,
   output$countryProdTable <- DT::renderDT({
     
     TAB <- values$mapworld$tab
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Country_Production',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Country_Production',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Country_Production',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+    DTformat(TAB, nrow=10, filename="Country_Production", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportCSP,{
@@ -2653,27 +2295,9 @@ To ensure the functionality of Biblioshiny,
     
     COGrowth()
     cotimeData=values$CountryOverTime
-    
-    DT::datatable(cotimeData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Countries_Production_Over_Time',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Countries_Production_Over_Time',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Countries_Production_Over_Time',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(cotimeData))-1))))) %>%
-      formatStyle(names(cotimeData),  backgroundColor = 'white') 
+    DTformat(cotimeData, nrow=10, filename="Countries_Production_Over_Time", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportCPOT,{
@@ -2737,28 +2361,9 @@ To ensure the functionality of Biblioshiny,
   output$MostCitCountriesTable <- DT::renderDT({
     g <- MCCountries()
     TAB <- values$TABCitCo
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Cited_Countries',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Cited_Countries',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Cited_Countries',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') %>% 
-      formatRound(names(TAB)[3], 2)
+    DTformat(TAB, nrow=10, filename="Most_Cited_Countries", pagelength=TRUE, left=NULL, right=NULL, numeric=3, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportMCCO,{
@@ -2821,29 +2426,9 @@ To ensure the functionality of Biblioshiny,
     g <- MGCDocuments()
     TAB <- values$TABGlobDoc
     TAB$DOI<- paste0('<a href=\"https://doi.org/',TAB$DOI,'\" target=\"_blank\">',TAB$DOI,'</a>')
-    DT::datatable(TAB, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Global_Cited_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Global_Cited_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Global_Cited_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') %>% 
-      formatRound(names(TAB)[4], 2) %>%
-      formatRound(names(TAB)[5], 2)
+    DTformat(TAB, nrow=10, filename="Most_Global_Cited_Documents", pagelength=TRUE, left=NULL, right=NULL, numeric=4:5, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportMCD,{
@@ -2865,10 +2450,10 @@ To ensure the functionality of Biblioshiny,
                  value = 0, {
                    TAB <-localCitations(values$M, fast.search=FALSE, sep = input$LocCitSep)$Paper
                    TAB <- TAB %>%
-                     group_by(.data$Year) %>%
-                     mutate(Ratio = .data$LCS/.data$GCS*100,
-                            NLCS = .data$LCS/mean(.data$LCS),
-                            NGCS = .data$GCS/mean(.data$GCS)) %>%
+                     group_by(Year) %>%
+                     mutate(Ratio = LCS/GCS*100,
+                            NLCS = LCS/mean(LCS),
+                            NGCS = GCS/mean(GCS)) %>%
                      ungroup() %>%
                      as.data.frame()
                  })
@@ -2911,28 +2496,9 @@ To ensure the functionality of Biblioshiny,
     TAB$DOI <- paste0('<a href=\"https://doi.org/',TAB$DOI,'\" target=\"_blank\">',TAB$DOI,'</a>')
     
     names(TAB)[4:8] <- c("Local Citations", "Global Citations","LC/GC Ratio (%)", "Normalized Local Citations","Normalized Global Citations")
-    DT::datatable(TAB, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Local_Cited_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Local_Cited_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Local_Cited_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%') %>%
-      formatRound(names(TAB)[c(6:8)], digits=2)
+    DTformat(TAB, nrow=10, filename="Most_Local_Cited_Documents", pagelength=TRUE, left=NULL, right=NULL, numeric=6:8, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportMLCD,{
@@ -2954,7 +2520,7 @@ To ensure the functionality of Biblioshiny,
     CR <- citations(values$M,sep=input$CitRefsSep)$Cited
     TAB <- data.frame(names(CR),as.numeric(CR))
     names(TAB) <- c("Cited References", "Citations")
-    values$TABCitRef <- TAB %>% filter(.data$`Cited References`!="ANONYMOUS, NO TITLE CAPTURED")
+    values$TABCitRef <- TAB %>% filter(`Cited References`!="ANONYMOUS, NO TITLE CAPTURED")
     
     xx=values$TABCitRef
     if (input$MostCitRefsK>dim(xx)[1]){
@@ -2963,7 +2529,7 @@ To ensure the functionality of Biblioshiny,
     
     xx=xx[1:k,]
     
-    g <- freqPlot(xx,x=2,y=1, textLaby = "References", textLabx = "Local Citations", title = "Most Local Cited References", values)
+    g <- freqPlot(xx,x=2,y=1, textLaby = "References", textLabx = "Local Citations", title = "Most Local Cited References", values, string.max=70)
     
     values$MLCRplot <- g
     return(g)
@@ -2993,27 +2559,9 @@ To ensure the functionality of Biblioshiny,
     
     TAB=TAB[,c(3,1,2)]
     names(TAB)[1]="Google Scholar"
-    DT::datatable(TAB, rownames = FALSE, escape=FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Local_Cited_References',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Local_Cited_References',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Local_Cited_References',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+    DTformat(TAB, nrow=10, filename="Most_Local_Cited_References", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportMLCR,{
@@ -3059,27 +2607,9 @@ To ensure the functionality of Biblioshiny,
   output$rpysTable <- DT::renderDT({
     RPYS()
     rpysData=values$res$rpysTable
-    
-    DT::datatable(rpysData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'RPYS',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'RPYS',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'RPYS',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(rpysData))-1))))) %>%
-      formatStyle(names(rpysData),  backgroundColor = 'white') 
+    DTformat(rpysData, nrow=10, filename="RPYS", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$crTable <- DT::renderDT({
@@ -3090,26 +2620,9 @@ To ensure the functionality of Biblioshiny,
     crData=crData[order(-as.numeric(crData$Year),-crData$Freq),]
     names(crData)=c("Year", "Reference", "Local Citations", "Google link")
     crData <- crData[,c(1,4,2,3)] 
-    DT::datatable(crData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'RPYS_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'RPYS_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'RPYS_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(crData))-1))))) %>%
-      formatStyle(names(crData),  backgroundColor = 'white')
+    DTformat(crData, nrow=10, filename="RPYS_Documents", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportRPYS,{
@@ -3127,6 +2640,46 @@ To ensure the functionality of Biblioshiny,
   
   ## Words ----
   ### Most Frequent Words ----
+  
+  observeEvent(input$MostRelWordsStop,{
+    values$MRWremove.terms <- data.frame(stopword=trimws(readStopwordsFile(file=input$MostRelWordsStop, sep=input$MostRelWordsSep)))
+    values$GenericSL <- values$MRWremove.terms
+    popUpGeneric(title="Stopword list", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("stopwordList"),
+                 btn_labels="OK")
+    
+  })
+  
+  observeEvent(input$MRWSyn,{
+    synonyms <- trimws(readSynWordsFile(file=input$MRWSyn, sep=input$MRWSynSep))
+    term <- unlist(lapply(strsplit(synonyms,";"),function(l){l[1]}))
+    synList <- unlist(lapply(strsplit(synonyms,";"),function(l){
+      paste0(trimws(l[-1]),collapse=";")
+      }))
+    values$MRWsyn.terms <- data.frame(term=term, synonyms=synList)
+    values$GenericSYN <- values$MRWsyn.terms
+    popUpGeneric(title="Synonym List", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("synonymList"),
+                 btn_labels="OK")
+    
+  })
+  
+  output$stopwordList <- renderDT({
+    DTformat(values$GenericSL, nrow=Inf, filename="Stopword_List", pagelength=FALSE, left=1, right=NULL, numeric=NULL, dom="none", 
+             size='90%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=FALSE, escape=FALSE, 
+             selection=FALSE, scrollY=TRUE)
+  })
+  
+  output$synonymList <- renderDT({
+    DTformat(values$GenericSYN, nrow=Inf, filename="Stopword_List", pagelength=FALSE, left=1, right=NULL, numeric=NULL, dom="none", 
+             size='90%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=FALSE, escape=FALSE, 
+             selection=FALSE, scrollY=TRUE)
+  })
+  
   MFWords <- eventReactive(input$applyMFWords,{
     if (input$MostRelWords %in% c("TI","AB")){
       ngrams <- as.numeric(input$MRWngrams)
@@ -3136,16 +2689,17 @@ To ensure the functionality of Biblioshiny,
     
     ### load file with terms to remove
     if (input$MostRelWordsStopFile=="Y"){
-      remove.terms <- trimws(readStopwordsFile(file=input$MostRelWordsStop, sep=input$MostRelWordsSep))
+      remove.terms <- trimws(values$MRWremove.terms$stopword)
     }else{remove.terms <- NULL}
-    values$MRWremove.terms <- remove.terms
+    #values$MRWremove.terms <- remove.terms
     ### end of block
     
     ### load file with synonyms
     if (input$MRWSynFile=="Y"){
-      synonyms <- trimws(readSynWordsFile(file=input$MRWSyn, sep=input$MRWSynSep))
+      synonyms <- values$MRWsyn.terms %>% group_by(term) %>% mutate(term=paste0(term,";",synonyms)) %>% select(term)
+      synonyms <- synonyms$term
     }else{synonyms <- NULL}
-    values$MRWsyn.terms <- synonyms
+    #values$MRWsyn.terms <- synonyms
     ### end of block
     
     WR=wordlist(values$M,Field=input$MostRelWords,n=Inf,measure="identity", ngrams=ngrams, remove.terms = remove.terms, synonyms = synonyms)$v
@@ -3173,22 +2727,6 @@ To ensure the functionality of Biblioshiny,
     return(g)
   })
   
-  output$MostRelWordsStopPreview <-  renderUI({
-    if (!is.null(values$MRWremove.terms) | exists("values$MRWremove.terms")){
-      strPreview(values$MRWremove.terms, input$MostRelWordsSep)  
-    }else{
-      strPreview(" ", input$MostRelWordsSep)
-    }
-  })
-  
-  output$MRWSynPreview <-  renderUI({
-    if (!is.null(values$MRWsyn.terms) | exists("values$MRWsyn.terms")){
-      strSynPreview(values$MRWsyn.terms)  
-    }else{
-      strSynPreview(" ; ")
-    }
-  })
-  
   output$MRWplot.save <- downloadHandler(
     filename = function() {
       paste("MostRelevantWords-", Sys.Date(), ".png", sep="")
@@ -3208,28 +2746,9 @@ To ensure the functionality of Biblioshiny,
     g <- MFWords()
     
     TAB <- values$TABWord
-    
-    DT::datatable(TAB, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Frequent_Words',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Frequent_Words',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Frequent_Words',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TAB))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(TAB),  backgroundColor = 'white',textAlign = 'center', fontSize = '110%')
+    DTformat(TAB, nrow=10, filename="Most_Frequent_Words", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportMFW,{
@@ -3246,6 +2765,33 @@ To ensure the functionality of Biblioshiny,
   })
   
   ### WordCloud ----  
+  observeEvent(input$WCStop,{
+    values$WCremove.terms <- data.frame(stopword=trimws(readStopwordsFile(file=input$WCStop, sep=input$WCSep)))
+    values$GenericSL <- values$WCremove.terms
+    popUpGeneric(title="Stopword list", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("stopwordList"),
+                 btn_labels="OK")
+    
+  })
+
+  observeEvent(input$WCSyn,{
+    synonyms <- trimws(readSynWordsFile(file=input$WCSyn, sep=input$WCSynSep))
+    term <- unlist(lapply(strsplit(synonyms,";"),function(l){l[1]}))
+    synList <- unlist(lapply(strsplit(synonyms,";"),function(l){
+      paste0(trimws(l[-1]),collapse=";")
+    }))
+    values$WCsyn.terms <- data.frame(term=term, synonyms=synList)
+    values$GenericSYN <- values$WCsyn.terms
+    popUpGeneric(title="Synonym List", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("synonymList"),
+                 btn_labels="OK")
+    
+  })
+
   WordCloud <- eventReactive(input$applyWordCloud,{
     if (input$summaryTerms %in% c("TI","AB")){
       ngrams <- as.numeric(input$summaryTermsngrams)
@@ -3255,20 +2801,21 @@ To ensure the functionality of Biblioshiny,
     
     ### load file with terms to remove
     if (input$WCStopFile=="Y"){
-      remove.terms <- trimws(readStopwordsFile(file=input$WCStop, sep=input$WCSep))
+      remove.terms <- trimws(values$WCremove.terms$stopword)
     }else{remove.terms <- NULL}
-    values$WCremove.terms <- remove.terms
+    #values$WCremove.terms <- remove.terms
     ### end of block
     
     ### load file with synonyms
     if (input$WCSynFile=="Y"){
-      synonyms <- trimws(readSynWordsFile(file=input$WCSyn, sep=input$WCSynSep))
+      synonyms <- values$WCsyn.terms %>% group_by(term) %>% mutate(term=paste0(term,";",synonyms)) %>% select(term)
+      synonyms <- synonyms$term
+      print(synonyms)
     }else{synonyms <- NULL}
-    values$WCsyn.terms <- synonyms
+    #values$WCsyn.terms <- synonyms
     ### end of block
-    print(values$WCsyn.terms )
     
-    resW=wordlist(M=values$M, Field=input$summaryTerms, n=input$n_words, measure=input$measure, ngrams=ngrams, remove.terms = remove.terms, synonyms = values$WCsyn.terms)
+    resW=wordlist(M=values$M, Field=input$summaryTerms, n=input$n_words, measure=input$measure, ngrams=ngrams, remove.terms = remove.terms, synonyms = synonyms)
     
     W=resW$W
     values$Words <- resW$Words
@@ -3303,6 +2850,33 @@ To ensure the functionality of Biblioshiny,
   })
   
   ### TreeMap ----  
+  observeEvent(input$TreeMapStop,{
+    values$TreeMapremove.terms <- data.frame(stopword=trimws(readStopwordsFile(file=input$TreeMapStop, sep=input$TreeMapSep)))
+    values$GenericSL <- values$TreeMapremove.terms
+    popUpGeneric(title="Stopword list", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("stopwordList"),
+                 btn_labels="OK")
+    
+  })
+  
+  observeEvent(input$TreeMapSyn,{
+    synonyms <- trimws(readSynWordsFile(file=input$TreeMapSyn, sep=input$TreeMapSynSep))
+    term <- unlist(lapply(strsplit(synonyms,";"),function(l){l[1]}))
+    synList <- unlist(lapply(strsplit(synonyms,";"),function(l){
+      paste0(trimws(l[-1]),collapse=";")
+    }))
+    values$TreeMapsyn.terms <- data.frame(term=term, synonyms=synList)
+    values$GenericSYN <- values$TreeMapsyn.terms
+    popUpGeneric(title="Synonym List", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("synonymList"),
+                 btn_labels="OK")
+    
+  })
+  
   TreeMap <- eventReactive(input$applyTreeMap,{
     if (input$treeTerms %in% c("TI","AB")){
       ngrams <- as.numeric(input$treeTermsngrams)
@@ -3311,15 +2885,16 @@ To ensure the functionality of Biblioshiny,
     }
     ### load file with terms to remove
     if (input$TreeMapStopFile=="Y"){
-      remove.terms <- trimws(readStopwordsFile(file=input$TreeMapStop, sep=input$TreeMapSep))
+      remove.terms <- trimws(values$TreeMapremove.terms$stopword)
     }else{remove.terms <- NULL}
-    values$TreeMapremove.terms <- remove.terms
+    #values$TreeMapremove.terms <- remove.terms
     ### end of block
     ### load file with synonyms
     if (input$TreeMapSynFile=="Y"){
-      synonyms <- trimws(readSynWordsFile(file=input$TreeMapSyn, sep=input$TreeMapSynSep))
+      synonyms <- values$TreeMapsyn.terms %>% group_by(term) %>% mutate(term=paste0(term,";",synonyms)) %>% select(term)
+      synonyms <- synonyms$term
     }else{synonyms <- NULL}
-    values$TreeMapsyn.terms <- synonyms
+    #values$TreeMapsyn.terms <- synonyms
     ### end of block
     
     resW=wordlist(M=values$M, Field=input$treeTerms, n=input$treen_words, measure="identity", ngrams=ngrams, remove.terms=remove.terms, synonyms = synonyms)
@@ -3353,72 +2928,19 @@ To ensure the functionality of Biblioshiny,
     values$TreeMap
   })
   
-  output$TreeMapStopPreview <-  renderUI({
-    if (!is.null(values$TreeMapremove.terms) | exists("values$TreeMapremove.terms")){
-      strPreview(values$TreeMapremove.terms, input$TreeMapSep)  
-    }else{
-      strPreview(" ", input$TreeMapSep)
-    }
-  })
-  
-  output$TreeMapSynPreview <-  renderUI({
-    if (!is.null(values$TreeMapsyn.terms) | exists("values$TreeMapsyn.terms")){
-      strSynPreview(values$TreeMapsyn.terms)  
-    }else{
-      strSynPreview(" ")
-    }
-  })
   
   output$wordTable <- DT::renderDT({
     WordCloud()
-    
-    DT::datatable(values$Words, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Frequent_Words',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Frequent_Words',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Frequent_Words',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$Words))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(values$Words),  backgroundColor = 'white',textAlign = 'center')
+    DTformat(values$Words, nrow=10, filename="Most_Frequent_Words", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$treeTable <- DT::renderDT({
     WordsT <- TreeMap()
-    
-    DT::datatable(values$WordsT, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Most_Frequent_Words',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Most_Frequent_Words',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Most_Frequent_Words',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(values$WordsT))-1)))), 
-                  class = 'cell-border compact stripe') %>%
-      formatStyle(names(values$WordsT),  backgroundColor = 'white',textAlign = 'center')
+    DTformat(values$WordsT, nrow=10, filename="Most_Frequent_Words", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   },height = 600, width = 900)
   
   observeEvent(input$reportTREEMAP,{
@@ -3438,6 +2960,33 @@ To ensure the functionality of Biblioshiny,
   })
   
   ### Words' Frequency over Time ----   
+  observeEvent(input$WDStop,{
+    values$WDremove.terms <- data.frame(stopword=trimws(readStopwordsFile(file=input$WDStop, sep=input$WDSep)))
+    values$GenericSL <- values$WDremove.terms
+    popUpGeneric(title="Stopword list", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("stopwordList"),
+                 btn_labels="OK")
+    
+  })
+  
+  observeEvent(input$WDSyn,{
+    synonyms <- trimws(readSynWordsFile(file=input$WDSyn, sep=input$WDSynSep))
+    term <- unlist(lapply(strsplit(synonyms,";"),function(l){l[1]}))
+    synList <- unlist(lapply(strsplit(synonyms,";"),function(l){
+      paste0(trimws(l[-1]),collapse=";")
+    }))
+    values$WDsyn.terms <- data.frame(term=term, synonyms=synList)
+    values$GenericSYN <- values$WDsyn.terms
+    popUpGeneric(title="Synonym List", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("synonymList"),
+                 btn_labels="OK")
+    
+  })
+  
   WDynamics <- eventReactive(input$applyWD,{
     if (input$cumTerms=="Cum"){
       cdf=TRUE
@@ -3448,16 +2997,17 @@ To ensure the functionality of Biblioshiny,
     
     ### load file with terms to remove
     if (input$WDStopFile=="Y"){
-      remove.terms <- trimws(readStopwordsFile(file=input$WDStop, sep=input$WDSep))
+      remove.terms <- trimws(values$WDremove.terms$stopword)
     }else{remove.terms <- NULL}
-    values$WDremove.terms <- remove.terms
+    #values$WDremove.terms <- remove.terms
     ### end of block
     
     ### load file with synonyms
     if (input$WDSynFile=="Y"){
-      synonyms <- trimws(readSynWordsFile(file=input$WDSyn, sep=input$WDSynSep))
+      synonyms <- values$WDsyn.terms %>% group_by(term) %>% mutate(term=paste0(term,";",synonyms)) %>% select(term)
+      synonyms <- synonyms$term
     }else{synonyms <- NULL}
-    values$WDsyn.terms <- synonyms
+    #values$WDsyn.terms <- synonyms
     ### end of block
     
     switch(input$growthTerms,
@@ -3489,10 +3039,10 @@ To ensure the functionality of Biblioshiny,
     
     Text <- paste(values$DF$Term," (",values$DF$Year,") ",values$DF$Freq, sep="")
     
-    x <- c(max(values$DF$Year)-0.02-diff(range(values$SO$Year))*0.20, max(values$DF$Year)-0.02)-1
+    x <- c(max(values$DF$Year)-0.02-diff(range(values$DF$Year))*0.20, max(values$DF$Year)-0.02)-1
     y <- c(min(values$DF$Freq),min(values$DF$Freq)+diff(range(values$DF$Freq))*0.20)
     
-    g <- ggplot(values$DF, aes(x=.data$Year,y=.data$Freq, group=.data$Term, color=.data$Term, text = Text))+
+    g <- ggplot(values$DF, aes(x=Year,y=Freq, group=Term, color=Term, text = Text))+
       geom_line()+
       labs(x = 'Year'
            , y = laby
@@ -3517,29 +3067,13 @@ To ensure the functionality of Biblioshiny,
             ,axis.title.y = element_text(vjust = 1, angle = 90)
             ,axis.title.x = element_text(hjust = 0.95, angle = 0)
             ,axis.text.x = element_text(size=10, angle = 90)
-            ,axis.line.x = element_line(color="black",size=0.5)
-            ,axis.line.y = element_line(color="black",size=0.5)
+            ,axis.line.x = element_line(color="black",linewidth=0.5)
+            ,axis.line.y = element_line(color="black",linewidth=0.5)
       ) + 
       annotation_custom(values$logoGrid, xmin = x[1], xmax = x[2], ymin = y[1], ymax = y[2]) 
     
     values$WDplot <- g
     return(g)
-  })
-  
-  output$WDStopPreview <-  renderUI({
-    if (!is.null(values$WDremove.terms) | exists("values$WDremove.terms")){
-      strPreview(values$WDremove.terms)  
-    }else{
-      strPreview(" ")
-    }
-  })
-  
-  output$WDSynPreview <-  renderUI({
-    if (!is.null(values$WDsyn.terms) | exists("values$WDsyn.terms")){
-      strSynPreview(values$WDsyn.terms)  
-    }else{
-      strSynPreview(" ")
-    }
   })
   
   output$WDplot.save <- downloadHandler(
@@ -3585,28 +3119,10 @@ To ensure the functionality of Biblioshiny,
   
   output$kwGrowthtable <- DT::renderDT({
     g <- WDynamics()
-    kwData=values$KW
-    
-    DT::datatable(kwData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Word_Dynamics',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Word_Dynamics',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Word_Dynamics',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(kwData))-1))))) %>%
-      formatStyle(names(kwData),  backgroundColor = 'white') 
+    kwData <- values$KW
+    DTformat(kwData, nrow=10, filename="Word_Dynamics", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportWD,{
@@ -3623,6 +3139,34 @@ To ensure the functionality of Biblioshiny,
   })
   
   ### Trend Topics ----
+  
+  observeEvent(input$TTStop,{
+    values$TTremove.terms <- data.frame(stopword=trimws(readStopwordsFile(file=input$TTStop, sep=input$TTSep)))
+    values$GenericSL <- values$TTremove.terms
+    popUpGeneric(title="Stopword list", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("stopwordList"),
+                 btn_labels="OK")
+    
+  })
+  
+  observeEvent(input$TTSyn,{
+    synonyms <- trimws(readSynWordsFile(file=input$TTSyn, sep=input$TTSynSep))
+    term <- unlist(lapply(strsplit(synonyms,";"),function(l){l[1]}))
+    synList <- unlist(lapply(strsplit(synonyms,";"),function(l){
+      paste0(trimws(l[-1]),collapse=";")
+    }))
+    values$TTsyn.terms <- data.frame(term=term, synonyms=synList)
+    values$GenericSYN <- values$TTsyn.terms
+    popUpGeneric(title="Synonym List", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("synonymList"),
+                 btn_labels="OK")
+    
+  })
+  
   output$trendSliderPY <- renderUI({
     
     sliderInput("trendSliderPY", "Timespan", min = min(values$M$PY,na.rm=T),sep="",
@@ -3633,16 +3177,17 @@ To ensure the functionality of Biblioshiny,
     
     ### load file with terms to remove
     if (input$TTStopFile=="Y"){
-      remove.terms <- trimws(readStopwordsFile(file=input$TTStop, sep=input$TTSep))
+      remove.terms <- trimws(values$TTremove.terms$stopword)
     }else{remove.terms <- NULL}
-    values$TTremove.terms <- remove.terms
+    #values$TTremove.terms <- remove.terms
     ### end of block
     
     ### load file with synonyms
     if (input$TTSynFile=="Y"){
-      synonyms <- trimws(readSynWordsFile(file=input$TTSyn, sep=input$TTSynSep))
+      synonyms <- values$TTsyn.terms %>% group_by(term) %>% mutate(term=paste0(term,";",synonyms)) %>% select(term)
+      synonyms <- synonyms$term
     }else{synonyms <- NULL}
-    values$TTsyn.terms <- synonyms
+    #values$TTsyn.terms <- synonyms
     ### end of block
     
     if (input$trendTerms %in% c("TI","AB")){
@@ -3653,22 +3198,6 @@ To ensure the functionality of Biblioshiny,
                                       n.items = input$trendNItems, remove.terms = remove.terms, synonyms = synonyms, 
                                       dynamic.plot=TRUE, graph = FALSE)
     return(values$trendTopics$graph)
-  })
-  
-  output$TTStopPreview <-  renderUI({
-    if (!is.null(values$TTremove.terms) | exists("values$TTremove.terms")){
-      strPreview(values$TTremove.terms)  
-    }else{
-      strPreview(" ")
-    }
-  })
-  
-  output$TTSynPreview <-  renderUI({
-    if (!is.null(values$TTsyn.terms) | exists("values$TTsyn.terms")){
-      strSynPreview(values$TTsyn.terms)  
-    }else{
-      strSynPreview(" ")
-    }
   })
   
   output$TTplot.save <- downloadHandler(
@@ -3689,27 +3218,9 @@ To ensure the functionality of Biblioshiny,
   output$trendTopicsTable <- DT::renderDT({
     TrendTopics()
     tpData=values$trendTopics$df_graph
-    
-    DT::datatable(tpData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Trend_Topics',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Trend_Topics',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Trend_Topics',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tpData))-1))))) %>%
-      formatStyle(names(tpData),  backgroundColor = 'white')
+    DTformat(tpData, nrow=10, filename="Stopword_List", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportTT,{
@@ -3771,52 +3282,18 @@ To ensure the functionality of Biblioshiny,
     CMMAP()
     #cmData=values$CM$data[,c(2,1,3,5)]
     cmData <- values$CM$data
-    DT::datatable(cmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'CouplingMap',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'CouplingMap',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'CouplingMap',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(cmData))-1))))) %>%
-      formatStyle(names(cmData),  backgroundColor = 'white')
+    DTformat(cmData, nrow=10, filename="CouplingMap", pagelength=TRUE, left=NULL, right=NULL, numeric=2, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$CMTableCluster <- DT::renderDT({
     CMMAP()
     #cmData=values$CM$clusters[,c(7,1:4,6)]
     cmData <- values$CM$clusters
-    DT::datatable(cmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'CouplingMap_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'CouplingMap_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'CouplingMap_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(cmData))-1))))) %>%
-      formatStyle(names(cmData),  backgroundColor = 'white') 
+    DTformat(cmData, nrow=10, filename="CouplingMap_Clusters", pagelength=TRUE, left=NULL, right=NULL, numeric=4:5, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportCM,{
@@ -3839,6 +3316,33 @@ To ensure the functionality of Biblioshiny,
   # CONCEPTUAL STRUCTURE ----
   ### Network approach ----
   #### Co-occurrences network ----
+  observeEvent(input$COCStop,{
+    values$COCremove.terms <- data.frame(stopword=trimws(readStopwordsFile(file=input$COCStop, sep=input$COCSep)))
+    values$GenericSL <- values$COCremove.terms
+    popUpGeneric(title="Stopword list", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("stopwordList"),
+                 btn_labels="OK")
+    
+  })
+  
+  observeEvent(input$COCSyn,{
+    synonyms <- trimws(readSynWordsFile(file=input$COCSyn, sep=input$COCSynSep))
+    term <- unlist(lapply(strsplit(synonyms,";"),function(l){l[1]}))
+    synList <- unlist(lapply(strsplit(synonyms,";"),function(l){
+      paste0(trimws(l[-1]),collapse=";")
+    }))
+    values$COCsyn.terms <- data.frame(term=term, synonyms=synList)
+    values$GenericSYN <- values$COCsyn.terms
+    popUpGeneric(title="Synonym List", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("synonymList"),
+                 btn_labels="OK")
+    
+  })
+  
   COCnetwork <- eventReactive(input$applyCoc,{
     
     values <- cocNetwork(input,values)
@@ -3859,22 +3363,6 @@ To ensure the functionality of Biblioshiny,
     values$cocOverlay
   })
   
-  output$COCStopPreview <-  renderUI({
-    if (!is.null(values$COCremove.terms) | exists("values$COCremove.terms")){
-      strPreview(values$COCremove.terms)  
-    }else{
-      strPreview(" ")
-    }
-  })
-  
-  output$COCSynPreview <-  renderUI({
-    if (!is.null(values$COCsyn.terms) | exists("values$COCsyn.terms")){
-      strSynPreview(values$COCsyn.terms)  
-    }else{
-      strSynPreview(" ")
-    }
-  })
-  
   output$network.coc <- downloadHandler(
     filename = function() {
       paste("Co_occurrence_network-", Sys.Date(), ".zip", sep="")
@@ -3883,14 +3371,14 @@ To ensure the functionality of Biblioshiny,
       tmpdir <- tempdir()
       owd <- setwd(tmpdir)
       on.exit(setwd(owd))
-      print(tmpdir)
+      # print(tmpdir)
       #igraph::write.graph(values$obj$graph_pajek,file=file, format="pajek")
       myfile <- paste("mynetwork-", Sys.Date(), sep="")
       files <- paste0(myfile, c(".net",".vec",".clu"))
-      graph2Pajek(values$cocnet$graph, file=myfile)
-      print(files)
-      print(dir())
-      zip(file,files)
+      graph2Pajek(values$cocnet$graph, filename=myfile)
+      # print(files)
+      # print(dir())
+      zip::zip(file,files)
     },
     contentType = "zip"
   )
@@ -3908,26 +3396,9 @@ To ensure the functionality of Biblioshiny,
     COCnetwork()
     cocData=values$cocnet$cluster_res
     names(cocData)=c("Node", "Cluster", "Betweenness", "Closeness", "PageRank")
-    DT::datatable(cocData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"), filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'CoWord_Network_Analysis',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'CoWord_Network_Analysis',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'CoWord_Network_Analysis',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(cocData))-1))))) %>%
-      formatStyle(names(cocData),  backgroundColor = 'white') 
+    DTformat(cocData, nrow=10, filename="CoWord_Network", pagelength=TRUE, left=NULL, right=NULL, numeric=3:5, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   ### Degree Plot Co-word analysis ----
@@ -3957,25 +3428,35 @@ To ensure the functionality of Biblioshiny,
   })
   
   ### Correspondence Analysis ----
+  observeEvent(input$CSStop,{
+    values$CSremove.terms <- data.frame(stopword=trimws(readStopwordsFile(file=input$CSStop, sep=input$CSSep)))
+    values$GenericSL <- values$CSremove.terms
+    popUpGeneric(title="Stopword list", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("stopwordList"),
+                 btn_labels="OK")
+    
+  })
+  
+  observeEvent(input$FASyn,{
+    synonyms <- trimws(readSynWordsFile(file=input$FASyn, sep=input$FASynSep))
+    term <- unlist(lapply(strsplit(synonyms,";"),function(l){l[1]}))
+    synList <- unlist(lapply(strsplit(synonyms,";"),function(l){
+      paste0(trimws(l[-1]),collapse=";")
+    }))
+    values$FAsyn.terms <- data.frame(term=term, synonyms=synList)
+    values$GenericSYN <- values$FAsyn.terms
+    popUpGeneric(title="Synonym List", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("synonymList"),
+                 btn_labels="OK")
+    
+  })
   
   CSfactorial <- eventReactive(input$applyCA,{
     values <- CAmap(input,values)
-  })
-  
-  output$CSStopPreview <-  renderUI({
-    if (!is.null(values$CSremove.terms) | exists("values$CSremove.terms")){
-      strPreview(values$CSremove.terms)  
-    }else{
-      strPreview(" ")
-    }
-  })
-  
-  output$FASynPreview <-  renderUI({
-    if (!is.null(values$FAsyn.terms) | exists("values$FAsyn.terms")){
-      strSynPreview(values$FAsyn.terms)  
-    }else{
-      strSynPreview(" ")
-    }
   })
   
   output$FAplot.save <- downloadHandler(
@@ -3996,7 +3477,7 @@ To ensure the functionality of Biblioshiny,
       png(filename = files[2],  height = values$h, width = values$h*2, units="in", res = values$dpi)
           plot(values$CS$graph_dendogram)
       dev.off()
-      zip(file,files)
+      zip::zip(file,files)
     },
     contentType = "zip"
   )
@@ -4018,51 +3499,17 @@ To ensure the functionality of Biblioshiny,
   output$CSTableW <- DT::renderDT({
     CSfactorial()
     WData <- values$CS$WData
-    DT::datatable(WData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'CoWord_Factorial_Analysis_Words_By_Cluster',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'CoWord_Factorial_Analysis_Words_By_Cluster',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'CoWord_Factorial_Analysis_Words_By_Cluster',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(WData))-1))))) %>%
-      formatStyle(names(WData),  backgroundColor = 'white')
+    DTformat(WData, nrow=10, filename="CoWord_Factorial_Analysis_Words_By_Cluster", pagelength=TRUE, left=NULL, right=NULL, numeric=2:3, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$CSTableD <- DT::renderDT({
     CSfactorial()
     CSData <- values$CS$CSData
-    DT::datatable(CSData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'CoWord_Factorial_Analysis_Articles_By_Cluster',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'CoWord_Factorial_Analysis_Articles_By_Cluster',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'CoWord_Factorial_Analysis_Articles_By_Cluster',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(CSData))-1))))) %>%
-      formatStyle(names(CSData),  backgroundColor = 'white') 
+    DTformat(CSData, nrow=10, filename="CoWord_Factorial_Analysis_Articles_By_Cluster", pagelength=TRUE, left=NULL, right=NULL, numeric=2:4, dom=TRUE, 
+             size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   # add to report
@@ -4080,6 +3527,33 @@ To ensure the functionality of Biblioshiny,
   })
   
   ### Thematic Map ----
+  observeEvent(input$TMStop,{
+    values$TMremove.terms <- data.frame(stopword=trimws(readStopwordsFile(file=input$TMStop, sep=input$TMSep)))
+    values$GenericSL <- values$TMremove.terms
+    popUpGeneric(title="Stopword list", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("stopwordList"),
+                 btn_labels="OK")
+    
+  })
+  
+  observeEvent(input$TMapSyn,{
+    synonyms <- trimws(readSynWordsFile(file=input$TMapSyn, sep=input$TMapSynSep))
+    term <- unlist(lapply(strsplit(synonyms,";"),function(l){l[1]}))
+    synList <- unlist(lapply(strsplit(synonyms,";"),function(l){
+      paste0(trimws(l[-1]),collapse=";")
+    }))
+    values$TMapsyn.terms <- data.frame(term=term, synonyms=synList)
+    values$GenericSYN <- values$TMapsyn.terms
+    popUpGeneric(title="Synonym List", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("synonymList"),
+                 btn_labels="OK")
+    
+  })
+  
   TMAP <- eventReactive(input$applyTM,{
     if (input$TMfield %in% c("TI","AB")){
       ngrams <- as.numeric(input$TMngrams)
@@ -4089,16 +3563,17 @@ To ensure the functionality of Biblioshiny,
     
     ### load file with terms to remove
     if (input$TMStopFile=="Y"){
-      remove.terms <- trimws(readStopwordsFile(file=input$TMStop, sep=input$TMSep))
+      remove.terms <- trimws(values$TMremove.terms$stopword)
     }else{remove.terms <- NULL}
-    values$TMremove.terms <- remove.terms
+    #values$TMremove.terms <- remove.terms
     ### end of block
     
     ### load file with synonyms
     if (input$TMapSynFile=="Y"){
-      synonyms <- trimws(readSynWordsFile(file=input$TMapSyn, sep=input$TMapSynSep))
+      synonyms <- values$TMapsyn.terms %>% group_by(term) %>% mutate(term=paste0(term,";",synonyms)) %>% select(term)
+      synonyms <- synonyms$term
     }else{synonyms <- NULL}
-    values$TMapsyn.terms <- synonyms
+    #values$TMapsyn.terms <- synonyms
     ### end of block
     
     values$TM <- thematicMap(values$M, field=input$TMfield, 
@@ -4157,8 +3632,8 @@ To ensure the functionality of Biblioshiny,
     values$d <- event_data("plotly_click")
     coord <- values$d[c("x","y")]
     color <- values$TM$clusters_orig %>% 
-      filter(.data$rcentrality==coord$x,.data$rdensity==coord$y) %>% 
-      select(.data$color) %>% as.character()
+      filter(rcentrality==coord$x,rdensity==coord$y) %>% 
+      select(color) %>% as.character()
     g <- values$TM$subgraphs[[color]]
     values$plotClust <- igraph2visClust(g,curved=F,labelsize=4,opacity=0.5,shape="dot", shadow=TRUE, edgesize=5)$VIS
     values$plotClust 
@@ -4174,21 +3649,6 @@ To ensure the functionality of Biblioshiny,
     values$networkTM$VIS
   })
   
-  output$TMStopPreview <-  renderUI({
-    if (!is.null(values$TMremove.terms) | exists("values$TMremove.terms")){
-      strPreview(values$TMremove.terms)  
-    }else{
-      strPreview(" ")
-    }
-  })
-  
-  output$TMapSynPreview <-  renderUI({
-    if (!is.null(values$TMapsyn.terms) | exists("values$TMapsyn.terms")){
-      strSynPreview(values$TMapsyn.terms)
-    }else{
-      strSynPreview(" ")
-    }
-  })
   
   output$TMplot.save <- downloadHandler(
     filename = function() {
@@ -4203,82 +3663,25 @@ To ensure the functionality of Biblioshiny,
   output$TMTable <- DT::renderDT({
     TMAP()
     tmData=values$TM$words
-    
-    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
-      formatStyle(names(tmData),  backgroundColor = 'white') 
+    DTformat(tmData, nrow=10, filename="Thematic_Map_Terms", pagelength=TRUE, left=NULL, right=NULL, numeric=5:7, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTableCluster <- DT::renderDT({
     TMAP()
     tmData <- values$TM$clusters
-    
-    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
-      formatStyle(names(tmData),  backgroundColor = 'white') 
+    DTformat(tmData, nrow=10, filename="Thematic_Map_Clusters", pagelength=TRUE, left=NULL, right=NULL, numeric=2:3, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTableDocument <- DT::renderDT({
     TMAP()
     tmDataDoc <- values$TM$documentToClusters
-    
-    DT::datatable(tmDataDoc, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmDataDoc))-1))))) %>%
-      formatStyle(names(tmDataDoc),  backgroundColor = 'white') %>% 
-      formatRound(names(tmDataDoc)[7:8], 3) %>% 
-      formatRound(names(tmDataDoc)[c(10:(ncol(tmDataDoc)-2),ncol(tmDataDoc))], 3) %>% 
-      formatRound(names(tmDataDoc)[ncol(tmDataDoc)], 3) 
+    DTformat(tmDataDoc, nrow=10, filename="Thematic_Map_Documents", pagelength=TRUE, left=NULL, right=NULL, numeric=c(7:8,10:(ncol(tmDataDoc)-2),ncol(tmDataDoc)), dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportTM,{
@@ -4300,6 +3703,33 @@ To ensure the functionality of Biblioshiny,
   })
   
   ### Thematic Evolution ----
+  observeEvent(input$TEStop,{
+    values$TEremove.terms <- data.frame(stopword=trimws(readStopwordsFile(file=input$TEStop, sep=input$TESep)))
+    values$GenericSL <- values$TEremove.terms
+    popUpGeneric(title="Stopword list", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("stopwordList"),
+                 btn_labels="OK")
+    
+  })
+  
+  observeEvent(input$TESyn,{
+    synonyms <- trimws(readSynWordsFile(file=input$TESyn, sep=input$TESynSep))
+    term <- unlist(lapply(strsplit(synonyms,";"),function(l){l[1]}))
+    synList <- unlist(lapply(strsplit(synonyms,";"),function(l){
+      paste0(trimws(l[-1]),collapse=";")
+    }))
+    values$TEsyn.terms <- data.frame(term=term, synonyms=synList)
+    values$GenericSYN <- values$TEsyn.terms
+    popUpGeneric(title="Synonym List", 
+                 type=NULL, 
+                 color=c("#1d8fe1"),
+                 subtitle=DTOutput("synonymList"),
+                 btn_labels="OK")
+    
+  })
+  
   output$sliders <- renderUI({
     numSlices <- as.integer(input$numSlices)
     v=quantile(values$M$PY, seq(0,1,by=(1/(numSlices+1))), na.rm=TRUE)
@@ -4318,16 +3748,17 @@ To ensure the functionality of Biblioshiny,
     
     ### load file with terms to remove
     if (input$TEStopFile=="Y"){
-      remove.terms <- trimws(readStopwordsFile(file=input$TEStop, sep=input$TESep))
+      remove.terms <- trimws(values$TEremove.terms$stopword)
     }else{remove.terms <- NULL}
-    values$TEremove.terms <- remove.terms
+    #values$TEremove.terms <- remove.terms
     ### end of block
     
     ### load file with synonyms
     if (input$TESynFile=="Y"){
-      synonyms <- trimws(readSynWordsFile(file=input$TESyn, sep=input$TESynSep))
+      synonyms <- values$TEsyn.terms %>% group_by(term) %>% mutate(term=paste0(term,";",synonyms)) %>% select(term)
+      synonyms <- synonyms$term
     }else{synonyms <- NULL}
-    values$TEsyn.terms <- synonyms
+    #values$TEsyn.terms <- synonyms
     ### end of block
     
     values$yearSlices <- as.numeric()
@@ -4365,22 +3796,6 @@ To ensure the functionality of Biblioshiny,
     values$TEplot
   })
   
-  output$TEStopPreview <-  renderUI({
-    if (!is.null(values$TEremove.terms) | exists("values$TEremove.terms")){
-      strPreview(values$TEremove.terms)  
-    }else{
-      strPreview(" ")
-    }
-  })
-  
-  output$TESynPreview <-  renderUI({
-    if (!is.null(values$TEsyn.terms) | exists("values$TEsyn.terms")){
-      strSynPreview(values$TEsyn.terms)  
-    }else{
-      strSynPreview(" ")
-    }
-  })
-  
   output$TEplot.save <- downloadHandler(
     filename = function() {
       #
@@ -4408,7 +3823,7 @@ To ensure the functionality of Biblioshiny,
       #   download = TRUE,
       #   server_dir = NULL
       # )
-      zip(file,files)
+      zip::zip(file,files)
     },
     contentType = "zip"
   )
@@ -4417,29 +3832,9 @@ To ensure the functionality of Biblioshiny,
     TEMAP()
     TEData=values$nexus$Data
     names(TEData)=c("From", "To", "Words", "Weighted Inclusion Index", "Inclusion Index", "Occurrences", "Stability Index")
-    DT::datatable(TEData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Evolution',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Evolution',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Evolution',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(TEData))-1))))) %>%
-      formatStyle(names(TEData),  backgroundColor = 'white') %>%
-      formatRound(names(TEData)[4], 2) %>%
-      formatRound(names(TEData)[5], 2) %>%
-      formatRound(names(TEData)[7], 2) 
+    DTformat(TEData, nrow=10, filename="Thematic_Evolution", pagelength=TRUE, left=NULL, right=NULL, numeric=c(4,5,7), dom=TRUE, 
+             size='85%', filter="top", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMPlot1 <-  renderPlotly({
@@ -4525,287 +3920,89 @@ To ensure the functionality of Biblioshiny,
   output$TMTable1 <- DT::renderDT({
     TEMAP()
     tmData=values$nexus$TM[[1]]$words
-    
-    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_1_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_1_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_1_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
-      formatStyle(names(tmData),  backgroundColor = 'white') 
+    DTformat(tmData, nrow=10, filename="Thematic_Map_Period_1_Terms", pagelength=TRUE, left=NULL, right=NULL, numeric=5:7, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTable2 <- DT::renderDT({
     TEMAP()
     tmData=values$nexus$TM[[2]]$words
-    
-    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_2_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_2_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_2_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
-      formatStyle(names(tmData),  backgroundColor = 'white') 
+    DTformat(tmData, nrow=10, filename="Thematic_Map_Period_2_Terms", pagelength=TRUE, left=NULL, right=NULL, numeric=5:7, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTable3 <- DT::renderDT({
     TEMAP()
     tmData=values$nexus$TM[[3]]$words
-    
-    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_3_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_3_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_3_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
-      formatStyle(names(tmData),  backgroundColor = 'white') 
+    DTformat(tmData, nrow=10, filename="Thematic_Map_Period_3_Terms", pagelength=TRUE, left=NULL, right=NULL, numeric=5:7, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTable4 <- DT::renderDT({
     TEMAP()
     tmData=values$nexus$TM[[4]]$words
-    
-    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_4_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_4_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_4_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
-      formatStyle(names(tmData),  backgroundColor = 'white') 
+    DTformat(tmData, nrow=10, filename="Thematic_Map_Period_4_Terms", pagelength=TRUE, left=NULL, right=NULL, numeric=5:7, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTable5 <- DT::renderDT({
     TEMAP()
     tmData=values$nexus$TM[[5]]$words
-    
-    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_5_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_5_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_5_Terms',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
-      formatStyle(names(tmData),  backgroundColor = 'white') 
+    DTformat(tmData, nrow=10, filename="Thematic_Map_Period_5_Terms", pagelength=TRUE, left=NULL, right=NULL, numeric=5:7, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTableCluster1 <- DT::renderDT({
     TEMAP()
     tmData <- values$nexus$TM[[1]]$clusters
-    
-    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_1_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_1_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_1_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
-      formatStyle(names(tmData),  backgroundColor = 'white') 
+    DTformat(tmData, nrow=10, filename="Thematic_Map_Period_1_Clusters", pagelength=TRUE, left=NULL, right=NULL, numeric=2:3, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTableCluster2 <- DT::renderDT({
     TEMAP()
     tmData <- values$nexus$TM[[2]]$clusters
-    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_2_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_2_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_2_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
-      formatStyle(names(tmData),  backgroundColor = 'white') 
+    DTformat(tmData, nrow=10, filename="Thematic_Map_Period_2_Clusters", pagelength=TRUE, left=NULL, right=NULL, numeric=2:3, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTableCluster3 <- DT::renderDT({
     TEMAP()
     tmData <- values$nexus$TM[[3]]$clusters
-    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_3_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_3_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_3_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
-      formatStyle(names(tmData),  backgroundColor = 'white') 
+    DTformat(tmData, nrow=10, filename="Thematic_Map_Period_3_Clusters", pagelength=TRUE, left=NULL, right=NULL, numeric=2:3, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTableCluster4 <- DT::renderDT({
     TEMAP()
     tmData <- values$nexus$TM[[4]]$clusters
-    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_4_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_4_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_4_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
-      formatStyle(names(tmData),  backgroundColor = 'white') 
+    DTformat(tmData, nrow=10, filename="Thematic_Map_Period_4_Clusters", pagelength=TRUE, left=NULL, right=NULL, numeric=2:3, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE) 
   })
   
   output$TMTableCluster5 <- DT::renderDT({
     TEMAP()
     tmData <- values$nexus$TM[[5]]$clusters
-    DT::datatable(tmData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_5_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_5_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_5_Clusters',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmData))-1))))) %>%
-      formatStyle(names(tmData),  backgroundColor = 'white') 
+    DTformat(tmData, nrow=10, filename="Thematic_Map_Period_5_Clusters", pagelength=TRUE, left=NULL, right=NULL, numeric=2:3, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE) 
   })
   
-  output$TMTableDocument1 <- DT::renderDT({
+  output$TMTableDocument1 <- DT::renderDT(server=TRUE,{
     TEMAP()
     tmDataDoc <- values$nexus$TM[[1]]$documentToClusters
-    
-    
-    DT::datatable(tmDataDoc, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_1_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_1_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_1_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmDataDoc))-1))))) %>%
-      formatStyle(names(tmDataDoc),  backgroundColor = 'white') %>% 
-      formatRound(names(tmDataDoc)[7:8], 3) %>% 
-      formatRound(names(tmDataDoc)[10:(ncol(tmDataDoc)-2)], 3) %>% 
-      formatRound(names(tmDataDoc)[ncol(tmDataDoc)], 3)
+    DTformat(tmDataDoc, nrow=10, filename="Thematic_Map_Period_1_Documents", pagelength=TRUE, left=NULL, right=NULL, numeric=c(7:8,10:(ncol(tmDataDoc)-2),ncol(tmDataDoc)), dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTableDocument2 <- DT::renderDT({
@@ -4813,30 +4010,9 @@ To ensure the functionality of Biblioshiny,
     tmDataDoc <- values$nexus$TM[[2]]$documentToClusters
     tmDataDoc$DI<- paste0('<a href=\"https://doi.org/',tmDataDoc$DI,'\" target=\"_blank\">',tmDataDoc$DI,'</a>')
     names(tmDataDoc)[1:9] <- c("DOI", "Authors","Title","Source","Year","TotalCitation","TCperYear","NTC","SR") 
-    
-    DT::datatable(tmDataDoc, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_2_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_2_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_2_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmDataDoc))-1))))) %>%
-      formatStyle(names(tmDataDoc),  backgroundColor = 'white') %>% 
-      formatRound(names(tmDataDoc)[7:8], 3) %>% 
-      formatRound(names(tmDataDoc)[10:(ncol(tmDataDoc)-2)], 3) %>% 
-      formatRound(names(tmDataDoc)[ncol(tmDataDoc)], 3)
+    DTformat(tmDataDoc, nrow=10, filename="Thematic_Map_Period_2_Documents", pagelength=TRUE, left=NULL, right=NULL, numeric=c(7:8,10:(ncol(tmDataDoc)-2),ncol(tmDataDoc)), dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTableDocument3 <- DT::renderDT({
@@ -4845,29 +4021,9 @@ To ensure the functionality of Biblioshiny,
     tmDataDoc$DI<- paste0('<a href=\"https://doi.org/',tmDataDoc$DI,'\" target=\"_blank\">',tmDataDoc$DI,'</a>')
     names(tmDataDoc)[1:9] <- c("DOI", "Authors","Title","Source","Year","TotalCitation","TCperYear","NTC","SR") 
     
-    DT::datatable(tmDataDoc, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_3_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_3_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_3_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmDataDoc))-1))))) %>%
-      formatStyle(names(tmDataDoc),  backgroundColor = 'white') %>% 
-      formatRound(names(tmDataDoc)[7:8], 3) %>% 
-      formatRound(names(tmDataDoc)[10:(ncol(tmDataDoc)-2)], 3) %>% 
-      formatRound(names(tmDataDoc)[ncol(tmDataDoc)], 3)
+    DTformat(tmDataDoc, nrow=10, filename="Thematic_Map_Period_3_Documents", pagelength=TRUE, left=NULL, right=NULL, numeric=c(7:8,10:(ncol(tmDataDoc)-2),ncol(tmDataDoc)), dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTableDocument4 <- DT::renderDT({
@@ -4876,29 +4032,9 @@ To ensure the functionality of Biblioshiny,
     tmDataDoc$DI<- paste0('<a href=\"https://doi.org/',tmDataDoc$DI,'\" target=\"_blank\">',tmDataDoc$DI,'</a>')
     names(tmDataDoc)[1:9] <- c("DOI", "Authors","Title","Source","Year","TotalCitation","TCperYear","NTC","SR") 
     
-    DT::datatable(tmDataDoc, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_4_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_4_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_4_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmDataDoc))-1))))) %>%
-      formatStyle(names(tmDataDoc),  backgroundColor = 'white') %>% 
-      formatRound(names(tmDataDoc)[7:8], 3) %>% 
-      formatRound(names(tmDataDoc)[10:(ncol(tmDataDoc)-2)], 3) %>% 
-      formatRound(names(tmDataDoc)[ncol(tmDataDoc)], 3)
+    DTformat(tmDataDoc, nrow=10, filename="Thematic_Map_Period_4_Documents", pagelength=TRUE, left=NULL, right=NULL, numeric=c(7:8,10:(ncol(tmDataDoc)-2),ncol(tmDataDoc)), dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   output$TMTableDocument5 <- DT::renderDT({
@@ -4907,29 +4043,9 @@ To ensure the functionality of Biblioshiny,
     tmDataDoc$DI<- paste0('<a href=\"https://doi.org/',tmDataDoc$DI,'\" target=\"_blank\">',tmDataDoc$DI,'</a>')
     names(tmDataDoc)[1:9] <- c("DOI", "Authors","Title","Source","Year","TotalCitation","TCperYear","NTC","SR") 
     
-    DT::datatable(tmDataDoc, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Thematic_Map_Period_5_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Thematic_Map_Period_5_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Thematic_Map_Period_5_Documents',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(tmDataDoc))-1))))) %>%
-      formatStyle(names(tmDataDoc),  backgroundColor = 'white') %>% 
-      formatRound(names(tmDataDoc)[7:8], 3) %>% 
-      formatRound(names(tmDataDoc)[10:(ncol(tmDataDoc)-2)], 3) %>% 
-      formatRound(names(tmDataDoc)[ncol(tmDataDoc)], 3)
+    DTformat(tmDataDoc, nrow=10, filename="Thematic_Map_Period_5_Documents", pagelength=TRUE, left=NULL, right=NULL, numeric=c(7:8,10:(ncol(tmDataDoc)-2),ncol(tmDataDoc)), dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportTE,{
@@ -4996,14 +4112,14 @@ To ensure the functionality of Biblioshiny,
       tmpdir <- tempdir()
       owd <- setwd(tmpdir)
       on.exit(setwd(owd))
-      print(tmpdir)
+      # print(tmpdir)
       #igraph::write.graph(values$obj$graph_pajek,file=file, format="pajek")
       myfile <- paste("mynetwork-", Sys.Date(), sep="")
       files <- paste0(myfile, c(".net",".vec",".clu"))
-      graph2Pajek(values$cocitnet$graph, file=myfile)
-      print(files)
-      print(dir())
-      zip(file,files)
+      graph2Pajek(values$cocitnet$graph, filename=myfile)
+      # print(files)
+      # print(dir())
+      zip::zip(file,files)
     },
     contentType = "zip"
   )
@@ -5012,26 +4128,9 @@ To ensure the functionality of Biblioshiny,
     COCITnetwork()
     cocitData=values$cocitnet$cluster_res
     names(cocitData)=c("Node", "Cluster", "Betweenness", "Closeness", "PageRank")
-    DT::datatable(cocitData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'CoCitation_Network',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'CoCitation_Network',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'CoCitation_Network',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(cocitData))-1))))) %>%
-      formatStyle(names(cocitData),  backgroundColor = 'white') 
+    DTformat(cocitData, nrow=10, filename="CoCitation_Network", pagelength=TRUE, left=NULL, right=NULL, numeric=3:5, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   #### save coc network image as html ----
@@ -5093,41 +4192,9 @@ To ensure the functionality of Biblioshiny,
   output$histTable <- DT::renderDT({
     
     Data <- values$histResults$histData
-    
-    DT::datatable(Data, escape = FALSE, rownames = FALSE, extensions = c("Buttons"),
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Historiograph_Network',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Historiograph_Network',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Historiograph_Network',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(Data))-1))))) %>%
-      formatStyle(names(Data),  backgroundColor = 'white') %>%
-      formatStyle(
-        'GCS',
-        background = styleColorBar(Data$GCS, 'steelblue'),
-        backgroundSize = '100% 90%',
-        backgroundRepeat = 'no-repeat',
-        backgroundPosition = 'center'
-      ) %>%
-      formatStyle(
-        'LCS',
-        background = styleColorBar(Data$LCS, 'steelblue'),
-        backgroundSize = '100% 90%',
-        backgroundRepeat = 'no-repeat',
-        backgroundPosition = 'center'
-      )
+    DTformat(Data, nrow=10, filename="Historiograph_Network", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })
   
   observeEvent(input$reportHIST,{
@@ -5180,14 +4247,14 @@ To ensure the functionality of Biblioshiny,
       tmpdir <- tempdir()
       owd <- setwd(tmpdir)
       on.exit(setwd(owd))
-      print(tmpdir)
+      # print(tmpdir)
       #igraph::write.graph(values$obj$graph_pajek,file=file, format="pajek")
       myfile <- paste("mynetwork-", Sys.Date(), sep="")
       files <- paste0(myfile, c(".net",".vec",".clu"))
-      graph2Pajek(values$colnet$graph, file=myfile)
-      print(files)
-      print(dir())
-      zip(file,files)
+      graph2Pajek(values$colnet$graph, filename=myfile)
+      # print(files)
+      # print(dir())
+      zip::zip(file,files)
     },
     contentType = "zip"
   )
@@ -5195,27 +4262,9 @@ To ensure the functionality of Biblioshiny,
   output$colTable <- DT::renderDT({
     COLnetwork()
     colData=values$colnet$cluster_res
-    
-    DT::datatable(colData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"), filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'Collaboration_Network',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'Collaboration_Network',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'Collaboration_Network',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(colData))-1))))) %>%
-      formatStyle(names(colData),  backgroundColor = 'white') 
+    DTformat(colData, nrow=10, filename="Collaboration_Network", pagelength=TRUE, left=NULL, right=NULL, numeric=3:5, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   })   
   
   #### save coc network image as html ####
@@ -5279,27 +4328,9 @@ To ensure the functionality of Biblioshiny,
   output$WMTable <- DT::renderDT({
     WMnetwork()  
     colData=values$WMmap$tab
-    
-    DT::datatable(colData, escape = FALSE, rownames = FALSE, extensions = c("Buttons"), filter = 'top',
-                  options = list(pageLength = 10, dom = 'Bfrtip',
-                                 buttons = list('pageLength',
-                                                list(extend = 'copy'),
-                                                list(extend = 'csv',
-                                                     filename = 'World_Collaboration_Map',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'excel',
-                                                     filename = 'World_Collaboration_Map',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'pdf',
-                                                     filename = 'World_Collaboration_Map',
-                                                     title = " ",
-                                                     header = TRUE),
-                                                list(extend = 'print')),
-                                 lengthMenu = list(c(10,25,50,-1),c('10 rows', '25 rows', '50 rows','Show all')),
-                                 columnDefs = list(list(className = 'dt-center', targets = 0:(length(names(colData))-1))))) %>%
-      formatStyle(names(colData),  backgroundColor = 'white') 
+    DTformat(colData, nrow=10, filename="Collaboration_WorldMap", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
   }) 
   
   observeEvent(input$reportCOLW,{

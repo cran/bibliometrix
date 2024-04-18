@@ -1,3 +1,5 @@
+utils::globalVariables(c("Paper","Tag","content","cont"))
+
 bib2df<-function(D, dbsource = "isi"){
   
   #D <- D[nchar(D)>1]  
@@ -44,10 +46,10 @@ bib2df<-function(D, dbsource = "isi"){
   DATA <- data.frame(Tag = substr(D,1,ind+1), content = substr(D,ind+2,nchar(D)), Paper=numPapers)
   DATA$content <- gsub("\\}|\\},|\\{","",DATA$content)
   #DATA$content <- gsub("\\{","",DATA$content)
-  df <- DATA %>% group_by(.data$Paper, .data$Tag) %>%
-    summarise(cont=paste(.data$content, collapse="---",sep="")) %>%
-    arrange(.data$Tag, .data$Paper) %>%
-    pivot_wider(names_from =  .data$Tag,values_from = .data$cont) %>%
+  df <- DATA %>% group_by(Paper, Tag) %>%
+    summarise(cont=paste(content, collapse="---",sep="")) %>%
+    arrange(Tag, Paper) %>%
+    pivot_wider(names_from =Tag,values_from = cont) %>%
     ungroup()
   
   df <- as.data.frame(df)
@@ -83,7 +85,7 @@ bib2df<-function(D, dbsource = "isi"){
   names(df) <- gsub("=\\{","",Tag)
   
   ### replace "---" with ";"
-  tagsComma <- c("AU","DE","ID","C1" ,"CR")
+  tagsComma <- c("AU","DE","ID","C1","CR")
   nolab <- setdiff(tagsComma,names(df))
   if (length(nolab)>0){
     cat("\nWarning:\nIn your file, some mandatory metadata are missing. Bibliometrix functions may not work properly!\n
@@ -97,6 +99,8 @@ Please, take a look at the vignettes:
   df1 <- data.frame(lapply(df[tagsComma],function(x){
     gsub("---",";",x)
   }))
+  
+  df1$AU <- gsub(" and;| and ",";",df1$AU)
   
   ### replace "---" with " "
   otherTags <- setdiff(names(df),tagsComma)
@@ -116,9 +120,8 @@ Please, take a look at the vignettes:
   
   df <- postprocessing(df, dbsource)
   
-  df <- df[names(df)!="Paper"]
-  df <- df[names(df)!="paper"]
-  
+  df <- df[!names(df) %in% c("Paper", "paper")]
+
   return(df)
 }
 
@@ -127,9 +130,10 @@ postprocessing <-function(DATA,dbsource){
   
   # Authors' names cleaning (surname and initials)
   #remove ; and 2 or more spaces
-  DATA$AU=gsub("\\s+", " ", DATA$AU)
+  DATA$AU <- gsub("\\s+", " ", DATA$AU)
+  DATA$AF <- gsub("\\.|,","",DATA$AU)
   
-  listAU <- strsplit(DATA$AU, " and ")
+  listAU <- strsplit(DATA$AU, ";")
   
   AU <- lapply(listAU,function(l){
     

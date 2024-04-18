@@ -1,3 +1,4 @@
+utils::globalVariables(c("countries","continent"))
 #' Country Collaboration Networks by Region
 #' 
 #' A function to create and plot country collaboration networks by Region
@@ -17,7 +18,7 @@
 #' \code{type="fruchterman"}\tab   \tab Fruchterman-Reingold layout\cr
 #' \code{type="kamada"}\tab   \tab  Kamada-Kawai layout}
 #'  
-#' @param vos.path is a character indicating the full path whre VOSviewer.jar is located.
+#' @param vos.path is a character indicating the full path where VOSviewer.jar is located.
 #' @param size is integer. It defines the size of each vertex. Default is \code{size=3}. 
 #' @param size.cex is logical. If TRUE the size of each vertex is proportional to its degree.  
 #' @param noloops is logical. If TRUE loops in the network are deleted.
@@ -97,7 +98,7 @@ collabByRegionPlot <- function(
   row.names(NetMatrix) <- colnames(NetMatrix) <- tolower(row.names(NetMatrix))
   labelCo <- data.frame(countries= row.names(NetMatrix))
   data("countries",envir=environment())
-  countries <- countries %>% mutate(countries = tolower(.data$countries))
+  countries <- countries %>% mutate(countries = tolower(countries))
   
   labelCo <- labelCo %>% 
     left_join(countries, by = "countries")
@@ -114,8 +115,8 @@ collabByRegionPlot <- function(
 
   for (i in regions){
     reg_co <- labelCo %>% 
-      dplyr::filter(.data$continent %in% i) %>% 
-      select(.data$countries)
+      dplyr::filter(continent %in% i) %>% 
+      select(countries)
     NetMatrix_reg <- NetMatrix[reg_co$countries,reg_co$countries]
 
     if (!is.null(nrow(NetMatrix_reg))){
