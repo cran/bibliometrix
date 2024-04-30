@@ -73,13 +73,7 @@ convert2df<-function(file,dbsource="wos",format="plaintext", remove.duplicates=T
     cat("\n 'format' argument is not properly specified")
     cat("\n 'format' argument has to be a character string matching one among:",allowed_formats,"\n")
   }
-  
-  # ### da controllare
-  # if (length(setdiff(format,c("api","plaintext","bibtex","csv","excel", "endnote")))>0){
-  #   D <- importFiles(file)
-  #   D <- iconv(D, "latin1", "ASCII", sub="")}
-  # ####
-  
+
   if (dbsource=="wos") dbsource <- "isi"
   if (format=="endnote") format <- "plaintext"
   if (format == "lens") format <- "csv"
@@ -209,7 +203,7 @@ convert2df<-function(file,dbsource="wos",format="plaintext", remove.duplicates=T
   }
   
   # remove double ;
-  M <- M%>% 
+  M <- M %>% 
     mutate_if(is.character, ~gsub(";;",";",.x))
   
   ### SR field creation

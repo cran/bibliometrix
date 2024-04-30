@@ -1,5 +1,47 @@
 ### COMMON FUNCTIONS ####
 
+# LOAD FUNCTIONS -----
+formatDB <- function(obj){
+  ext<- sub('.*\\.', '', obj[1])
+  switch(ext,
+         txt ={
+           format <- "plaintext"
+         },
+         csv ={
+           format <- "csv"
+         },
+         bib ={
+           format <- "bibtex"
+         },
+         ciw ={
+           format <- "endnote"
+         },
+         xlsx={
+           format <- "excel"
+         }
+  )
+  return(format)
+}
+
+## smart_load function ----
+smart_load <- function(file){
+  var <- load(file)
+  n <- length(var)
+  if (!"M" %in% var){
+    if (n == 1) {
+      eval(parse(text = paste0("M <- ", var)))
+    } else {
+      stop("I could not find bibliometrixDB object in your data file: ", file)
+    }
+  }
+  rm(list = var[var != "M"])
+  if ( ("M" %in% ls()) & inherits(M, "bibliometrixDB") ){
+    return(M)
+  } else {
+    stop("Please make sure your RData/Rda file contains a bibliometrixDB object (M).")
+  }
+}
+
 # DATA TABLE FORMAT ----
 DTformat <- function(df, nrow=10, filename="Table", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, size='85%', filter="top",
                      columnShort=NULL, columnSmall=NULL, round=2, title="", button=FALSE, escape=FALSE, selection=FALSE, scrollX=FALSE, scrollY=FALSE){
@@ -54,7 +96,7 @@ DTformat <- function(df, nrow=10, filename="Table", pagelength=TRUE, left=NULL, 
   if (isTRUE(dom)){
     dom <- "Brtip"
   } else if (dom==FALSE){
-    dom <- "Bt"
+    dom <- "Bftp"
   } else {
     dom <- "t"
   }
@@ -669,7 +711,8 @@ descriptive <- function(values,type){
            TAB <- countryCollab(values$M)
            TAB <- TAB %>% 
              mutate(Freq = Articles/sum(Articles)) %>% 
-             mutate(MCP_Ratio = MCP/Articles)
+             mutate(MCP_Ratio = MCP/Articles) %>% 
+             drop_na(Country)
          },
          "tab6"={
            if (!"AU1_CO" %in% names(values$M)){
@@ -1042,6 +1085,7 @@ CAmap <- function(input, values){
     values$CS=list("NA")
     
   }
+  return(values)
 }
 
 historiograph <- function(input,values){
@@ -2108,19 +2152,6 @@ addGgplotsWb <- function(list_plot, wb, sheetname, col, width=10, height=7, dpi=
   return(wb)
 }
 
-# screenSh <- function(selector){
-#   fileName <- tempfile(pattern = "figureImage",
-#                        tmpdir = "",
-#                        fileext = "") %>% substr(.,2,nchar(.))
-#   if (is.null(selector)){
-#     shinyscreenshot::screenshot(filename=fileName, download=FALSE, server_dir = tempdir())
-#   } else {
-#     shinyscreenshot::screenshot(selector=selector, filename=fileName, download=FALSE, server_dir = tempdir())
-#   }
-#   file <- paste(tempdir(),"/",fileName,".png",sep="")
-#   return(file)
-# }
-
 screenSh <- function(p, zoom = 2, type="vis"){
   tmpdir = tempdir()
   fileName <- tempfile(pattern = "figureImage",
@@ -2142,7 +2173,12 @@ screenShot <- function(p, filename, type){
   
   # setting up the main directory
   #filename <- paste0(file.path(home,"downloads/"),filename)
-  filename <- paste0(file.path(home,"downloads"),"/",filename)
+  if ("downloads" %in% tolower(dir(home))){
+    filename <- paste0(file.path(home,"downloads"),"/",filename)
+  } else {
+    filename <- paste0(home,"/",filename)
+  }
+  
   plot2png(p, filename, zoom = 2, type=type, tmpdir = tempdir())
   
 }
@@ -2158,6 +2194,9 @@ plot2png <- function(p, filename, zoom = 2, type="vis", tmpdir){
            htmlwidgets::saveWidget(p, file=html_name)
          })
   webshot2::webshot(url = html_name, zoom = zoom, file = filename)#, verbose=FALSE)
+  popUpGeneric(title=NULL, type="success", color=c("#1d8fe1"),
+               subtitle=paste0("Plot was saved in the following path: ",filename),
+               btn_labels="OK", size="40%")
 }
 
 addScreenWb <- function(df, wb, width=14, height=8, dpi=75){
