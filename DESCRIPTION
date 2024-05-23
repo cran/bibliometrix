@@ -1,7 +1,7 @@
 Package: bibliometrix
 Type: Package
 Title: Comprehensive Science Mapping Analysis
-Version: 4.2.1
+Version: 4.2.2
 Authors@R: c(
     person(given = "Massimo",
            family = "Aria",
@@ -14,7 +14,9 @@ Authors@R: c(
            email = "cuccurullocorrado@gmail.com",
            comment = c(ORCID = "0000-0002-7401-8575")))
 Description: Tool for quantitative research in scientometrics and bibliometrics.
-    It provides various routines for importing bibliographic data from 'SCOPUS',
+    It implements the comprehensive workflow for science mapping analysis proposed in Aria M. and 
+    Cuccurullo C. (2017) <doi:10.1016/j.joi.2017.08.007>.
+    'bibliometrix' provides various routines for importing bibliographic data from 'SCOPUS',
     'Clarivate Analytics Web of Science' (<https://www.webofknowledge.com/>), 'Digital Science Dimensions' 
 	(<https://www.dimensions.ai/>), 'OpenAlex' (<https://openalex.org/>), 'Cochrane Library' (<https://www.cochranelibrary.com/>),  'Lens' (<https://lens.org>), 
 	and 'PubMed' (<https://pubmed.ncbi.nlm.nih.gov/>) databases, performing bibliometric analysis 
@@ -36,9 +38,9 @@ Suggests: knitr, rmarkdown, testthat (>= 3.0.0), shinycssloaders,
 RoxygenNote: 7.3.1
 NeedsCompilation: no
 Config/testthat/edition: 3
-Packaged: 2024-04-30 13:25:35 UTC; massimoaria
+Packaged: 2024-05-23 09:31:22 UTC; massimoaria
 Author: Massimo Aria [cre, aut, cph] (<https://orcid.org/0000-0002-8517-9411>),
   Corrado Cuccurullo [aut] (<https://orcid.org/0000-0002-7401-8575>)
 Maintainer: Massimo Aria <aria@unina.it>
 Repository: CRAN
-Date/Publication: 2024-04-30 14:30:02 UTC
+Date/Publication: 2024-05-23 14:40:07 UTC
