@@ -18,6 +18,7 @@
 #' @import openalexR
 #' @import ca
 #' @importFrom dplyr %>%
+#' @importFrom dplyr bind_cols
 #' @importFrom dplyr across
 #' @importFrom dplyr row_number
 #' @importFrom dplyr tibble
@@ -735,4 +736,11 @@ colorlist <- function(){
   c("#E41A1C","#377EB8","#4DAF4A","#984EA3","#FF7F00","#A65628","#F781BF","#999999","#66C2A5","#FC8D62","#8DA0CB","#E78AC3","#A6D854","#FFD92F"
              ,"#B3B3B3","#A6CEE3","#1F78B4","#B2DF8A","#33A02C","#FB9A99","#E31A1C","#FDBF6F","#FF7F00","#CAB2D6","#6A3D9A","#B15928","#8DD3C7","#BEBADA"
              ,"#FB8072","#80B1D3","#FDB462","#B3DE69","#D9D9D9","#BC80BD","#CCEBC5")
+}
+
+#Initial to upper case
+firstup <- function(x) {
+  x <- tolower(x)
+  substr(x, 1, 1) <- toupper(substr(x, 1, 1))
+  x
 }

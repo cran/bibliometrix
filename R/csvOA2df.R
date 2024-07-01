@@ -1,4 +1,4 @@
-utils::globalVariables(c("all_of", "corr", "DI", "id_oa","RP","UN","AU_ID","corresponding_author_ids"))
+utils::globalVariables(c("all_of", "corr", "DI", "C1","id_oa","RP","UN","AU_ID","corresponding_author_ids", "References"))
 
 csvOA2df <- function(file){
   options(readr.num_columns = 0)
@@ -28,7 +28,7 @@ csvOA2df <- function(file){
   # recode as numeric
   DATA$TC <- as.numeric(DATA$TC)
   DATA$PY <- as.numeric(DATA$PY)
-  DATA$relevance_score <- as.numeric(DATA$relevance_score)
+  #DATA$relevance_score <- as.numeric(DATA$relevance_score)
   
   # replace | with ;
   DATA <- DATA %>% 
@@ -36,20 +36,81 @@ csvOA2df <- function(file){
   
   DATA$AF <- DATA$AU
   DATA$ID <- DATA$DE
-  DATA$AB=""
+  if (!"AB" %in% names(DATA)) DATA$AB=""
   DATA$CR <- gsub("https://openalex.org/","",DATA$CR)
   DATA$AU_ID <- gsub("https://openalex.org/","",DATA$AU_ID)
   DATA$id_oa <- gsub("https://openalex.org/","",DATA$id_oa)
   DATA$JI <- DATA$J9 <- gsub("https://openalex.org/","",DATA$SO_ID)
   DATA$corresponding_author_ids <- gsub("https://openalex.org/","",DATA$corresponding_author_ids)
-  DATA$C1 <- gsub("https://", "", DATA$C1)
   DATA$DB <- "OPENALEX"
+  
+  # affilitation string
+  AFF <- DATA %>% 
+    select(id_oa, starts_with("authorships_raw_affiliation_strings_")) 
+  
+  if(ncol(AFF)>1){
+    colId <- c(-1,parse_number(colnames(AFF)[-1]))
+    
+    DATA <- AFF[order(colId)] %>% 
+      unite(., C1, starts_with("authorships_raw_affiliation_strings_"), sep=";") %>% 
+      mutate(C1 = gsub("NA","",C1),
+             C1 = TrimMult(C1,char=";")) %>% 
+      bind_cols(DATA %>% 
+                  select(-"id_oa", -starts_with("authorships_raw_affiliation_strings_")))
+  } else {
+    AFF <- lapply(stri_extract_all_regex(DATA$authorships.raw_affiliation_strings, "\\[([^\\]]+)\\]"), function(l){
+      gsub("\\['|'\\]","",l)
+    })
+    
+    AFF <- data.frame(id_oa=rep(DATA$id_oa, lengths(AFF)), C1 = unlist(AFF)) %>% 
+      group_by(id_oa) %>% 
+      summarize(C1 = paste(C1,collapse=";")) 
+    DATA <- DATA %>% 
+      left_join(AFF, by = "id_oa")
+    DATA$C1[is.na(DATA$C1)] <- ""
+  }
+
+  DATA$C1 <- gsub("https://", "", DATA$C1)
+  
+  # country string
+  CO <- DATA %>% 
+    select(id_oa, starts_with("authorships_countries_")) 
+  
+  if(ncol(CO)>1){
+  colId <- c(-1,parse_number(colnames(CO)[-1]))
+  
+  DATA <- CO[order(colId)] %>% 
+    unite(., AU_CO, starts_with("authorships_countries_"), sep=";") %>% 
+    mutate(AU_CO = gsub("NA","",AU_CO),
+           AU_CO = TrimMult(AU_CO,char=";")) %>% 
+    bind_cols(DATA %>% 
+                select(-"id_oa", -starts_with("authorships_countries_")))
+  } else {
+    CO <- lapply(stri_extract_all_regex(DATA$authorships.countries, "\\[([^\\]]+)\\]"), function(l){
+      gsub("\\['|'\\]","",l)
+    })
+    
+    CO <- data.frame(id_oa=rep(DATA$id_oa, lengths(CO)), AU_CO = unlist(CO)) %>% 
+      group_by(id_oa) %>% 
+      summarize(AU_CO = gsub("'","",paste(AU_CO,collapse=";")))
+    DATA <- DATA %>% 
+      left_join(CO, by = "id_oa")
+    DATA$AU_CO[is.na(DATA$AU_CO)] <- ""
+  }
+  
   
   ## corresponding author
   DATA <- DATA %>% 
     mutate(AU1_ID = gsub(";.*", "", corresponding_author_ids))
   UN <- strsplit(DATA$C1,";")
-  corresp <- strsplit(DATA$authorships_is_corresponding,";")
+  if ("authorships_is_corresponding" %in% names(DATA)){
+    corresp <- strsplit(tolower(DATA$authorships_is_corresponding),";")
+  } else {
+    corresp <- strsplit(tolower(DATA$authorships.is_corresponding),";")
+  }
+  
+  
+  
   df_UN <- data.frame(UN=unlist(UN), id_oa=rep(DATA$id_oa,lengths(UN))) %>% 
     group_by(id_oa) %>% 
     mutate(n=row_number())
@@ -93,6 +154,7 @@ csvOA2df <- function(file){
     mutate(across(all_of(label), toupper),
            DI = gsub("https://doi.org/","",DI),
            DI = ifelse(DI == "null",NA,DI)) 
+  DATA$SO <- toupper(DATA$SO)
   
   return(DATA)
 }
@@ -103,14 +165,18 @@ relabelling_OA <- function(DATA){
   label[label %in% "id"] <- "id_oa"
   label[label %in% "display_name"] <- "TI"
   label[label %in% "primary_location_display_name"] <- "SO"
+  label[label %in% "locations.source.display_name"] <- "SO"
   label[label %in% "primary_location_id"] <- "SO_ID"
+  label[label %in% "locations.source.id"] <- "SO_ID"
   label[label %in% "primary_location_host_organization"] <- "PU"
   label[label %in% "primary_location_issns"] <- "ISSN"
   label[label %in% "primary_location_issn_l"] <- "ISSN_I"
   label[label %in% "primary_location_landing_page_url"] <- "URL"
   label[label %in% "primary_location_pdf_url"] <- "URL_PDF"
   label[label %in% "author_ids"] <- "AU_ID"
+  label[label %in% "authorships.author.id"] <- "AU_ID"
   label[label %in% "author_names"] <- "AU"
+  label[label %in% "authorships.author.display_name"] <- "AU"
   label[label %in% "author_orcids"] <- "OI"
   label[label %in% "author_institution_names"] <- "C3"
   label[label %in% "cited_by_count"] <- "TC"
@@ -119,7 +185,9 @@ relabelling_OA <- function(DATA){
   label[label %in% "biblio_issue"] <- "IS"
   label[label %in% "biblio_volume"] <- "VL"
   label[label %in% "referenced_works" ] <- "CR"
-  label[label %in% "keywords_keyword"] <- "DE"
+  label[label %in% "keywords_display_name"] <- "DE"
+  label[label %in% "keywords.display_name"] <- "DE"
+  label[label %in% "abstract"] <- "AB"
   label[label %in% "concepts_display_name"] <- "CONCEPTS"
   label[label %in% "topics_display_name"] <- "TOPICS"
   label[label %in% "sustainable_development_goals_display_name"] <- "SDG"
@@ -128,8 +196,13 @@ relabelling_OA <- function(DATA){
   label[label %in% "referenced_works_count"] <- "NR"
   label[label %in% "language"] <- "LA"
   label[label %in% "authorships_author_position"] <- "AU_POSITION"
-  label[label %in% "authorships_raw_affiliation_string"] <- "C1"
+  #label[label %in% "authorships_raw_affiliation_string"] <- "C1"
   label[label %in% "doi"] <- "DI"
   names(DATA) <- label
   return(DATA)
+}
+
+TrimMult <- function(x, char=" ") {
+  return(gsub(paste0("^", char, "*|(?<=", char, ")", char, "|", char, "*$"),
+              "", x, perl=T))
 }
