@@ -17,6 +17,7 @@
 #' @import tidytext
 #' @import openalexR
 #' @import ca
+#' @import visNetwork
 #' @importFrom purrr map2_dfr
 #' @importFrom purrr map_dfr
 #' @importFrom purrr map_df
@@ -252,7 +253,7 @@
 #' @importFrom Matrix tril
 #' @importFrom Matrix triu
 #' @importFrom Matrix uniqTsparse
-#' @importFrom Matrix unname
+# @importFrom Matrix unname
 #' @importFrom Matrix unpack
 #' @importFrom Matrix update
 #' @importFrom Matrix updown

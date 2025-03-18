@@ -1451,7 +1451,7 @@ savenetwork <- function(con, VIS){
     visNetwork::visSave(con)
 }
 
-igraph2vis<-function(g,curved,labelsize,opacity,type,shape, net, shadow=TRUE, edgesize=5){
+igraph2vis<-function(g,curved,labelsize,opacity,type,shape, net, shadow=TRUE, edgesize=5, noOverlap=TRUE){
   
   LABEL=igraph::V(g)$name
   
@@ -1515,14 +1515,19 @@ igraph2vis<-function(g,curved,labelsize,opacity,type,shape, net, shadow=TRUE, ed
     }else{
         vn$nodes$font.color <- adjustcolor("black", alpha.f = 0)
     }
+   ## avoid label overlaps 
+    if (noOverlap){
+
+      threshold <- 0.05
+      ymax <- diff(range(coords[,2]))
+      xmax <- diff(range(coords[,1]))
+      threshold2 <- threshold*mean(xmax,ymax)
+      w <- data.frame(x=coords[,1],y=coords[,2],labelToPlot=vn$nodes$label, dotSize=size, row.names = vn$nodes$label)
+      labelToRemove <- avoidNetOverlaps(w, threshold = threshold2)
+    } else {
+      labelToRemove <- ""
+    }
     
-    ## avoid label overlaps
-    threshold <- 0.05
-    ymax <- diff(range(coords[,2]))
-    xmax <- diff(range(coords[,1]))
-    threshold2 <- threshold*mean(xmax,ymax)
-    w <- data.frame(x=coords[,1],y=coords[,2],labelToPlot=vn$nodes$label, dotSize=size, row.names = vn$nodes$label)
-    labelToRemove <- avoidNetOverlaps(w, threshold = threshold2)
     vn$nodes <- vn$nodes %>% 
       mutate(label = ifelse(label %in% labelToRemove, "",label),
              title = id)
@@ -1932,15 +1937,16 @@ dend2vis <- function(hc, labelsize, nclusters=1, community=FALSE){
 
 ## Factorial Analysis dynamic plots
 ca2plotly <- function(CS, method="MCA", dimX = 1, dimY = 2, topWordPlot = Inf, threshold=0.10, labelsize=16, size=5){
-  
+  LABEL <- CS$WData$word
   switch(method,
          CA={
            contrib = rowSums(CS$coord$contrib %>% as.data.frame())/2
            wordCoord <- CS$coord$coord[,1:2] %>%
              data.frame() %>%
-             mutate(label = row.names(CS$coord$coord),
+             mutate(label = LABEL,
                     contrib = contrib) %>% 
              select(c(3,1,2,4))
+           row.names(wordCoord) <- LABEL
            xlabel <- paste0("Dim 1 (",round(CS$res$eigCorr$perc[1],2),"%)")
            ylabel <- paste0("Dim 2 (",round(CS$res$eigCorr$perc[2],2),"%)")
          },
@@ -1948,9 +1954,10 @@ ca2plotly <- function(CS, method="MCA", dimX = 1, dimY = 2, topWordPlot = Inf, t
            contrib = rowSums(CS$coord$contrib %>% as.data.frame())/2
            wordCoord <- CS$coord$coord[,1:2] %>%
              data.frame() %>%
-             mutate(label = row.names(CS$coord$coord),
+             mutate(label = LABEL,
                     contrib = contrib) %>% 
              select(c(3,1,2,4))
+           row.names(wordCoord) <- LABEL
            xlabel <- paste0("Dim 1 (",round(CS$res$eigCorr$perc[1],2),"%)")
            ylabel <- paste0("Dim 2 (",round(CS$res$eigCorr$perc[2],2),"%)")
          },
@@ -2231,7 +2238,7 @@ plot2png <- function(p, filename, zoom = 2, type="vis", tmpdir){
          plotly={
            htmlwidgets::saveWidget(p, file=html_name)
          })
-  webshot2::webshot(url = html_name, zoom = zoom, file = filename)#, verbose=FALSE)
+  biblioShot(url = html_name, zoom = zoom, file = filename)#, verbose=FALSE)
   
   popUpGeneric(title=NULL, type="success", color=c("#1d8fe1"),
                subtitle=paste0("Plot was saved in the following path: ",filename),

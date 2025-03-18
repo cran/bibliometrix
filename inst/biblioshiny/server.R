@@ -1,5 +1,7 @@
 source("utils.R", local=TRUE)
 source("libraries.R", local=TRUE)
+source("biblioShot.R", local=TRUE)
+
 suppressMessages(libraries())
 
 #### SERVER ####
@@ -42,6 +44,8 @@ To ensure the functionality of Biblioshiny,
       footer = modalButton("Dismiss"),
       easyClose = TRUE
     ))
+  } else {
+    Sys.setenv (CHROMOTE_CHROME = Chrome_url)
   }
   
   ## file upload max size
@@ -1107,24 +1111,31 @@ To ensure the functionality of Biblioshiny,
   DTfiltered <- eventReactive(input$applyFilter,{
     M <- values$Morig
     B <- bradford(M)$table
-    M <- subset(M, M$PY>=input$sliderPY[1] & M$PY<=input$sliderPY[2])
-    M <- subset(M, M$TCpY>=input$sliderTCpY[1] & M$TCpY<=input$sliderTCpY[2])
-    M <- subset(M, M$DT %in% input$selectType)
-    M <- subset(M, M$LA %in% input$selectLA)
+    M <- M %>%
+      dplyr::filter(PY >= input$sliderPY[1], PY <= input$sliderPY[2]) %>%
+      dplyr::filter(TCpY >= input$sliderTCpY[1], TCpY <= input$sliderTCpY[2]) %>%
+      dplyr::filter(DT %in% input$selectType) %>%
+      dplyr::filter(LA %in% input$selectLA)
+    
     switch(input$bradfordSources,
            "core"={
-             SO=B$SO[B$Zone %in% "Zone 1"]
+             so <- B$SO[B$Zone %in% "Zone 1"]
            },
            "zone2"={
-             SO=B$SO[B$Zone %in% c("Zone 1", "Zone 2")]
+             so <- B$SO[B$Zone %in% c("Zone 1", "Zone 2")]
            },
-           "all"={SO=B$SO})
-    M=M[M$SO %in% SO,]
+           "all"={so <- B$SO})
+    M <- M %>%
+      filter(SO %in% so)
+    
     values<-initial(values)
     row.names(M) <- M$SR
     class(M) <- c("bibliometrixDB", "data.frame")
-    values$M=M
-    Mdisp=as.data.frame(apply(values$M,2,function(x){substring(x,1,150)}))    
+    values$M <- M
+    Mdisp <- values$M %>%
+      mutate(across(everything(), ~ substring(., 1, 150))) %>%
+      as.data.frame()
+    
     if (dim(Mdisp)[1]>0){
       DTformat(Mdisp, nrow=3, filename="Filtered_DataTable", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, size='70%', filter="top",
                columnShort=NULL, columnSmall=NULL, round=2, title="", button=FALSE, escape=FALSE, selection=FALSE,scrollX=TRUE)
@@ -2772,11 +2783,11 @@ To ensure the functionality of Biblioshiny,
     #values$MRWsyn.terms <- synonyms
     ### end of block
     
-    WR=wordlist(values$M,Field=input$MostRelWords,n=Inf,measure="identity", ngrams=ngrams, remove.terms = remove.terms, synonyms = synonyms)$v
+    WR <- wordlist(values$M,Field=input$MostRelWords,n=Inf,measure="identity", ngrams=ngrams, remove.terms = remove.terms, synonyms = synonyms)$v
     
-    TAB=data.frame(names(WR),as.numeric(WR))
-    names(TAB)=c("Words", "Occurrences")
-    values$TABWord=TAB
+    TAB <- data.frame(names(WR),as.numeric(WR))
+    names(TAB) <- c("Words", "Occurrences")
+    values$TABWord <- TAB
     
     xx=values$TABWord
     if (input$MostRelWordsN>dim(xx)[1]){
@@ -3293,7 +3304,7 @@ To ensure the functionality of Biblioshiny,
              "Year (Q1)" = year_q1,
              "Year (Median)" = year_med,
              "Year (Q3)" = year_q3)
-    DTformat(tpData, nrow=10, filename="Stopword_List", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=FALSE, 
+    DTformat(tpData, nrow=10, filename="TrendTopic", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=FALSE, 
              size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
              selection=FALSE)
   })
@@ -3428,7 +3439,7 @@ To ensure the functionality of Biblioshiny,
     values <- cocNetwork(input,values)
     values$COCnetwork<-igraph2vis(g=values$cocnet$graph,curved=(input$coc.curved=="Yes"), 
                                labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
-                               shape=input$coc.shape, net=values$cocnet, shadow=(input$coc.shadow=="Yes"), edgesize=input$edgesize)
+                               shape=input$coc.shape, net=values$cocnet, shadow=(input$coc.shadow=="Yes"), edgesize=input$edgesize, noOverlap=input$noOverlap)
     values$cocOverlay <- overlayPlotly(values$COCnetwork$VIS)
     values$degreePlot <- degreePlot(values$cocnet)
   })
@@ -3728,7 +3739,7 @@ To ensure the functionality of Biblioshiny,
     TMAP()
     values$networkTM<-igraph2vis(g=values$TM$net$graph,curved=(input$coc.curved=="Yes"), 
                                  labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
-                                 shape=input$coc.shape, net=values$TM$net)
+                                 shape=input$coc.shape, net=values$TM$net, noOverlap=input$noOverlapTM)
     values$networkTM$VIS
   })
   
@@ -3869,14 +3880,18 @@ To ensure the functionality of Biblioshiny,
         names(values$nexus$TM[[i]]$documentToClusters)[1:9] <- c("DOI", "Authors","Title","Source","Year","TotalCitation","TCperYear","NTC","SR")
       }
       values$nexus$Data <- values$nexus$Data[values$nexus$Data$Inc_index>0,-c(4,8)]
-      values$TEplot <- plotThematicEvolution(Nodes = values$nexus$Nodes,Edges = values$nexus$Edges, measure = input$TEmeasure, min.flow = input$minFlowTE)
+      values$TEplot <- plotThematicEvolution(Nodes = values$nexus$Nodes,Edges = values$nexus$Edges, measure = input$TEmeasure, min.flow = input$minFlowTE, label_size = input$sizeTE*20)
     }
     
   })
   
-  output$TEPlot <- plotly::renderPlotly({
+  output$TEPlot <- visNetwork::renderVisNetwork({
     TEMAP()
     values$TEplot
+  })
+  
+  session$onFlushed(function() {
+    shinyjs::runjs("$('#TEPlot').trigger('resize');")
   })
   
   output$TEplot.save <- downloadHandler(
@@ -3897,7 +3912,7 @@ To ensure the functionality of Biblioshiny,
         files <- c(fileName,files)
       }
       plot2png(values$TEplot, filename= filenameTE, 
-               zoom = 2, type="plotly", tmpdir=tmpdir)
+               zoom = 2, type="vis", tmpdir=tmpdir)
       # screenshot(
       #   filename = paste("ThematicEvolution_", Sys.Date(), ".png", sep=""),
       #   id = "TEPlot",
@@ -3960,7 +3975,7 @@ To ensure the functionality of Biblioshiny,
     k=1
     values$network1<-igraph2vis(g=values$nexus$Net[[k]]$graph,curved=(input$coc.curved=="Yes"), 
                                 labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
-                                shape=input$coc.shape, net=values$nexus$Net[[k]])
+                                shape=input$coc.shape, net=values$nexus$Net[[k]], noOverlap=input$noOverlapTE)
     values$network1$VIS
   })
   
@@ -3969,7 +3984,7 @@ To ensure the functionality of Biblioshiny,
     k=2
     values$network2<-igraph2vis(g=values$nexus$Net[[k]]$graph,curved=(input$coc.curved=="Yes"), 
                                 labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
-                                shape=input$coc.shape, net=values$nexus$Net[[k]])
+                                shape=input$coc.shape, net=values$nexus$Net[[k]], noOverlap=input$noOverlapTE)
     values$network2$VIS
   })
   
@@ -3978,7 +3993,7 @@ To ensure the functionality of Biblioshiny,
     k=3
     values$network3<-igraph2vis(g=values$nexus$Net[[k]]$graph,curved=(input$coc.curved=="Yes"), 
                                 labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
-                                shape=input$coc.shape, net=values$nexus$Net[[k]])
+                                shape=input$coc.shape, net=values$nexus$Net[[k]], noOverlap=input$noOverlapTE)
     values$network3$VIS
   })
   
@@ -3987,7 +4002,7 @@ To ensure the functionality of Biblioshiny,
     k=4
     values$network4<-igraph2vis(g=values$nexus$Net[[k]]$graph,curved=(input$coc.curved=="Yes"), 
                                 labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
-                                shape=input$coc.shape, net=values$nexus$Net[[k]])
+                                shape=input$coc.shape, net=values$nexus$Net[[k]], noOverlap=input$noOverlapTE)
     values$network4$VIS
   })
   
@@ -3996,7 +4011,7 @@ To ensure the functionality of Biblioshiny,
     k=5
     values$network5<-igraph2vis(g=values$nexus$Net[[k]]$graph,curved=(input$coc.curved=="Yes"), 
                                 labelsize=input$labelsize, opacity=input$cocAlpha,type=input$layout,
-                                shape=input$coc.shape, net=values$nexus$Net[[k]])
+                                shape=input$coc.shape, net=values$nexus$Net[[k]], noOverlap=input$noOverlapTE)
     values$network5$VIS
   })
   
