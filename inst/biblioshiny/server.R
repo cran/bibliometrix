@@ -67,6 +67,16 @@ To ensure the functionality of Biblioshiny,
   values$out <- NULL
   values$loadMenu <- NA
   
+  ### column to export in TALL
+  if (suppressPackageStartupMessages(!require("tall", quietly = TRUE))) {
+      values$TALLmissing <- TRUE
+    } else {
+      values$TALLmissing <- FALSE  
+    }
+  values$corpusCol <- c("Title" = "TI","Abstract"="AB", "Author's Keywords"="DE")
+  values$metadataCol <- c("Publication Year" = "PY","Document Type"="DT", "DOI"="DI", "Open Access"="OA", "Language"="LA", "First Author"= "AU1")
+  
+  
   ### setting values
   values$dpi <- 300
   values$h <- 7
@@ -1433,10 +1443,9 @@ To ensure the functionality of Biblioshiny,
       sheetname <- "ThreeFieldsPlot"
       ind <- which(regexpr(sheetname,values$wb$sheet_names)>-1)
       if (length(ind)>0){
-        sheetname <- paste(sheetname,length(ind)+1,sep="")
+        sheetname <- paste(sheetname, "(", length(ind) + 1, ")", sep = "")
       } 
       addWorksheet(wb=values$wb, sheetName=sheetname, gridLines = FALSE)
-      #values$fileTFP <- screenSh(selector = "#ThreeFieldsPlot") ## screenshot
       values$fileTFP <- screenSh(values$TFP, zoom = 2, type="plotly")
       values$list_file <- rbind(values$list_file, c(sheetname,values$fileTFP,1))
       popUp(title="Three-Field Plot", type="success")
@@ -2002,36 +2011,10 @@ To ensure the functionality of Biblioshiny,
   ### Lotka Law ----  
   output$lotkaPlot <- renderPlotly({
     
-    values$lotka=lotka(biblioAnalysis(values$M))
-    AuProd=values$lotka$AuthorProd
-    AuProd$Theoretical=10^(log10(values$lotka$C)-2*log10(AuProd[,1]))
-    AuProd$Theoretical=AuProd$Theoretical/sum(AuProd$Theoretical)
+    values$lotka <- lotka(values$M)
     
-    x <- c(max(AuProd$N.Articles)-0.02-diff(range(AuProd$N.Articles))*0.125, max(AuProd$N.Articles)-0.02)+1
-    y <- c(min(AuProd$Freq*100),min(AuProd$Freq*100)+diff(range(AuProd$Freq*100))*0.125)
-    
-    g=ggplot2::ggplot(AuProd, aes(x = N.Articles, y = Freq*100, text=paste("N.Articles: ",N.Articles,"\n% of production: ",round(Freq*100,1)))) +
-      geom_line(aes(group="NA")) +
-      #geom_area(aes(group="NA"),fill = 'grey90', alpha = .5) +
-      geom_line(data=AuProd, aes(y=Theoretical*100, group="NA"),linetype = "dashed",color="black",alpha=0.8)+
-      xlim(0,max(AuProd$N.Articles)+1)+
-      labs(x = 'Documents written'
-           , y = '% of Authors'
-           , title = "Author Productivity through Lotka's Law") +
-      theme(text = element_text(color = "#444444")
-            ,panel.background = element_rect(fill = '#FFFFFF')
-            ,panel.grid.minor = element_line(color = '#EFEFEF')
-            ,panel.grid.major = element_line(color = '#EFEFEF')
-            ,plot.title = element_text(size = 24)
-            ,axis.title = element_text(size = 14, color = '#555555')
-            ,axis.title.y = element_text(vjust = 1, angle = 0)
-            ,axis.title.x = element_text(hjust = 0)
-            ,axis.line.x = element_line(color="black",linewidth=0.5)
-            ,axis.line.y = element_line(color="black",linewidth=0.5)
-      ) +
-      annotation_custom(values$logoGrid, xmin = x[1], xmax = x[2], ymin = y[1], ymax = y[2]) 
-    values$LLplot <- g
-    plot.ly(g,flip=FALSE, side="r", aspectratio=1.4, size=0.10)
+    values$LLplot <- values$lotka$g
+    plot.ly(values$lotka$g_shiny,flip=FALSE, side="r", aspectratio=1.4, size=0.10)
   })
   
   output$LLplot.save <- downloadHandler(
@@ -2045,8 +2028,8 @@ To ensure the functionality of Biblioshiny,
   )
   
   output$lotkaTable <- DT::renderDT({
-    names(values$lotka$AuthorProd)=c("Documents written","N. of Authors","Proportion of Authors")
-    DTformat(values$lotka$AuthorProd, nrow=10, filename="Lotka_Law", pagelength=TRUE, left=NULL, right=NULL, numeric=3, dom=FALSE, 
+
+    DTformat(values$lotka$AuthorProd, nrow=10, filename="Lotka_Law", pagelength=TRUE, left=NULL, right=NULL, numeric=c(3,4), dom=FALSE, 
              size='100%', filter="none", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
              selection=FALSE)
   })
@@ -4187,7 +4170,8 @@ To ensure the functionality of Biblioshiny,
     values <- intellectualStructure(input,values)
     values$COCITnetwork<-igraph2vis(g=values$cocitnet$graph,curved=(input$cocit.curved=="Yes"), 
                                labelsize=input$citlabelsize, opacity=0.7,type=input$citlayout,
-                               shape=input$cocit.shape, net=values$cocitnet, shadow=(input$cocit.shadow=="Yes"))
+                               shape=input$cocit.shape, net=values$cocitnet, shadow=(input$cocit.shadow=="Yes"),
+                               noOverlap=input$citNoOverlap)
     values$cocitOverlay <- overlayPlotly(values$COCITnetwork$VIS)
     values$degreePlot <- degreePlot(values$cocitnet)
   })
@@ -4316,7 +4300,8 @@ To ensure the functionality of Biblioshiny,
     values <- socialStructure(input,values)
     values$COLnetwork<-igraph2vis(g=values$colnet$graph,curved=(input$soc.curved=="Yes"), 
                                labelsize=input$collabelsize, opacity=input$colAlpha,type=input$collayout,
-                               shape=input$col.shape, net=values$colnet, shadow=(input$col.shadow=="Yes"))
+                               shape=input$col.shape, net=values$colnet, shadow=(input$col.shadow=="Yes"),
+                               noOverlap=input$colNoOverlap)
     values$colOverlay <- overlayPlotly(values$COLnetwork$VIS)
     values$degreePlot <-degreePlot(values$colnet)
     if (is.null(dim(values$colnet$cluster_res))){
@@ -4565,8 +4550,92 @@ To ensure the functionality of Biblioshiny,
     screenShot(values$COLnetwork$VIS, filename=filename, type="vis")
   })
   
+  ## TALL EXPORT ----
+  observe({
+    req(values$M)
+    ind <- which(values$corpusCol %in% names(values$M))
+    corpusCol <- values$corpusCol[ind]
+    updateMultiInput(session, 'tallFields',
+                     selected = character(0),
+                     choices = names(corpusCol))
+  })
   
-  ### settings ----
+  observe({
+    req(values$M)
+    ind <- which(values$metadataCol %in% names(values$M))
+    metadataCol <- values$metadataCol[ind]
+    updateMultiInput(session, 'tallMetadata',
+                     selected = character(0),
+                     choices = names(metadataCol))
+  })
+  
+  observeEvent(eventExpr = {input$tallRun},
+               handlerExpr = {
+                 req(input$tallFields)
+    values$tallDf <- tallExport(values$M, input$tallFields, input$tallMetadata, values$metadataCol)
+    
+  })
+  
+  output$tallTable <- renderDT({
+    req(values$tallDf)
+      DTformat(values$tallDf, nrow=3, filename="tallDf", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=FALSE, size='70%', filter="none",
+               columnShort=NULL, columnSmall=NULL, round=2, title="", button=FALSE, escape=FALSE, selection=FALSE,scrollX=TRUE)
+  })
+  
+  output$tall.save <- downloadHandler(
+    filename = function() {
+      paste("tallFile-", Sys.Date(), ".csv", sep="")
+    },
+    content <- function(file) {
+      write.csv(values$tallDf, file=file, row.names = FALSE)
+    },
+    contentType = "csv"
+  )
+  
+  observeEvent(eventExpr = {values$TALLmissing},
+               handlerExpr = {
+                 if (values$TALLmissing){
+                   output$tallBttn1 <- renderUI({
+                     div(style ="border-radius: 10px; border-width: 3px; font-size: 15px;",
+                         align = "center",
+                         width="100%",
+                         actionBttn(inputId = "installTall", label = strong("Install TALL"),
+                                    width = "100%", style = "pill", color = "danger",
+                                    icon = icon(name ="cloud-download", lib="glyphicon"))
+                     )
+                   })
+                   output$tallBttn2 <- renderUI("")
+                 } else {
+                   output$tallBttn1 <- renderUI("")
+                   output$tallBttn2 <- renderUI({
+                     if (require("tall", quietly = TRUE)){
+                       div(style ="border-radius: 10px; border-width: 3px; font-size: 15px;",
+                           align = "center",
+                           width="100%",
+                           actionBttn(inputId = "launchTall", label = strong("Launch TALL"),
+                                      width = "100%", style = "pill", color = "primary",
+                                      icon = icon(name ="play", lib="glyphicon")))
+                     }
+                   })
+                 }
+  })
+  
+  
+  observeEvent(eventExpr = {input$installTall},
+               handlerExpr = {
+                 pak::pkg_install("tall")
+                 popUpGeneric(title=NULL, type="success", color=c("#1d8fe1"),
+                              subtitle="TALL has been successfully installed",
+                              btn_labels="OK", size="40%")
+                 if (suppressMessages(require("tall", quietly = TRUE))) values$TALLmissing <- FALSE
+               })
+
+  observeEvent(eventExpr = {input$launchTall},
+               handlerExpr = {
+                 system('Rscript -e "tall::tall()"')
+               })
+  
+  ## SETTING ----
   observeEvent(input$dpi, {
     values$dpi <- as.numeric(input$dpi)
   })
