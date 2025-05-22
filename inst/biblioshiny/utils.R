@@ -57,7 +57,7 @@ merge_files <- function(files) {
     extF <- ext[i]
     filename <- file[i]
 
-    switch(extF,
+    switch(tolower(extF),
       xlsx = {
         Mfile[[i]] <- readxl::read_excel(filename, col_types = "text") %>% as.data.frame()
         Mfile[[i]]$PY <- as.numeric(Mfile[[i]]$PY)
@@ -450,17 +450,7 @@ notifications <- function() {
   }
 
   ## check if a file exists on the local machine and load it
-  switch(Sys.info()[["sysname"]],
-    Windows = {
-      home <- Sys.getenv("R_USER")
-    },
-    Linux = {
-      home <- Sys.getenv("HOME")
-    },
-    Darwin = {
-      home <- Sys.getenv("HOME")
-    }
-  )
+  home <- homeFolder()
 
   file <- paste(home, "/biblioshiny_notifications.csv", sep = "")
   fileTrue <- file.exists(file)
@@ -555,6 +545,8 @@ initial <- function(values) {
   values$citShortlabel <- "NA"
   values$S <- list("NA")
   values$GR <- "NA"
+  values$nMerge <- NULL
+  values$collection_description <- NULL
   ### column to export in TALL
   values$corpusCol <- c("Title" = "TI", "Abstract" = "AB", "Author's Keywords" = "DE")
   values$metadataCol <- c("Publication Year" = "PY", "Document Type" = "DT", "DOI" = "DI", "Open Access" = "OA", "Language" = "LA", "First Author" = "AU1")
@@ -1953,6 +1945,8 @@ hist2vis <- function(net, labelsize = 2, nodesize = 2, curved = FALSE, shape = "
 
   vn <- visNetwork::toVisNetworkData(net$net)
 
+  vn$nodes$short_label <- LABEL
+  
   if (labeltype != "short") {
     vn$nodes$label <- paste0(vn$nodes$years, ": ", LABEL)
   } else {
@@ -2007,9 +2001,8 @@ hist2vis <- function(net, labelsize = 2, nodesize = 2, curved = FALSE, shape = "
   }))
 
   vn$nodes <- vn$nodes %>%
-    # select(!LCS.y) %>%
-    # rename(LCS = LCS.x) %>%
-    mutate(title = paste("<b>Title</b>: ",
+    mutate(title_orig = title,
+      title = paste("<b>Title</b>: ",
       title,
       "<br><b>DOI</b>: ",
       paste0(
@@ -2030,28 +2023,27 @@ hist2vis <- function(net, labelsize = 2, nodesize = 2, curved = FALSE, shape = "
   vn$nodes$shape <- "dot"
   vn$nodes$shadow <- TRUE
 
-  nr <- nrow(vn$nodes)
-  y <- max(vn$nodes$y)
+  # nr <- nrow(vn$nodes)
+  # y <- max(vn$nodes$y)
+  # vn$nodes[nr + 1, c("id", "title", "label", "color", "font.color")] <-
+  #   c(rep("logo", 3), "black", "white")
+  # vn$nodes$x[nr + 1] <- max(vn$nodes$x, na.rm = TRUE) + 1
+  # vn$nodes$y[nr + 1] <- y
+  # vn$nodes$size[nr + 1] <- vn$nodes$size[nr] * 4
+  # vn$nodes$years[nr + 1] <- as.numeric(vn$nodes$x[nr + 1])
+  # vn$nodes$font.size[nr + 1] <- vn$nodes$font.size[nr]
+  # vn$nodes$group[nr + 1] <- "logo"
+  # vn$nodes$shape[nr + 1] <- "image"
+  # vn$nodes$image[nr + 1] <- "logo.jpg"
+  # vn$nodes$fixed.x <- TRUE
+  # vn$nodes$fixed.y <- FALSE
+  # vn$nodes$fixed.y[nr + 1] <- TRUE
+  # vn$nodes$shadow[nr + 1] <- FALSE
 
-  vn$nodes[nr + 1, c("id", "title", "label", "color", "font.color")] <-
-    c(rep("logo", 3), "black", "white")
-  vn$nodes$x[nr + 1] <- max(vn$nodes$x, na.rm = TRUE) + 1
-  vn$nodes$y[nr + 1] <- y
-  vn$nodes$size[nr + 1] <- vn$nodes$size[nr] * 4
-  vn$nodes$years[nr + 1] <- as.numeric(vn$nodes$x[nr + 1])
-  vn$nodes$font.size[nr + 1] <- vn$nodes$font.size[nr]
-  vn$nodes$group[nr + 1] <- "logo"
-  vn$nodes$shape[nr + 1] <- "image"
-  vn$nodes$image[nr + 1] <- "logo.jpg"
-  vn$nodes$fixed.x <- TRUE
-  vn$nodes$fixed.y <- FALSE
-  vn$nodes$fixed.y[nr + 1] <- TRUE
-  vn$nodes$shadow[nr + 1] <- FALSE
-
-  coords <- vn$nodes[, c("x", "y")] %>%
-    as.matrix()
-
-  coords[, 2] <- coords[, 2]^(1 / 2)
+  # coords <- vn$nodes[, c("x", "y")] %>%
+  #   as.matrix()
+  # 
+  # coords[, 2] <- coords[, 2]^(1 / 2)
 
   tooltipStyle <- ("position: fixed;visibility:hidden;padding: 5px;white-space: nowrap;
                   font-size:12px;font-color:black;background-color:white;")
@@ -2064,12 +2056,28 @@ hist2vis <- function(net, labelsize = 2, nodesize = 2, curved = FALSE, shape = "
   vn$nodes$size[nrow(vn$nodes)] <- max(5 * nodesize)
 
   for (i in 1:nrow(vn$nodes)) vn$nodes$font.color[i] <- adjustcolor(vn$nodes$font.color[i], alpha.f = opacity_font[i])
+  
+  x <- vn$nodes$x
+  y <- vn$nodes$y
+  vn$nodes$x <- y
+  vn$nodes$y <- x
+  
+  vn$nodes <- assign_horizontal_coords_clusters_adaptive(vn$nodes)
 
+  vn$nodes$fixed.x <- FALSE
+  vn$nodes$fixed.y <-TRUE
+  
+  coords <- vn$nodes[, c("x", "y")] %>%
+    as.matrix()
+  coords[,2] <- coords[,2]
+  
   VIS <-
     visNetwork::visNetwork(nodes = vn$nodes, edges = vn$edges, type = "full", smooth = TRUE, physics = FALSE) %>%
     visNetwork::visNodes(shadow = vn$nodes$shadow, shape = shape, size = vn$nodes$size, font = list(color = vn$nodes$font.color, size = vn$nodes$font.size, vadjust = vn$nodes$font.vadjust)) %>%
     visNetwork::visIgraphLayout(layout = "layout.norm", layoutMatrix = coords, type = "full") %>%
-    visNetwork::visEdges(smooth = list(type = "horizontal"), arrows = list(to = list(enabled = TRUE, scaleFactor = 0.5))) %>%
+    #visNetwork::visEdges(smooth = list(type = "horizontal"), arrows = list(to = list(enabled = TRUE, scaleFactor = 0.5))) %>%
+    visNetwork::visEdges(smooth = list(enabled = TRUE, type = "dynamic", roundness = 0.3),
+                         arrows = list(to = list(enabled = TRUE, scaleFactor = 0.5))) %>%
     visNetwork::visInteraction(dragNodes = T, navigationButtons = F, hideEdgesOnDrag = F, tooltipStyle = tooltipStyle, zoomSpeed = 0.2) %>%
     visNetwork::visOptions(
       highlightNearest = list(enabled = T, hover = T, degree = list(from = 1), algorithm = "hierarchical"), nodesIdSelection = F,
@@ -2079,6 +2087,29 @@ hist2vis <- function(net, labelsize = 2, nodesize = 2, curved = FALSE, shape = "
   return(list(VIS = VIS, vn = vn, type = "historiograph", curved = curved))
 }
 
+## calculate node coordinates in historiograph
+assign_horizontal_coords_clusters_adaptive <- function(nodes_df, spacing_base = 1.0, cluster_spacing = 6, tol=0.15) {
+  
+  clusters <- nodes_df %>%
+    count(color, name = "n_cluster") %>%
+    arrange(desc(n_cluster)) %>%
+    mutate(cluster_id = row_number(),
+           cluster_center = (cluster_id - mean(cluster_id)) * cluster_spacing)
+  
+  nodes_df <- nodes_df %>%
+    left_join(clusters, by = "color")
+  
+  nodes_df <- nodes_df %>%
+    group_by(years, color) %>%
+    mutate(
+      n_nodes = n(),
+      spacing = spacing_base * n_nodes,  # USA direttamente il numero di nodi
+      x = (cluster_center[1] + spacing[1] * (row_number() - (n() + 1)/2))*runif(1,1-tol,1+tol)
+    ) %>%
+    ungroup()
+  
+  return(nodes_df)
+}
 
 ## Pajek Export
 graph2Pajek <- function(graph, filename = "my_pajek_network") {
@@ -2517,19 +2548,8 @@ screenSh <- function(p, zoom = 2, type = "vis") {
 }
 
 screenShot <- function(p, filename, type) {
-  switch(Sys.info()[["sysname"]],
-    Windows = {
-      home <- Sys.getenv("R_USER")
-      home <- gsub("/Documents", "", home)
-    },
-    Linux = {
-      home <- Sys.getenv("HOME")
-    },
-    Darwin = {
-      home <- Sys.getenv("HOME")
-    }
-  )
-
+  home <- homeFolder()
+  
   # setting up the main directory
   # filename <- paste0(file.path(home,"downloads/"),filename)
   if ("downloads" %in% tolower(dir(home))) {
@@ -2968,7 +2988,7 @@ menuList <- function(values) {
 
   L[[length(L) + 1]] <- menuItem("TALL Export", tabName = "tall", icon = icon("text-size", lib = "glyphicon"))
 
-  L[[length(L) + 1]] <- menuItem("Settings", tabName = "settings", icon = fa_i(name = "sliders"))
+  # L[[length(L) + 1]] <- menuItem("Settings", tabName = "settings", icon = fa_i(name = "sliders"))
 
   if (!isTRUE(TC)) {
     out <- c(
@@ -3009,3 +3029,22 @@ menuList <- function(values) {
 
   return(L)
 }
+
+
+# find home folder
+homeFolder <- function() {
+  switch(Sys.info()[["sysname"]],
+         Windows = {
+           home <- Sys.getenv("R_USER")
+         },
+         Linux = {
+           home <- Sys.getenv("HOME")
+         },
+         Darwin = {
+           home <- Sys.getenv("HOME")
+         }
+  )
+  return(home)
+}
+
+

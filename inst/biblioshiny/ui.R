@@ -45,6 +45,7 @@ export_bttn <- list(
 )
 
 ## load content of Info page
+biblioAI <- helpContent()$biblioAI
 info <- helpContent()$info
 pubs <- helpContent()$publications
 ## Header ----
@@ -127,8 +128,9 @@ sidebar <- shinydashboardPlus::dashboardSidebar(
     menuItem("biblioshiny", tabName = "biblioshinyy", icon = fa_i(name = "house-user")),
     menuItem("Info",
       tabName = "info", icon = fa_i(name = "circle-info"),
-      menuSubItem("Supported Files", tabName = "supFiles", icon = fa_i(name = "circle-info")),
-      menuSubItem("Team's Publications", tabName = "pubs", icon = fa_i(name = "circle-info"))
+      menuSubItem("Biblio AI", tabName = "biblioAI", icon = fa_i(name = "microchip")),
+      menuSubItem("Supported Files", tabName = "supFiles", icon = fa_i(name = "database")),
+      menuSubItem("Team's Publications", tabName = "pubs", icon = fa_i(name = "book"))
     ),
     menuItem("Data",
       tabName = "uploadData", icon = fa_i(name = "file-import"),
@@ -136,7 +138,8 @@ sidebar <- shinydashboardPlus::dashboardSidebar(
       menuSubItem("API", tabName = "gathData", icon = icon("chevron-right", lib = "glyphicon")),
       menuSubItem("Merge Collections", tabName = "mergeData", icon = icon("chevron-right", lib = "glyphicon"))
     ),
-    menuItemOutput("rest_of_sidebar")
+    menuItemOutput("rest_of_sidebar"),
+    menuItem("Settings", tabName = "settings", icon = fa_i(name = "sliders"))
   ),
   textOutput("res"),
   width = 300
@@ -196,15 +199,15 @@ body <- dashboardBody(
           ),
           column(
             12,
-            div(img(src = "logo.jpg", height = "35%", width = "35%"), style = "text-align: center;")
+            div(img(src = "logoAI.jpg", height = "35%", width = "35%"), style = "text-align: center;")
           ),
           column(
             12,
-            div(p("For an introduction and live examples, visit the ",
-              em(a("bibliometrix website.",
-                href = "https://www.bibliometrix.org", target = "_blank"
-              )),
-              style = "text-align:center; font-size:18px;"
+            div(h3(em("Biblioshiny 5.0 now includes Biblio AI – a powerful AI assistant for your science mapping analyses.",
+            #   em(a("bibliometrix website.",
+            #     href = "https://www.bibliometrix.org", target = "_blank"
+            #   )),
+              ),style = "text-align:center; font-size:24px;"
             )),
             br(),
             hr()
@@ -217,19 +220,38 @@ body <- dashboardBody(
             div(h6("When they are used in a publication, we ask that authors to cite the following reference:",
               style = "text-align:center; font-size:19px;"
             )),
-            br(),
             div(h6("Aria, M., & Cuccurullo, C. (2017).", strong(" bibliometrix: An R-tool for comprehensive"),
-              style = "text-align:center; font-size:19px;"
+              style = "text-align:center; font-size:22px;"
             )),
             div(h6(strong("science mapping analysis."),
               em("Journal of Informetrics"), ", 11(4), 959-975.",
-              style = "text-align:center; font-size:19px;"
+              style = "text-align:center; font-size:22px;"
             )),
             br(),
             div(h6("Failure to properly cite the software is considered a violation of the license.",
               style = "text-align:center; font-size:19px;"
-            ))
+            )),
+            br(),
+            div(p("For an introduction and live examples, visit the ",
+              em(a("bibliometrix website.",
+                href = "https://www.bibliometrix.org", target = "_blank"
+              )),
+              style = "text-align:center; font-size:18px;"
+            )),
           )
+        )
+      )
+    ),
+    tabItem(
+      "biblioAI",
+      fluidPage(
+        fluidRow(
+          column(1),
+          column(
+            10,
+            HTML(biblioAI)
+          ),
+          column(1)
         )
       )
     ),
@@ -284,6 +306,7 @@ body <- dashboardBody(
             ),
             column(
               9,
+              uiOutput("collection_descriptionUI"),
               shinycssloaders::withSpinner(DT::DTOutput("contents"))
             ),
             column(
@@ -574,6 +597,7 @@ body <- dashboardBody(
             ),
             column(
               9,
+              uiOutput("collection_description_mergeUI"),
               shinycssloaders::withSpinner(DT::DTOutput("contentsMerge"))
             ),
             column(
@@ -710,6 +734,7 @@ body <- dashboardBody(
           )
         ),
         fluidRow(
+          #div(id = "valuebox-container",
           tabsetPanel(
             type = "tabs", id = "maininfo",
             tabPanel(
@@ -745,8 +770,21 @@ body <- dashboardBody(
             tabPanel("Table",
               shinycssloaders::withSpinner(DT::DTOutput(outputId = "MainInfo", width = 700)),
               align = "center"
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("MainInfoGeminiUI"))
+                  )
+                )
+              )
             )
           )
+          #) # end div
         )
       )
     ),
@@ -892,68 +930,68 @@ body <- dashboardBody(
                   solidHeader = FALSE,
                   fluidRow(
                     column(6, selectInput("CentralField",
-                      label = "Middle Field",
-                      choices = c(
-                        "Authors" = "AU",
-                        "Affiliations" = "AU_UN",
-                        "Countries" = "AU_CO",
-                        "Keywords" = "DE",
-                        "Keywords Plus" = "ID",
-                        "Titles" = "TI_TM",
-                        "Abstract" = "AB_TM",
-                        "Sources" = "SO",
-                        "References" = "CR",
-                        "Cited Sources" = "CR_SO"
-                      ),
-                      selected = "AU"
+                                          label = "Middle Field",
+                                          choices = c(
+                                            "Authors" = "AU",
+                                            "Affiliations" = "AU_UN",
+                                            "Countries" = "AU_CO",
+                                            "Keywords" = "DE",
+                                            "Keywords Plus" = "ID",
+                                            "Titles" = "TI_TM",
+                                            "Abstract" = "AB_TM",
+                                            "Sources" = "SO",
+                                            "References" = "CR",
+                                            "Cited Sources" = "CR_SO"
+                                          ),
+                                          selected = "AU"
                     )),
                     column(6, numericInput("CentralFieldn",
-                      label = ("Number of items"),
-                      min = 1, max = 50, step = 1, value = 20
+                                           label = ("Number of items"),
+                                           min = 1, max = 50, step = 1, value = 20
                     ))
                   ),
                   fluidRow(
                     column(6, selectInput("LeftField",
-                      label = "Left Field",
-                      choices = c(
-                        "Authors" = "AU",
-                        "Affiliations" = "AU_UN",
-                        "Countries" = "AU_CO",
-                        "Keywords" = "DE",
-                        "Keywords Plus" = "ID",
-                        "Titles" = "TI_TM",
-                        "Abstract" = "AB_TM",
-                        "Sources" = "SO",
-                        "References" = "CR",
-                        "Cited Sources" = "CR_SO"
-                      ),
-                      selected = "CR"
+                                          label = "Left Field",
+                                          choices = c(
+                                            "Authors" = "AU",
+                                            "Affiliations" = "AU_UN",
+                                            "Countries" = "AU_CO",
+                                            "Keywords" = "DE",
+                                            "Keywords Plus" = "ID",
+                                            "Titles" = "TI_TM",
+                                            "Abstract" = "AB_TM",
+                                            "Sources" = "SO",
+                                            "References" = "CR",
+                                            "Cited Sources" = "CR_SO"
+                                          ),
+                                          selected = "CR"
                     )),
                     column(6, numericInput("LeftFieldn",
-                      label = ("Number of items"),
-                      min = 1, max = 50, step = 1, value = 20
+                                           label = ("Number of items"),
+                                           min = 1, max = 50, step = 1, value = 20
                     ))
                   ),
                   fluidRow(
                     column(6, selectInput("RightField",
-                      label = "Right Field",
-                      choices = c(
-                        "Authors" = "AU",
-                        "Affiliations" = "AU_UN",
-                        "Countries" = "AU_CO",
-                        "Keywords" = "DE",
-                        "Keywords Plus" = "ID",
-                        "Titles" = "TI_TM",
-                        "Abstract" = "AB_TM",
-                        "Sources" = "SO",
-                        "References" = "CR",
-                        "Cited Sources" = "CR_SO"
-                      ),
-                      selected = "DE"
+                                          label = "Right Field",
+                                          choices = c(
+                                            "Authors" = "AU",
+                                            "Affiliations" = "AU_UN",
+                                            "Countries" = "AU_CO",
+                                            "Keywords" = "DE",
+                                            "Keywords Plus" = "ID",
+                                            "Titles" = "TI_TM",
+                                            "Abstract" = "AB_TM",
+                                            "Sources" = "SO",
+                                            "References" = "CR",
+                                            "Cited Sources" = "CR_SO"
+                                          ),
+                                          selected = "DE"
                     )),
                     column(6, numericInput("RightFieldn",
-                      label = ("Number of items"),
-                      min = 1, max = 50, step = 1, value = 20
+                                           label = ("Number of items"),
+                                           min = 1, max = 50, step = 1, value = 20
                     ))
                   )
                 ),
@@ -968,7 +1006,24 @@ body <- dashboardBody(
           )
         ),
         fluidRow(
-          shinycssloaders::withSpinner(plotlyOutput(outputId = "ThreeFieldsPlot", height = "90vh"))
+          tabsetPanel(
+            type = "tabs",
+            tabPanel("Plot",
+                     shinycssloaders::withSpinner(plotlyOutput(outputId = "ThreeFieldsPlot", height = "90vh"))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("TFPGeminiUI"))
+                  )
+                )
+              )
+            )
+          )
         )
       )
     ),
@@ -1570,7 +1625,20 @@ body <- dashboardBody(
             tabPanel(
               "Table - Documents",
               shinycssloaders::withSpinner(DT::DTOutput("TopAuthorsProdTablePapers"))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("ApotGeminiUI"))
+                  )
+                )
+              )
             )
+            
           )
         )
       )
@@ -1933,6 +2001,18 @@ body <- dashboardBody(
             tabPanel(
               "Table",
               shinycssloaders::withSpinner(DT::DTOutput("MostRelCountriesTable"))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("MostRelCountriesGeminiUI"))
+                  )
+                )
+              )
             )
           )
         )
@@ -2305,6 +2385,18 @@ body <- dashboardBody(
             tabPanel(
               "Table",
               shinycssloaders::withSpinner(DT::DTOutput("MostLocCitDocsTable"))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("MostLocCitDocsGeminiUI"))
+                  )
+                )
+              )
             )
           )
         )
@@ -2490,7 +2582,7 @@ body <- dashboardBody(
               shinycssloaders::withSpinner(plotlyOutput(outputId = "rpysPlot", height = "75vh"))
             ),
             tabPanel(
-              "Table - RPY",
+              "Table - RPYS",
               shinycssloaders::withSpinner(DT::DTOutput(
                 outputId = "rpysTable"
               ))
@@ -2500,6 +2592,18 @@ body <- dashboardBody(
               shinycssloaders::withSpinner(DT::DTOutput(
                 outputId = "crTable"
               ))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("rpysGeminiUI"))
+                  )
+                )
+              )
             )
           )
         )
@@ -3437,6 +3541,18 @@ body <- dashboardBody(
             tabPanel(
               "Table",
               shinycssloaders::withSpinner(DT::DTOutput(outputId = "trendTopicsTable"))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("trendTopicsGeminiUI"))
+                  )
+                )
+              )
             )
           )
         )
@@ -4064,6 +4180,18 @@ body <- dashboardBody(
             tabPanel(
               "Degree Plot",
               shinycssloaders::withSpinner(plotlyOutput(outputId = "cocDegree", height = "75vh"))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("cocGeminiUI"))
+                  )
+                )
+              )
             )
           )
         )
@@ -4307,6 +4435,18 @@ body <- dashboardBody(
             tabPanel(
               "Documents",
               shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTableDocument"))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("TMGeminiUI"))
+                  )
+                )
+              )
             )
           )
         )
@@ -4670,7 +4810,19 @@ body <- dashboardBody(
                 "Documents",
                 shinycssloaders::withSpinner(DT::DTOutput(outputId = "TMTableDocument5"))
               )
-            ))
+            )),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("TEGeminiUI"))
+                  )
+                )
+              )
+            )
           )
         )
       )
@@ -4913,6 +5065,18 @@ body <- dashboardBody(
             tabPanel(
               "Articles by Cluster",
               shinycssloaders::withSpinner(DT::DTOutput(outputId = "CSTableD"))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("CSGeminiUI"))
+                  )
+                )
+              )
             )
           )
         )
@@ -5248,6 +5412,18 @@ body <- dashboardBody(
             tabPanel(
               "Degree Plot",
               shinycssloaders::withSpinner(plotlyOutput(outputId = "cocitDegree", height = 700))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("cocitGeminiUI"))
+                  )
+                )
+              )
             )
           )
         )
@@ -5351,7 +5527,7 @@ body <- dashboardBody(
                         label = "Node size",
                         min = 0,
                         max = 20,
-                        value = 4, step = 1
+                        value = 2, step = 1
                       )
                     )
                   )
@@ -5377,6 +5553,18 @@ body <- dashboardBody(
             tabPanel(
               "Table",
               shinycssloaders::withSpinner(DT::DTOutput(outputId = "histTable"))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("histGeminiUI"))
+                  )
+                )
+              )
             )
           )
         )
@@ -5711,6 +5899,18 @@ body <- dashboardBody(
             tabPanel(
               "Degree Plot",
               shinycssloaders::withSpinner(plotlyOutput(outputId = "colDegree", height = "75vh"))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("colGeminiUI"))
+                  )
+                )
+              )
             )
           )
         )
@@ -5800,6 +6000,18 @@ body <- dashboardBody(
               shinycssloaders::withSpinner(DT::DTOutput(
                 outputId = "WMTable"
               ))
+            ),
+            tabPanel(
+              title = tagList(icon("microchip"), tags$span(strong("Biblio AI"), style = "margin-left: 5px;")),
+              fluidPage(
+                fluidRow(
+                  column(
+                    12,
+                    br(),
+                    shinycssloaders::withSpinner(htmlOutput("WMGeminiUI"))
+                  )
+                )
+              )
             )
           )
         )
@@ -6027,7 +6239,33 @@ body <- dashboardBody(
         ), column(
           6
           ### To insert settings for default path, etc.
-        ))
+        )),
+        hr(),
+        h3("'Biblio AI' Api Key"),
+        h4("Set a valid API Key to use 'Biblio AI' features powered by Google Gemini."),
+        h5(HTML(
+          'If you don’t have one yet, you can generate it by logging into <a href="https://aistudio.google.com/app/apikey" target="_blank">AI Studio</a> with your Google account and creating a new API Key.'
+        )),
+        br(),
+        fluidRow(
+          column(4,
+                 passwordInput("api_key", "Enter your Gemini API Key:", "", width = "100%")
+                 )
+        ),
+        # br(),
+        uiOutput("apiStatus"),
+        br(),
+        fluidRow(
+          column(2,
+                 actionButton("set_key", "Set API Key",style = "color:white;", width = "70%")
+                 ),
+          column(2,
+                 actionButton("remove_key", "Remove API Key",style = "color:white;",width = "70%")
+                 )
+        ),
+        
+        
+        
       )
     )
   )
