@@ -3,12 +3,13 @@ gemini_ai <- function(image = NULL,
                       prompt = "Explain these images",
                       model = "2.0-flash",
                       type = "png",
-                      retry_503 = 3) {
+                      retry_503 = 3,
+                      api_key=NULL) {
   
   # Default config
   generation_config <- list(
     temperature = 1,
-    maxOutputTokens = 8192,
+    maxOutputTokens = 16384,#8192,
     topP = 0.95,
     topK = 40,
     seed = 1234
@@ -17,7 +18,7 @@ gemini_ai <- function(image = NULL,
   # Build URL
   model_query <- paste0("gemini-", model, ":generateContent")
   url <- paste0("https://generativelanguage.googleapis.com/v1beta/models/", model_query)
-  api_key <- Sys.getenv("GEMINI_API_KEY")
+  if (is.null(api_key)) api_key <- Sys.getenv("GEMINI_API_KEY")
   
   # Base structure of parts
   parts <- list(list(text = prompt))
@@ -72,7 +73,8 @@ gemini_ai <- function(image = NULL,
     resp <- tryCatch(
       req_perform(req),
       error = function(e) {
-        return(list(error = TRUE, message = paste("❌ Request failed with error:", e$message)))
+        return(list(status_code=stringr::str_extract(e$message, "(?<=HTTP )\\d+")|> as.numeric(), 
+                    error = TRUE, message = paste("❌ Request failed with error:", e$message)))
       }
     )
     
@@ -80,9 +82,9 @@ gemini_ai <- function(image = NULL,
     # if (is.list(resp) && isTRUE(resp$error)) {
     #   return(resp$message)
     # }
-    
-    # Retry on HTTP 503
-    if (resp$status_code == 503) {
+
+    # Retry on HTTP 503 or 429
+    if (resp$status_code %in% c(429,503)) {
       if (attempt < retry_503) {
         message(paste0("⚠️ HTTP 503 (Service Unavailable) - retrying in 2 seconds (attempt ", attempt, "/", retry_503, ")..."))
         Sys.sleep(2)
@@ -98,6 +100,17 @@ gemini_ai <- function(image = NULL,
       }
     }
     
+    # HTTP errors
+    # 400 api key not valid
+    if (resp$status_code == 400) {
+      msg <- tryCatch({
+        parsed <- jsonlite::fromJSON(httr2::resp_body_string(resp))
+        parsed$error$message
+      }, error = function(e) {
+        "Please check your API key. It seems to be not valid!"
+      })
+      return(paste0("❌ HTTP ", resp$status_code, ": ", msg))
+    }
     # Other HTTP errors
     if (resp$status_code != 200) {
       msg <- tryCatch({
@@ -118,15 +131,26 @@ gemini_ai <- function(image = NULL,
 }
 
 setGeminiAPI <- function(api_key) {
+  
   # 1. Controllo validità dell'API key
+  apiCheck <- gemini_ai(image = NULL,
+                     prompt = "Hello",
+                     model = "2.0-flash",
+                     type = "png",
+                     retry_503 = 3, api_key=api_key)
+  
+  contains_http_error <- grepl("HTTP\\s*[1-5][0-9]{2}", apiCheck)
+  
+  if (contains_http_error) {
+    return(list(valid=FALSE, message="❌ API key seems be not valid! Please, check it or your connection."))
+  }
+  
   if (is.null(api_key) || !is.character(api_key) || nchar(api_key) == 0) {
-    message("❌ API key must be a non-empty string.")
-    return(NA)
+    return(list(valid=FALSE, message="❌ API key must be a non-empty string."))
   }
   
   if (nchar(api_key) < 10) {
-    message("❌ API key seems too short. Please verify your key.")
-    return(NA)
+    return(list(valid=FALSE, message="❌ API key seems too short. Please verify your key."))
   }
   
   # 2. Mostra solo gli ultimi 4 caratteri per feedback
@@ -136,7 +160,7 @@ setGeminiAPI <- function(api_key) {
   # 3. Imposta la variabile d'ambiente
   Sys.setenv(GEMINI_API_KEY = api_key)
   
-  return(paste0(paste0(rep("*",nchar(api_key)-4), collapse=""),last,collapse=""))
+  return(list(valid=TRUE, message=paste0(paste0(rep("*",nchar(api_key)-4), collapse=""),last,collapse="")))
 }
 
 showGeminiAPI <- function(){
@@ -161,7 +185,7 @@ load_api_key <- function(path = path_gemini_key) {
 geminiOutput <- function(title = "", content = "", values){
   if (is.null(content)){
     content <- "Click the 'Ask Biblio AI' button to analyze the visual outputs and provide an automatic interpretation of your results based on the graphs.\n
-This AI-powered feature leverages Google Gemini to help you understand patterns and insights emerging from your contextual analysis.\n\n\n\n\n\n\n"
+This AI-powered feature leverages Google Gemini to help you understand patterns and insights emerging from your contextual analysis.\n  \n  \n \n  \n  \n  \n"
   }
   box(
     title = title,
@@ -169,8 +193,9 @@ This AI-powered feature leverages Google Gemini to help you understand patterns 
     status = "info",
     solidHeader = TRUE,
     div(
+      id = "typing-box",
       style = "white-space: pre-wrap; background-color:#f9f9f9; padding:15px; border:1px solid #ccc; border-radius:5px; max-height:400px; overflow-y: auto;",
-      HTML(content)
+      HTML(text_to_html(content))
     ),
     br(),
     em("You can modify or enrich the proposed prompt with additional context or details about your analysis to help 'Biblio AI' generate a more accurate and meaningful interpretation."),
@@ -201,6 +226,9 @@ This AI-powered feature leverages Google Gemini to help you understand patterns 
 }
 
 biblioAiPrompts <- function(values, activeTab){
+  
+  ## ROle definition for Gemini as Biblio AI assistant
+  promptInitial <- "You are Biblio AI, an AI assistant integrated within Biblioshiny. Your task is to support researchers in interpreting and critically discussing the results of their bibliometric analyses, offering insights, contextual explanations, and guidance for data-driven interpretation. "
   
   switch(activeTab,
          "mainInfo"={
@@ -283,7 +311,12 @@ biblioAiPrompts <- function(values, activeTab){
            prompt <- paste0("Interpret this historiograph, a temporal citation network built by mapping direct citation links among documents. ",
                             #" The y-axis represents publication years, and directed edges indicate citations between articles. ",
                          "Highlight the main citation paths, pivotal works, and any notable temporal trends in knowledge development, looking also to the article titles and their topics.",
+                         " Focus on the temporal evolution of each cluster",
                             "Here there is the list of each paper (node) and its title: ",titles)
+           # prompt <- paste0("This historiograph represents a temporal citation network, constructed by mapping direct citation links among documents. Please identify and describe the main clusters",
+           #                  " as research streams evolving over time. For each cluster, provide a label based on the titles of its pivotal documents. Explain the temporal trajectory of each stream,",
+           #                  " highlighting foundational or highly cited works, and discuss any thematic overlaps or transitions between clusters.",
+           #                   "Here there is the list of the first 20 most cited papers and its title: ",titles)
          },
          "collabNetwork"={
            prompt <- paste0("Provide an interpretation of this 'collaboration' network", 
@@ -301,11 +334,13 @@ biblioAiPrompts <- function(values, activeTab){
            prompt <- paste0("Provide an interpretation of this plot creted with 'bibliometrix R Package'")
          }
   )
+  prompt <- paste0(promptInitial,prompt)
   #if (!activeTab %in% c("mainInfo", "thematicMap", "trendTopic")) prompt <- paste0(prompt, " Provide also scientific references about the methodological description")
   return(prompt)
 }
 
 geminiGenerate <- function(values, activeTab, gemini_additional, gemini_model_parameters, input){
+  
   if (gemini_additional!="") {
     desc <- paste0(values$collection_description, gemini_additional, gemini_model_parameters, collapse=". ")
   } else {
@@ -317,91 +352,91 @@ geminiGenerate <- function(values, activeTab, gemini_additional, gemini_model_pa
            req(values$TABvb)
            values$MainInfoGemini <- geminiPromptImage(obj=NULL, type="text",
                                                  prompt=prompt,
-                                                 key=values$geminiAPI, desc=desc)
+                                                 key=values$geminiAPI, desc=desc, values=values)
          },
          "threeFieldPlot"={
            req(values$TFP)
            values$TFPGemini <- geminiPromptImage(obj=values$TFP, type="plotly",
                                                  prompt=prompt,
-                                                 key=values$geminiAPI, desc=desc)
+                                                 key=values$geminiAPI, desc=desc, values=values)
          },
          "authorsProdOverTime"={
            req(values$AUProdOverTime)
            values$ApotGemini <- geminiPromptImage(obj=values$AUProdOverTime$graph, type="ggplot2",
                                                   prompt=prompt,
-                                                  key=values$geminiAPI, desc=desc)
+                                                  key=values$geminiAPI, desc=desc, values=values)
          },
          "correspAuthorCountry"={
            req(values$TABCo)
            values$MostRelCountriesGemini <- geminiPromptImage(obj=values$MRCOplot, type="ggplot2",
                                                               prompt=prompt,
-                                                              key=values$geminiAPI, desc=desc)
+                                                              key=values$geminiAPI, desc=desc, values=values)
          },
          "mostLocalCitDoc"={
            req(values$TABLocDoc)
            values$MostLocCitDocsGemini <- geminiPromptImage(obj=NULL, type="text",
                                                          prompt=prompt,
-                                                         key=values$geminiAPI, desc=desc)
+                                                         key=values$geminiAPI, desc=desc, values=values)
          },
          "trendTopic"={
            req(values$trendTopics)
            values$trendTopicsGemini <- geminiPromptImage(obj=values$trendTopics$graph, type="ggplot2",
                                                  prompt=prompt,
-                                                 key=values$geminiAPI, desc=desc)
+                                                 key=values$geminiAPI, desc=desc, values=values)
          },
          "ReferenceSpect"={
            req(values$res)
            values$rpysGemini <- geminiPromptImage(obj=values$res$spectroscopy, type="ggplot2",
                                                          prompt=prompt,
-                                                         key=values$geminiAPI, desc=desc)
+                                                         key=values$geminiAPI, desc=desc, values=values)
          },
          "coOccurenceNetwork" = {
            req(values$COCnetwork)
            values$cocGemini <- geminiPromptImage(obj=values$COCnetwork$VIS, type="vis",
                                                  prompt=prompt,
-                                                 key=values$geminiAPI, desc=desc)
+                                                 key=values$geminiAPI, desc=desc, values=values)
          },
          "thematicMap"={
            req(values$TMmap)
            values$TMGemini <- geminiPromptImage(obj=values$TMmap, type="plotly",
                                                 prompt=prompt,
-                                                key=values$geminiAPI, desc=desc)
+                                                key=values$geminiAPI, desc=desc, values=values)
          },
          "thematicEvolution"={
            req(values$nexus)
            files <- TE2Gemini(values$nexus, values$TEplot)
            values$TEGemini <- geminiPromptImage(obj=files, type="multi",
                                                 prompt=prompt,
-                                                key=values$geminiAPI, desc=desc)
+                                                key=values$geminiAPI, desc=desc, values=values)
          },
          "factorialAnalysis"={
            req(values$plotCS)
            values$CSGemini <- geminiPromptImage(obj=values$plotCS, type="plotly",
                                                 prompt=prompt,
-                                                key=values$geminiAPI, desc=desc)
+                                                key=values$geminiAPI, desc=desc, values=values)
          },
          "coCitationNetwork"={
            req(values$COCITnetwork)
            values$cocitGemini <- geminiPromptImage(obj=values$COCITnetwork$VIS, type="vis",
                                                    prompt=prompt,
-                                                   key=values$geminiAPI, desc=desc)
+                                                   key=values$geminiAPI, desc=desc, values=values)
          },
          "historiograph"={
            req(values$histPlotVis$VIS)
            values$histGemini <- geminiPromptImage(obj=values$histPlotVis$VIS, type="vis",
                                                   prompt=prompt,
-                                                  key=values$geminiAPI, desc=desc)
+                                                  key=values$geminiAPI, desc=desc, values=values)
          },
          "collabNetwork"={
            req(values$COLnetwork$VIS)
            values$colGemini <- geminiPromptImage(obj=values$COLnetwork$VIS, type="vis",
                                                  prompt=prompt,
-                                                 key=values$geminiAPI, desc=desc)
+                                                 key=values$geminiAPI, desc=desc, values=values)
          },
          "collabWorldMap"={
            values$WMGemini <- geminiPromptImage(obj=values$WMmap$g, type="ggplot2",
                                                 prompt=prompt,
-                                                key=values$geminiAPI, desc=desc)
+                                                key=values$geminiAPI, desc=desc, values=values)
          }
   )
   return(values)
@@ -491,7 +526,20 @@ geminiParameterPrompt <- function(values, activeTab, input){
 }
 
 ## gemini prompt for images
-geminiPromptImage <- function(obj, type="vis", prompt="Explain the topics in this map", key, desc = NULL){
+geminiPromptImage <- function(obj, type="vis", prompt="Explain the topics in this map", key, desc = NULL, values){
+  
+  ## Check Computer configuration to work with Biblio AI
+  ### Internet Connection
+  if (!is_online()){
+    res <- '⚠️ **Note**: Biblio AI requires an active internet connection to work.'
+    return(res)
+  }
+  ### Chromium Browser
+  if (is.null(values$Chrome_url)) {
+    res <- '⚠️ **Note**: Biblio AI requires a **Chrome-based browser** (such as Google Chrome or Microsoft Edge) installed on your computer to work correctly.'
+    return(res)
+  }
+  
   if (key){
     if (!is.null(desc)) prompt <- paste0(prompt,desc,collapse=". ")
     tmpdir <- tempdir()
@@ -526,7 +574,7 @@ geminiPromptImage <- function(obj, type="vis", prompt="Explain the topics in thi
 
 geminiWaitingMessage <- function(values, activeTab){
   
-  messageTxt <- "\n\nPlease Wait\n\nThinking.....\n\n"
+  messageTxt <- "⌛ Thinking..."
   
   switch(activeTab,
          "mainInfo"={
@@ -591,6 +639,58 @@ geminiWaitingMessage <- function(values, activeTab){
          }
   )
   return(values)
+}
+
+geminiContextualOutput <- function(values, activeTab){
+
+    switch(activeTab,
+           "mainInfo"={
+             messageTxt <- values$MainInfoGemini
+           },
+           "threeFieldPlot"={
+             messageTxt <- values$TFPGemini
+           },
+           "authorsProdOverTime"={
+             messageTxt <- values$ApotGemini
+           },
+           "correspAuthorCountry"={
+             messageTxt <- values$MostRelCountriesGemini
+           },
+           "mostLocalCitDoc"={
+             messageTxt <- values$MostLocCitDocsGemini
+           },
+           "trendTopic"={
+             messageTxt <- values$trendTopicsGemini
+           },
+           "ReferenceSpect"={
+             messageTxt <- values$rpysGemini
+           },
+           "coOccurenceNetwork" = {
+             messageTxt <- values$cocGemini
+           },
+           "thematicMap"={
+             messageTxt <- values$TMGemini
+           },
+           "thematicEvolution"={
+             messageTxt <- values$TEGemini
+           },
+           "factorialAnalysis"={
+             messageTxt <- values$CSGemini
+           },
+           "coCitationNetwork"={
+             messageTxt <- values$cocitGemini
+           },
+           "historiograph"={
+             messageTxt <- values$histGemini
+           },
+           "collabNetwork"={
+             messageTxt <- values$colGemini
+           },
+           "collabWorldMap"={
+             messageTxt <- values$WMGemini
+           }
+    )
+    return(messageTxt)
 }
 
 geminiSave <- function(values, activeTab){
@@ -733,6 +833,62 @@ copy_to_clipboard <- function(x) {
   } else {
     stop("Unrecognized or unsupported operating system.")
   }
+}
+
+# convert gemini output to HTML
+text_to_html <- function(input_text) {
+  input_text <- c(input_text,"\n")
+  # Escape HTML special characters
+  escape_html <- function(text) {
+    text <- gsub("&", "&amp;", text)
+    text <- gsub("<", "&lt;", text)
+    text <- gsub(">", "&gt;", text)
+    text
+  }
+  
+  # Convert markdown-style bold (**text**) to <strong>
+  convert_bold <- function(text) {
+    gsub("\\*\\*(.*?)\\*\\*", "<strong>\\1</strong>", text)
+  }
+  
+  # Process each paragraph
+  paragraphs <- unlist(strsplit(input_text, "\n\n"))
+  html_paragraphs <- lapply(paragraphs, function(p) {
+    lines <- unlist(strsplit(p, "\n"))
+    lines <- sapply(lines, escape_html) # escape special characters
+    lines <- sapply(lines, convert_bold) # convert **bold**
+    
+    if (all(grepl("^\\*\\s+", lines))) {
+      # Convert to unordered list
+      lines <- gsub("^\\*\\s+", "", lines)
+      items <- paste0("<li>", lines, "</li>", collapse = "\n")
+      return(paste0("<ul>\n", items, "\n</ul>"))
+    } else {
+      # Regular paragraph
+      return(paste0("<p>", paste(lines, collapse = "<br/>"), "</p>"))
+    }
+  })
+  
+  # Combine all HTML parts
+  html_body <- paste(html_paragraphs, collapse = "\n\n")
+  html <- paste0("<html>\n<body>\n", html_body, "\n</body>\n</html>")
+  html <- gsub("\n","",html)
+  return(html)
+}
+
+# From HTML to text Blocks 
+html_to_blocks <- function(raw_html){
+  html_body <- sub(".*<body[^>]*>", "", raw_html)
+  html_body <- sub("</body>.*", "", html_body)
+  
+  blocks <- stringr::str_split(
+    html_body,
+    "(?=<p|<ul|<ol|<li|<h[1-6]|<blockquote|<pre|<table|<div)",
+    simplify = FALSE
+  )[[1]]
+  
+  blocks <- trimws(blocks)
+  blocks <- blocks[nzchar(blocks)]
 }
 
 # Peaks identification in RPYS

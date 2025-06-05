@@ -778,7 +778,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("MainInfoGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("MainInfoGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -937,6 +938,7 @@ body <- dashboardBody(
                                             "Countries" = "AU_CO",
                                             "Keywords" = "DE",
                                             "Keywords Plus" = "ID",
+                                            "All Keywords" = "KW_Merged",
                                             "Titles" = "TI_TM",
                                             "Abstract" = "AB_TM",
                                             "Sources" = "SO",
@@ -959,6 +961,7 @@ body <- dashboardBody(
                                             "Countries" = "AU_CO",
                                             "Keywords" = "DE",
                                             "Keywords Plus" = "ID",
+                                            "All Keywords" = "KW_Merged",
                                             "Titles" = "TI_TM",
                                             "Abstract" = "AB_TM",
                                             "Sources" = "SO",
@@ -981,13 +984,14 @@ body <- dashboardBody(
                                             "Countries" = "AU_CO",
                                             "Keywords" = "DE",
                                             "Keywords Plus" = "ID",
+                                            "All Keywords" = "KW_Merged",
                                             "Titles" = "TI_TM",
                                             "Abstract" = "AB_TM",
                                             "Sources" = "SO",
                                             "References" = "CR",
                                             "Cited Sources" = "CR_SO"
                                           ),
-                                          selected = "DE"
+                                          selected = "KW_Merged"
                     )),
                     column(6, numericInput("RightFieldn",
                                            label = ("Number of items"),
@@ -1018,7 +1022,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("TFPGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("TFPGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -1633,7 +1638,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("ApotGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("ApotGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -2009,7 +2015,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("MostRelCountriesGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("MostRelCountriesGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -2393,7 +2400,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("MostLocCitDocsGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("MostLocCitDocsGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -2600,7 +2608,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("rpysGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("rpysGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -2658,11 +2667,12 @@ body <- dashboardBody(
                   choices = c(
                     "Keywords Plus" = "ID",
                     "Author's keywords" = "DE",
+                    "All Keywords" = "KW_Merged",
                     "Titles" = "TI",
                     "Abstracts" = "AB",
                     "Subject Categories (WoS)" = "WC"
                   ),
-                  selected = "ID"
+                  selected = "KW_Merged"
                 ),
                 conditionalPanel(
                   condition = "input.MostRelWords == 'AB' |input.MostRelWords == 'TI'",
@@ -2822,11 +2832,12 @@ body <- dashboardBody(
                   choices = c(
                     "Keywords Plus" = "ID",
                     "Author's keywords" = "DE",
+                    "All Keywords" = "KW_Merged",
                     "Titles" = "TI",
                     "Abstracts" = "AB",
                     "Subject Categories (WoS)" = "WC"
                   ),
-                  selected = "ID"
+                  selected = "KW_Merged"
                 ),
                 conditionalPanel(
                   condition = "input.summaryTerms == 'AB' |input.summaryTerms == 'TI'",
@@ -3062,11 +3073,12 @@ body <- dashboardBody(
                   choices = c(
                     "Keywords Plus" = "ID",
                     "Author's keywords" = "DE",
+                    "All Keywords" = "KW_Merged",
                     "Titles" = "TI",
                     "Abstracts" = "AB",
                     "Subject Categories (WoS)" = "WC"
                   ),
-                  selected = "ID"
+                  selected = "KW_Merged"
                 ),
                 conditionalPanel(
                   condition = "input.treeTerms == 'AB' |input.treeTerms == 'TI'",
@@ -3226,10 +3238,11 @@ body <- dashboardBody(
                   choices = c(
                     "Keywords Plus" = "ID",
                     "Author's keywords" = "DE",
+                    "All Keywords" = "KW_Merged",
                     "Titles" = "TI",
                     "Abstracts" = "AB"
                   ),
-                  selected = "ID"
+                  selected = "KW_Merged"
                 ),
                 conditionalPanel(
                   condition = "input.growthTerms == 'AB' |input.growthTerms == 'TI'",
@@ -3405,10 +3418,11 @@ body <- dashboardBody(
                   choices = c(
                     "Keywords Plus" = "ID",
                     "Author's keywords" = "DE",
+                    "All Keywords" = "KW_Merged",
                     "Titles" = "TI",
                     "Abstracts" = "AB"
                   ),
-                  selected = "ID"
+                  selected = "KW_Merged"
                 ),
                 conditionalPanel(
                   condition = "input.trendTerms == 'TI' | input.trendTerms == 'AB'",
@@ -3549,7 +3563,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("trendTopicsGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("trendTopicsGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -3800,11 +3815,12 @@ body <- dashboardBody(
                   choices = c(
                     "Keywords Plus" = "ID",
                     "Author's Keywords" = "DE",
+                    "All Keywords" = "KW_Merged",
                     "Titles" = "TI",
                     "Abstracts" = "AB",
                     "Subject Categories (WoS)" = "WC"
                   ),
-                  selected = "ID"
+                  selected = "KW_Merged"
                 ),
                 conditionalPanel(
                   condition = "input.field == 'TI' | input.field == 'AB'",
@@ -4188,7 +4204,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("cocGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("cocGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -4247,10 +4264,11 @@ body <- dashboardBody(
                   choices = c(
                     "Keywords Plus" = "ID",
                     "Author's Keywords" = "DE",
+                    "All Keywords" = "KW_Merged",
                     "Titles" = "TI",
                     "Abstracts" = "AB"
                   ),
-                  selected = "ID"
+                  selected = "KW_Merged"
                 ),
                 conditionalPanel(
                   condition = "input.TMfield == 'TI' | input.TMfield == 'AB'",
@@ -4443,7 +4461,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("TMGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("TMGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -4502,11 +4521,11 @@ body <- dashboardBody(
                   choices = c(
                     "Keywords Plus" = "ID",
                     "Author's Keywords" = "DE",
+                    "All Keywords" = "KW_Merged",
                     "Titles" = "TI",
-                    "Abstracts
-                                                           " = "AB"
+                    "Abstracts" = "AB"
                   ),
-                  selected = "ID"
+                  selected = "KW_Merged"
                 ),
                 conditionalPanel(
                   condition = "input.TEfield == 'TI' | input.TEfield == 'AB'",
@@ -4818,7 +4837,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("TEGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("TEGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -4886,10 +4906,11 @@ body <- dashboardBody(
                   choices = c(
                     "Keywords Plus" = "ID",
                     "Author's Keywords" = "DE",
+                    "All Keywords" = "KW_Merged",
                     "Titles" = "TI",
                     "Abstracts" = "AB"
                   ),
-                  selected = "ID"
+                  selected = "KW_Merged"
                 ),
                 conditionalPanel(
                   condition = "input.CSfield == 'TI' | input.CSfield == 'AB'",
@@ -5073,7 +5094,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("CSGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("CSGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -5420,7 +5442,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("cocitGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("cocitGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -5561,7 +5584,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("histGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("histGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -5907,7 +5931,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("colGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("colGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )
@@ -6008,7 +6033,8 @@ body <- dashboardBody(
                   column(
                     12,
                     br(),
-                    shinycssloaders::withSpinner(htmlOutput("WMGeminiUI"))
+                    shinycssloaders::withSpinner(htmlOutput("WMGeminiUI"), caption = HTML("<br><strong>Thinking...</strong>"),
+                                                 image = "ai_small2.gif", color = "#466fc4")
                   )
                 )
               )

@@ -17,6 +17,7 @@ utils::globalVariables(c(
 #'   \tabular{lll}{
 #'   \code{ID}\tab   \tab Keywords Plus associated by ISI or SCOPUS database\cr
 #'   \code{DE}\tab   \tab Author's keywords\cr
+#'   \code{KW_Merged}\tab   \tab All keywords\cr
 #'   \code{ID_TM}\tab   \tab Keywords Plus stemmed through the Porter's stemming algorithm\cr
 #'   \code{DE_TM}\tab   \tab Author's Keywords stemmed through the Porter's stemming algorithm\cr
 #'   \code{TI}\tab   \tab Terms extracted from titles\cr
@@ -106,6 +107,14 @@ conceptualStructure <- function(M, field = "ID", ngrams = 1, method = "MCA", qua
       CW <- CW[rowSums(CW) > 0, ]
       CW <- CW[, !(colnames(CW) %in% "NA")]
     },
+    KW_Merged = {
+      CW <- cocMatrix(M, Field = "KW_Merged", type = "matrix", sep = ";", binary = binary, remove.terms = remove.terms, synonyms = synonyms)
+      # Define minimum degree (number of occurrences of each Keyword)
+      CW <- CW[, colSums(CW) >= minDegree]
+      # Delete empty rows
+      CW <- CW[rowSums(CW) > 0, ]
+      CW <- CW[, !(colnames(CW) %in% "NA")]
+    },
     ID_TM = {
       M <- termExtraction(M, Field = "ID", remove.numbers = TRUE, stemming = stemming, language = "english", remove.terms = remove.terms, synonyms = synonyms, keep.terms = NULL, verbose = FALSE)
 
@@ -149,7 +158,6 @@ conceptualStructure <- function(M, field = "ID", ngrams = 1, method = "MCA", qua
       # CW=data.frame(apply(CW,2,factor))
     }
   )
-
 
   colnames(CW) <- label <- tolower(colnames(CW))
   rownames(CW) <- tolower(rownames(CW))

@@ -12,7 +12,7 @@ server <- function(input, output,session){
   ## suppress warnings
   options(warn = -1)
   
-  if(inherits(try(pagedown::find_chrome(), silent=T), "try-error")) {
+  if (inherits(try(pagedown::find_chrome(), silent=T), "try-error")) {
     Chrome_url <- NULL
   }else{
     Chrome_url <- pagedown::find_chrome()
@@ -57,6 +57,7 @@ To ensure the functionality of Biblioshiny,
   ## initial values
   data("logo",package="bibliometrix",envir=environment())
   values = reactiveValues()
+  values$Chrome_url <- Chrome_url
   values$sidebar <- sidebarMenu()
   values$rest_sidebar <- FALSE
   values$list_file <- data.frame(sheet=NULL,file=NULL,n=NULL) 
@@ -222,7 +223,10 @@ To ensure the functionality of Biblioshiny,
     contentType = "txt"
   )
   
+
+  
   ## observe gemini generate button
+  
   observeEvent(input$gemini_btn, {
     values$gemini_additional <- input$gemini_additional ## additional info to Gemini prompt
     values <- geminiWaitingMessage(values, input$sidebarmenu)
@@ -287,6 +291,7 @@ To ensure the functionality of Biblioshiny,
       data(management, package="bibliometrixData")
       values = initial(values)
       row.names(management) <- management$SR
+      management <- management %>% mergeKeywords(force = T)
       values$M <- management
       values$Morig = management
       values$Histfield = "NA"
@@ -295,7 +300,9 @@ To ensure the functionality of Biblioshiny,
       values$missingdf <- df <- missingData(values$M)$mandatoryTags
       values$missTags <- NULL
       values$menu <- menuList(values)
-      values$collection_description <- "Dataset 'Management':\nA collection of scientific articles about the use of bibliometric approaches in business and management disciplines. Period: 1985–2020."
+      values$collection_description <- 'A collection of scientific articles about the use of bibliometric approaches in business and management disciplines. Period: 1985–2020. This collection was identified by retrieving all documents indexed under the subject categories “Management” and "Business" that contain at least one of the following terms in their topic fields: “science map”, "bibliometric*".'
+        #"Dataset 'Management':\nA collection of scientific articles about the use of bibliometric approaches in business and management disciplines. Period: 1985–2020."
+      
       showModal(missingModal(session))
       return()
     }
@@ -512,13 +519,13 @@ To ensure the functionality of Biblioshiny,
              },
              ### RData format
              rdata={
-               M <- smart_load(inFile$datapath)
+               M <- smart_load(inFile$datapath) 
              },
              rda={
-               M <- smart_load(inFile$datapath)
+               M <- smart_load(inFile$datapath) 
              },
              rds={
-               M <- readRDS(inFile$datapath)
+               M <- readRDS(inFile$datapath) 
              })
     } else if (is.null(inFile)) {return(NULL)}
     
@@ -527,7 +534,7 @@ To ensure the functionality of Biblioshiny,
     ind <- which(substr(names(M),1,2)=="X.")
     if (length(ind)>0) M <- M[,-ind]
     ##
-    
+    M <- M %>% mergeKeywords(force = F)
     values$M <- M
     values$Morig = M
     values$Histfield = "NA"
@@ -1384,9 +1391,9 @@ To ensure the functionality of Biblioshiny,
   
   # gemini button for word network
   output$MainInfoGeminiUI <- renderUI({
+    #values <- geminiWaitingMessage(values, input$sidebarmenu)
     values$gemini_model_parameters <- geminiParameterPrompt(values, input$sidebarmenu, input)
     geminiOutput(title = "", content = values$MainInfoGemini, values)
-    
   })
   
   # Annual Production ----
@@ -2079,7 +2086,7 @@ To ensure the functionality of Biblioshiny,
     geminiOutput(title = "", content = values$ApotGemini, values)
     
   })
-  
+
   output$APOTplot.save <- downloadHandler(
     filename = function() {
       paste("AuthorsProductionOverTime-", Sys.Date(), ".png", sep="")
@@ -2128,9 +2135,7 @@ To ensure the functionality of Biblioshiny,
   
   ### Lotka Law ----  
   output$lotkaPlot <- renderPlotly({
-    
     values$lotka <- lotka(values$M)
-    
     values$LLplot <- values$lotka$g
     plot.ly(values$lotka$g_shiny,flip=FALSE, side="r", aspectratio=1.4, size=0.10)
   })
@@ -2669,7 +2674,7 @@ To ensure the functionality of Biblioshiny,
     values$gemini_model_parameters <- geminiParameterPrompt(values, input$sidebarmenu, input)
     geminiOutput(title = "", content = values$MostLocCitDocsGemini, values)
   })
-  
+
   output$MLCDplot.save <- downloadHandler(
     filename = function() {
       paste("MostLocalCitedDocuments-", Sys.Date(), ".png", sep="")
@@ -2800,7 +2805,7 @@ To ensure the functionality of Biblioshiny,
     geminiOutput(title = "", content = values$rpysGemini, values)
     
   })
-  
+
   output$rpysPlot <- renderPlotly({
     RPYS()
     plot.ly(values$res$spectroscopy, side="l", aspectratio = 1.3, size=0.10)
@@ -2919,6 +2924,7 @@ To ensure the functionality of Biblioshiny,
     switch(input$MostRelWords,
            ID={lab="Keywords Plus"},
            DE={lab="Author's Keywords"},
+           KW_Merged={lab="All Keywords"},
            TI={lab="Title's Words"},
            AB={lab="Abstract's Words"},
            WC={lab="Subject Categories"})
@@ -3219,6 +3225,9 @@ To ensure the functionality of Biblioshiny,
            DE={
              KW=KeywordGrowth(values$M, Tag = "DE", sep = ";", top = input$topkw[2], cdf = cdf, remove.terms=remove.terms, synonyms = synonyms)
            },
+           KW_Merged={
+             KW=KeywordGrowth(values$M, Tag = "KW_Merged", sep = ";", top = input$topkw[2], cdf = cdf, remove.terms=remove.terms, synonyms = synonyms)
+           },
            TI={
              values$M=termExtraction(values$M,Field = "TI", verbose=FALSE, ngrams=as.numeric(input$growthTermsngrams), remove.terms=remove.terms, synonyms = synonyms)
              KW=KeywordGrowth(values$M, Tag = "TI_TM", sep = ";", top = input$topkw[2], cdf = cdf)
@@ -3408,7 +3417,6 @@ To ensure the functionality of Biblioshiny,
   output$trendTopicsGeminiUI <- renderUI({
     values$gemini_model_parameters <- geminiParameterPrompt(values, input$sidebarmenu, input)
     geminiOutput(title = "", content = values$trendTopicsGemini, values)
-    
   })
   
   output$TTplot.save <- downloadHandler(
@@ -3588,7 +3596,6 @@ To ensure the functionality of Biblioshiny,
   output$cocGeminiUI <- renderUI({
     values$gemini_model_parameters <- geminiParameterPrompt(values, input$sidebarmenu, input)
     geminiOutput(title = "", content = values$cocGemini, values)
-    
   })
   
   output$network.coc <- downloadHandler(
@@ -3693,7 +3700,6 @@ To ensure the functionality of Biblioshiny,
   output$CSGeminiUI <- renderUI({
     values$gemini_model_parameters <- geminiParameterPrompt(values, input$sidebarmenu, input)
     geminiOutput(title = "", content = values$CSGemini, values)
-    
   })
   
   output$FAplot.save <- downloadHandler(
@@ -3843,7 +3849,6 @@ To ensure the functionality of Biblioshiny,
   output$TMGeminiUI <- renderUI({
     values$gemini_model_parameters <- geminiParameterPrompt(values, input$sidebarmenu, input)
     geminiOutput(title = "", content = values$TMGemini, values)
-    
   })
   
   ### click cluster networks
@@ -4045,9 +4050,8 @@ To ensure the functionality of Biblioshiny,
   output$TEGeminiUI <- renderUI({
     values$gemini_model_parameters <- geminiParameterPrompt(values, input$sidebarmenu, input)
     geminiOutput(title = "", content = values$TEGemini, values)
-    
   })
-  
+ 
   session$onFlushed(function() {
     shinyjs::runjs("$('#TEPlot').trigger('resize');")
   })
@@ -4357,7 +4361,6 @@ To ensure the functionality of Biblioshiny,
   output$cocitGeminiUI <- renderUI({
     values$gemini_model_parameters <- geminiParameterPrompt(values, input$sidebarmenu, input)
     geminiOutput(title = "", content = values$cocitGemini, values)
-    
   })
   
   output$network.cocit <- downloadHandler(
@@ -4457,10 +4460,9 @@ To ensure the functionality of Biblioshiny,
   output$histGeminiUI <- renderUI({
     values$gemini_model_parameters <- geminiParameterPrompt(values, input$sidebarmenu, input)
     geminiOutput(title = "", content = values$histGemini, values)
-    
   })
   
-  observeEvent(input$reportHIST,{
+ observeEvent(input$reportHIST,{
     if(!is.null(values$histResults$histData)){
       sheetname <- "Historiograph"
       list_df <- list(values$histResults$histData)
@@ -4507,10 +4509,9 @@ To ensure the functionality of Biblioshiny,
   output$colGeminiUI <- renderUI({
     values$gemini_model_parameters <- geminiParameterPrompt(values, input$sidebarmenu, input)
     geminiOutput(title = "", content = values$colGemini, values)
-    
   })
-  
-  output$network.col <- downloadHandler(
+
+   output$network.col <- downloadHandler(
     filename = function() {
       paste("Collaboration_network-", Sys.Date(), ".zip", sep="")
     },
@@ -4583,9 +4584,8 @@ To ensure the functionality of Biblioshiny,
   output$WMGeminiUI <- renderUI({
     values$gemini_model_parameters <- geminiParameterPrompt(values, input$sidebarmenu, input)
     geminiOutput(title = "", content = values$WMGemini, values)
-    
   })
-  
+ 
   output$CCplot.save <- downloadHandler(
     filename = function() {
       paste("CountryCollaborationMap-", Sys.Date(), ".png", sep="")
@@ -4850,14 +4850,14 @@ To ensure the functionality of Biblioshiny,
     key <- input$api_key
     last <- setGeminiAPI(key)
     
-    if (is.na(last)){
+    if (!last$valid){
       output$apiStatus <- renderUI({
-        output$status <- renderText(paste0("❌ API key seems tto be not valid"))
+        output$status <- renderText(last$message)
       })
       values$geminiAPI <- FALSE
     } else {
       output$apiStatus <- renderUI({
-        output$status <- renderText(paste0("✅ API key has been set: ",last))
+        output$status <- renderText(paste0("✅ API key has been set: ",last$message))
       })
       values$geminiAPI <- TRUE
       home <- homeFolder()
@@ -4873,11 +4873,12 @@ To ensure the functionality of Biblioshiny,
       path_gemini_key <- paste0(home,"/.biblio_gemini_key.txt", collapse="")
       file.remove(path_gemini_key)
       values$geminiAPI <- FALSE
+      output$apiStatus <- renderUI({
+        output$status <- renderText(paste0("❌ API key has been removed"))
+      })
     }
   })
   
 }
-
-
 
 # END ####

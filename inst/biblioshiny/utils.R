@@ -478,11 +478,12 @@ notifications <- function() {
     },
     # missing the local file. The online one exists.
     AnoB = {
-      notifOnline <- notifOnline %>%
-        dplyr::slice_head(n = 5)
+      # notifOnline <- notifOnline %>%
+      #   dplyr::slice_head(n = 5)
       notifTot <- notifOnline %>%
         filter(action == TRUE) %>%
-        mutate(status = "danger")
+        mutate(status = "danger") %>% 
+        dplyr::slice_head(n = 5)
       notifOnline %>%
         filter(action == TRUE) %>%
         write.csv(file = file, quote = FALSE, row.names = FALSE)
@@ -551,6 +552,13 @@ initial <- function(values) {
   values$corpusCol <- c("Title" = "TI", "Abstract" = "AB", "Author's Keywords" = "DE")
   values$metadataCol <- c("Publication Year" = "PY", "Document Type" = "DT", "DOI" = "DI", "Open Access" = "OA", "Language" = "LA", "First Author" = "AU1")
 
+  # Chrome enviroment variable
+  if (inherits(try(pagedown::find_chrome(), silent=T), "try-error")) {
+    values$Chrome_url <- NULL
+  }else{
+    values$Chrome_url <- pagedown::find_chrome()
+  }
+  
   return(values)
 }
 
@@ -1072,6 +1080,9 @@ wordlist <- function(M, Field, n, measure, ngrams, remove.terms = NULL, synonyms
     DE = {
       v <- tableTag(M, "DE", remove.terms = remove.terms, synonyms = synonyms)
     },
+    KW_Merged = {
+      v <- tableTag(M, "KW_Merged", remove.terms = remove.terms, synonyms = synonyms)
+    },
     TI = {
       if (!("TI_TM" %in% names(M))) {
         v <- tableTag(M, "TI", ngrams = ngrams, remove.terms = remove.terms, synonyms = synonyms)
@@ -1385,6 +1396,10 @@ cocNetwork <- function(input, values) {
           values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "author_keywords", n = n, sep = ";", remove.terms = remove.terms, synonyms = synonyms)
           values$Title <- "Authors' Keywords network"
         },
+        KW_Merged ={
+          values$NetWords <- biblioNetwork(values$M, analysis = "co-occurrences", network = "all_keywords", n = n, sep = ";", remove.terms = remove.terms, synonyms = synonyms)
+          values$Title <- "All Keywords network"
+        },
         TI = {
           # if(!("TI_TM" %in% names(values$M))){
           values$M <- termExtraction(values$M, Field = "TI", verbose = FALSE, ngrams = as.numeric(input$cocngrams), remove.terms = remove.terms, synonyms = synonyms)
@@ -1425,8 +1440,7 @@ cocNetwork <- function(input, values) {
     } else {
       curved <- FALSE
     }
-
-    # par(bg="grey92", mar=c(0,0,0,0))
+    
     values$cocnet <- networkPlot(values$NetWords,
       normalize = normalize, Title = values$Title, type = input$layout,
       size.cex = TRUE, size = 5, remove.multiple = F, edgesize = input$edgesize * 3, labelsize = input$labelsize, label.cex = label.cex,
