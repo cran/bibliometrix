@@ -1,5 +1,123 @@
 ### COMMON FUNCTIONS ####
 
+# Number format abbreviated
+format_abbreviated <- function(x) {
+  if (is.na(x)) return(NA)
+  if (x >= 1e6) {
+    return(paste0(format(round(x / 1e6, 2), nsmall = 2), "M"))
+  } else if (x >= 1e3) {
+    return(paste0(format(round(x / 1e3, 0), nsmall = 0), "K"))
+  } else {
+    return(as.character(x))
+  }
+}
+
+# total package download
+total_downloads <- function(pkg_name="bibliometrix", from="2016-01-01", to=Sys.Date()) {
+  # Function to get total downloads of a package from CRAN logs
+  # Args:
+  #   pkg_name: Name of the package as a string
+  # Returns:
+  #   Total number of downloads as an integer
+  
+  if (!is_online()){
+    return("--")
+  }
+  
+  #today <- Sys.Date()
+  if (!is.character(pkg_name) || length(pkg_name) != 1) {
+    stop("pkg_name must be a single string.")
+  }
+  
+  url <- paste0("https://cranlogs.r-pkg.org/downloads/total/",from,":",to,"/", pkg_name)
+  
+  json_text <- tryCatch({
+    readLines(url, warn = FALSE)
+  }, error = function(e) {
+    stop("Error fetching data from CRAN logs: ", e$message)
+  })
+  
+  # Extract the number manually (not robust)
+  txt <- unlist(strsplit(json_text, ","))
+  txt <- txt[grepl("downloads", txt)]
+  
+  if (length(txt) == 0) {
+    return(0)
+  }
+  
+  downloads <- gsub("[^0-9]", "", txt)
+  
+  return(as.integer(downloads))
+}
+
+# FILTER FUNCTIONS ----
+read_journal_list <- function(file_path) {
+  ext <- tools::file_ext(file_path)
+  
+  suppressMessages(journals <- switch(tolower(ext),
+                     "csv" = read.csv(file_path, header = FALSE, stringsAsFactors = FALSE)[[1]],
+                     "txt" = readLines(file_path, warn = FALSE),
+                     "xlsx" = {
+                       readxl::read_excel(file_path, col_names = FALSE)[[1]]
+                     },
+                     stop("Unsupported file format. Please upload a .csv, .txt, or .xlsx file.")
+  ))
+  
+  journals <- journals[!is.na(journals)]
+  journals <- toupper(trimws(journals))
+  return(journals)
+}
+
+wcTable <- function(M){
+  # Function to extract Science Category (WC) information from metadata
+  if ("WC" %in% names(M)){
+    WC <- strsplit(M$WC, ";")
+    df <- data.frame(SR = rep(M$SR, lengths(WC)), 
+                     WC = unlist(WC), 
+                     stringsAsFactors = FALSE)
+    
+    df$WC <- trimws(df$WC)  # Remove leading and trailing whitespace
+  } else {
+    df <- data.frame(SR = M$SR, WC = "N.A.", stringsAsFactors = FALSE)
+  }
+  
+  return(df)
+}
+
+countryTable <- function(M){
+  data("countries", envir = environment()) 
+  # Function to extract country information from metadata
+  if (!("AU_CO" %in% names(M))) { 
+    M <- metaTagExtraction(M, "AU_CO")
+  }
+  
+  CO <- strsplit(M$AU_CO, ";")
+  df <- data.frame(SR=rep(M$SR,lengths(CO)), 
+                   CO=trimws(unlist(CO)), 
+                   stringsAsFactors = FALSE)
+  
+  df$CO <- gsub("[[:digit:]]", "", df$CO)
+  df$CO <- gsub(".", "", df$CO, fixed=TRUE)
+  df$CO <- gsub(";;", ";", df$CO, fixed = TRUE)
+  df$CO <- gsub("UNITED STATES", "USA", df$CO)
+  df$CO <- gsub("RUSSIAN FEDERATION", "RUSSIA", df$CO)
+  df$CO <- gsub("TAIWAN", "CHINA", df$CO)
+  df$CO <- gsub("ENGLAND", "UNITED KINGDOM", df$CO)
+  df$CO <- gsub("SCOTLAND", "UNITED KINGDOM", df$CO)
+  df$CO <- gsub("WALES", "UNITED KINGDOM", df$CO)
+  df$CO <- gsub("NORTH IRELAND", "UNITED KINGDOM", df$CO)
+  df$CO <- gsub("UK","UNITED KINGDOM", df$CO)
+  #df$CO <- gsub("KOREA", "SOUTH KOREA", df$CO)
+  
+  
+  
+  df <- df %>% left_join(countries %>% select(countries, continent), by = c("CO" = "countries")) %>%
+    mutate(CO = ifelse(is.na(CO), "Unknown", CO)) %>% 
+    mutate(continent = ifelse(is.na(continent), "Unknown", continent)) %>%
+    mutate(CO = ifelse(CO == "UNKNOWN", "Unknown", CO))
+  
+}
+
 # LOAD FUNCTIONS -----
 formatDB <- function(obj) {
   ext <- sub(".*\\.", "", obj[1])
@@ -77,6 +195,20 @@ merge_files <- function(files) {
   attr(M, "nMerge") <- n
 
   return(M)
+}
+
+## dynamic watch emoji icons ---
+watchEmoji <- function(i){
+  emoji <- c("🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛")
+  # i is a positive int number, reduce it to an int from 1 to 12 
+  multiple <- floor(i/12)
+  if(multiple>0){
+    i <- i %% (12*multiple)
+    if (i == 0){
+      i <- 12
+    }
+  }
+  emoji[i]
 }
 
 
@@ -422,26 +554,45 @@ reduceRefs <- function(A) {
   return(A)
 }
 
+check_online <- function(host = "8.8.8.8", min_success = 1) {
+  # Use ping command to test connectivity (works on Windows, Linux, Mac)
+  ping_cmd <- if (.Platform$OS.type == "windows") {
+    sprintf("ping -n %d %s", min_success, host)
+  } else {
+    sprintf("ping -c %d %s", min_success, host)
+  }
+  
+  result <- suppressWarnings(system(ping_cmd, intern = TRUE, ignore.stderr = TRUE))
+  
+  success <- any(grepl("time=", result, ignore.case = TRUE))
+  
+  if (success) {
+    # message("✅ Host is reachable.")
+    # Extract average latency (optional)
+    latency_line <- result[grepl("time=", result)]
+    times <- as.numeric(sub(".*time=([0-9.]+).*", "\\1", latency_line))
+    avg_time <- mean(times, na.rm = TRUE)
+    # message(sprintf("📶 Average latency: %.1f ms", avg_time))
+    if (avg_time<200){
+      return(TRUE)
+    } else {return(FALSE)}
+    #return(TRUE)
+  } else {
+    #message(FALSE)
+    return(FALSE)
+  }
+}
+
 notifications <- function() {
   ## check connection and download notifications
-  online <- is_online()
+  #online <- is_online()
+  online <- check_online(host = "www.bibliometrix.org", min_success = 1)
   location <- "https://www.bibliometrix.org/bs_notifications/biblioshiny_notifications.csv"
   notifOnline <- NULL
-  if (isTRUE(is_online())) {
-    ## add check to avoid blocked app when internet connection is to slow
-    envir <- environment()
-    # setTimeLimit(cpu = 1, elapsed = 1, transient = TRUE)
-    # on.exit({
-    #   setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
-    # })
-    tryCatch(
-      {
-        eval(expr = suppressWarnings(notifOnline <- read.csv(location, header = TRUE, sep = ",")), envir = envir)
-      },
-      error = function(ex) {
-        notifOnLine <- NULL
-      }
-    )
+  if (isTRUE(online)) {
+    notifOnline <- read.csv(location, header = TRUE, sep = ",")
+    # ## add check to avoid blocked app when internet connection is to slow
+
     if (is.null(notifOnline)) {
       online <- FALSE
     } else {
@@ -456,8 +607,6 @@ notifications <- function() {
   fileTrue <- file.exists(file)
   if (isTRUE(fileTrue)) {
     suppressWarnings(notifLocal <- read.csv(file, header = TRUE, sep = ","))
-    # notifLocal <- readLines(file)
-    # linksLocal[nchar(linksLocal)<6] <- NA
   }
 
 
@@ -509,27 +658,12 @@ notifications <- function() {
     }
   )
 
-  # notifTot <- notifTot[1:(min(5,nrow(notifTot))),]
   return(notifTot)
 }
 
 is_online <- function(timeout = 3) {
   RCurl::url.exists("www.bibliometrix.org", timeout = timeout)
 }
-
-# is_online <- function(){
-#   ## add check to avoid blocked app when internet connection is to slow
-#   envir <- environment()
-#   setTimeLimit(cpu = 1, elapsed = 1, transient = TRUE)
-#   on.exit({
-#     setTimeLimit(cpu = Inf, elapsed = Inf, transient = FALSE)
-#   })
-#   tryCatch({
-#     eval(expr=suppressWarnings(resp <- curl::has_internet()), envir = envir)
-#   }, error = function(ex) {resp <- FALSE}
-#   )
-#   return(resp)
-# }
 
 initial <- function(values) {
   values$results <- list("NA")
@@ -1357,6 +1491,32 @@ degreePlot <- function(net) {
   return(p)
 }
 
+# Associate a Year to each Keyword 
+keywords2Years <- function(M, field = "DE", n=100){
+  suppressMessages(Y <- KeywordGrowth(M, Tag = field, top=Inf, cdf=FALSE))
+  
+  ## Normalize data and exclude tot from normalization
+  df <- Y %>% rowwise() %>% 
+    mutate(year_freq=sum(c_across(!matches("Year")))) %>% 
+    mutate(across(!matches("Year"), ~ .x / year_freq)) %>% 
+    mutate(across(!matches("Year"), ~ replace_na(.x, 0)))
+  
+  df_long <- df %>%
+    pivot_longer(
+      cols = -c(Year, year_freq),
+      names_to = "Keyword",
+      values_to = "Probability"
+    )
+  
+  df_max_year <- df_long %>%
+    group_by(Keyword) %>%
+    filter(Probability == max(Probability)) %>%
+    slice_max(order_by = year_freq, n = 1, with_ties = FALSE) %>%
+    ungroup()
+    
+    return(df_max_year)
+}
+
 cocNetwork <- function(input, values) {
   n <- input$Nodes
   label.n <- input$Labels
@@ -1448,18 +1608,20 @@ cocNetwork <- function(input, values) {
       cluster = input$cocCluster, remove.isolates = (input$coc.isolates == "yes"),
       community.repulsion = input$coc.repulsion / 2, verbose = FALSE
     )
+    
+    g <- values$cocnet$graph
+    Y <- keywords2Years(values$M, field= input$field, n = Inf)
+    label <- data.frame(Keyword = igraph::V(g)$name)
+    df <- label %>%
+      left_join(Y %>% mutate(Keyword = tolower(Keyword)), by = "Keyword") %>% 
+      rename(year_med = Year)
+    igraph::V(g)$year_med <- df$year_med
+    
     if (input$cocyears == "Yes") {
-      Y <- fieldByYear(values$M, field = input$field, graph = FALSE)
-      g <- values$cocnet$graph
-      label <- igraph::V(g)$name
-      ind <- which(tolower(Y$df$item) %in% label)
-      df <- Y$df[ind, ]
-
       col <- hcl.colors((diff(range(df$year_med)) + 1) * 10, palette = "Blues 3")
       igraph::V(g)$color <- col[(max(df$year_med) - df$year_med + 1) * 10]
-      igraph::V(g)$year_med <- df$year_med
-      values$cocnet$graph <- g
     }
+    values$cocnet$graph <- g
   } else {
     emptyPlot("Selected field is not included in your data collection")
   }
@@ -1526,6 +1688,25 @@ intellectualStructure <- function(input, values) {
   return(values)
 }
 
+authors2Years <- function(M, field="AU") {
+  WAU <- cocMatrix(M,field)
+  WPY <- cocMatrix(M,"PY")
+  B <- crossprod(WPY,WAU) %>% 
+    as.matrix() %>% 
+    as.data.frame() %>% 
+    tibble::rownames_to_column("Year")
+  
+  # create a data frame that startig from B associate at each author the year of the first non zero value
+  C <- B %>% 
+    pivot_longer(-Year, names_to = "Item", values_to = "Value") %>% 
+    filter(Value > 0) %>% 
+    group_by(Item) %>% 
+    summarise(FirstYear = min(Year)) %>% 
+    ungroup()
+  
+  return(C)
+}
+
 socialStructure <- function(input, values) {
   n <- input$colNodes
   label.n <- input$colLabels
@@ -1539,6 +1720,7 @@ socialStructure <- function(input, values) {
       COL_AU = {
         values$ColNetRefs <- biblioNetwork(values$M, analysis = "collaboration", network = "authors", n = n, sep = ";")
         values$Title <- "Author Collaboration network"
+        values$fieldCOL <- "AU"
       },
       COL_UN = {
         if (!("AU_UN" %in% names(values$M))) {
@@ -1546,6 +1728,7 @@ socialStructure <- function(input, values) {
         }
         values$ColNetRefs <- biblioNetwork(values$M, analysis = "collaboration", network = "universities", n = n, sep = ";")
         values$Title <- "Edu Collaboration network"
+        values$fieldCOL  <- "AU_UN"
       },
       COL_CO = {
         if (!("AU_CO" %in% names(values$M))) {
@@ -1553,6 +1736,7 @@ socialStructure <- function(input, values) {
         }
         values$ColNetRefs <- biblioNetwork(values$M, analysis = "collaboration", network = "countries", n = n, sep = ";")
         values$Title <- "Country Collaboration network"
+        values$fieldCOL  <- "AU_CO"
         # values$cluster="none"
       }
     )
@@ -1590,6 +1774,16 @@ socialStructure <- function(input, values) {
     remove.isolates = (input$col.isolates == "yes"), cluster = input$colCluster,
     community.repulsion = input$col.repulsion / 2, verbose = FALSE
   )
+  
+  g <- values$colnet$graph
+  Y <- authors2Years(values$M, values$fieldCOL)
+  label <- data.frame(Item = igraph::V(g)$name)
+  df <- label %>%
+    left_join(Y %>% mutate(Item = tolower(Item)), by = "Item") %>% 
+    rename(year_med = FirstYear)
+  igraph::V(g)$year_med <- df$year_med
+  
+  values$colnet$graph <- g
 
   return(values)
 }
@@ -1612,7 +1806,7 @@ countrycollaboration <- function(M, label, edgesize, min.edges, values) {
   breaks <- as.numeric(cut(CO$Freq, breaks = 10))
   names(breaks) <- breaks
   # breaks=breaks
-  data("countries", envir = environment())
+  data("countries", envir = environment()) 
   names(countries)[1] <- "Tab"
 
   COedges <- dplyr::inner_join(COedges, countries, by = c("V1" = "Tab"))

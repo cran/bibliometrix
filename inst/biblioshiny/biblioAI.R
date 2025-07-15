@@ -3,17 +3,48 @@ gemini_ai <- function(image = NULL,
                       prompt = "Explain these images",
                       model = "2.0-flash",
                       type = "png",
-                      retry_503 = 3,
-                      api_key=NULL) {
+                      retry_503 = 5,
+                      api_key=NULL,
+                      outputSize = "medium"){
   
-  # Default config
-  generation_config <- list(
-    temperature = 1,
-    maxOutputTokens = 16384,#8192,
-    topP = 0.95,
-    topK = 40,
-    seed = 1234
+  switch(outputSize,
+         "small" = {
+           generation_config <- list(
+             temperature = 1,
+             maxOutputTokens = 8192,
+             topP = 0.95,
+             topK = 40,
+             seed = 1234
+           )
+         },
+         "medium" = {
+           generation_config <- list(
+             temperature = 1,
+             maxOutputTokens = 16384, #8192,
+             topP = 0.95,
+             topK = 40,
+             seed = 1234
+           )
+         },
+         "large" = {
+           generation_config <- list(
+             temperature = 1,
+             maxOutputTokens = 32768, #8192,
+             topP = 0.95,
+             topK = 40,
+             seed = 1234
+           )
+         }
   )
+  
+  # # Default config
+  # generation_config <- list(
+  #   temperature = 1,
+  #   maxOutputTokens = 16384,#8192,
+  #   topP = 0.95,
+  #   topK = 40,
+  #   seed = 1234
+  # )
   
   # Build URL
   model_query <- paste0("gemini-", model, ":generateContent")
@@ -94,7 +125,7 @@ gemini_ai <- function(image = NULL,
           paste0(
             "❌ HTTP 503: Service Unavailable.\n",
             "The Google Gemini servers are currently overloaded or under maintenance.\n",
-            "All retry attempts failed (", retry_503, "). Please try again later."
+            "All retry attempts failed (", retry_503, "). Please try again in a few minutes. Alternatively, consider using a different AI model with lower latency."
           )
         )
       }
@@ -137,7 +168,7 @@ setGeminiAPI <- function(api_key) {
                      prompt = "Hello",
                      model = "2.0-flash",
                      type = "png",
-                     retry_503 = 3, api_key=api_key)
+                     retry_503 = 5, api_key=api_key)
   
   contains_http_error <- grepl("HTTP\\s*[1-5][0-9]{2}", apiCheck)
   
@@ -180,6 +211,26 @@ load_api_key <- function(path = path_gemini_key) {
     }
   }
   return(FALSE)
+}
+
+loadGeminiModel = function(file){
+  # load info about model type and output size
+  if (file.exists(file)){
+    model <- readLines(file, warn = FALSE)
+  } else {
+    model <- c("2.0-flash","medium")
+  }
+  if (length(model== 1)) {
+    model <- c(model,"medium")
+  }
+  return(model)
+}
+
+saveGeminiModel = function(model, file){
+  if (file.exists(file)) {
+    file.remove(file)
+  }
+  writeLines(model, file)
 }
 
 geminiOutput <- function(title = "", content = "", values){
@@ -276,13 +327,21 @@ biblioAiPrompts <- function(values, activeTab){
            "point marks the median value. The size of the bubbles is proportional to the annual frequency, reflecting the relative prominence of each term over time. ")
          },
          "ReferenceSpect"={
-           references <- merge_df_to_string(rpysPeaks(values$res, n=10))
-           prompt <- paste0("Provide an interpretation of this Reference Publication Year Spectroscopy (RPYS) plot.", 
+           references <- merge_df_to_string(values$res$peaks)
+           sequenceTop5 <- values$res$Sequences %>% 
+             filter(Class !="") %>% 
+             group_by(Class) %>% 
+             slice_max(Freq,n=5) %>% 
+             rename("Totale Citation" = "Freq")
+           prompt <- paste0("Provide an interpretation of this Reference Publication Year Spectroscopy plot (RPYS, Marx et al. 2014, JAIST).", 
                          " The black line shows the number of cited references by publication year. ",
-                         "The red line represents the deviation from the 5-year median citation frequency, calculated using a non-centered window composed of the five preceding years.",
+                         "The red line represents the deviation from the 5-year median citation frequency.",
                          " This highlights peak years of historical significance. A list of the most cited references is provided for the first ten peak years identified by the red line,",
                          " along with their citation frequencies: ",
-                         references)
+                         references,
+                         "\nIn addition, please highlight which references are the most important according to the following categories: Hot Paper, Life Cycle, Sleeping Beauty,","
+                         and Constant Performer (Thor A. et al. 2018, Identifying single influential publications in a research field: new analysis opportunities of the CRExplorer. Scientometrics).",
+                         " Below is the list of references with their assigned category.", sequenceTop5)
          },
          "coOccurenceNetwork" = {
            prompt <- paste0("Provide an interpretation of this 'word co-occurrence' network.",
@@ -564,7 +623,9 @@ geminiPromptImage <- function(obj, type="vis", prompt="Explain the topics in thi
            })
     
     res <- gemini_ai(image = file_path,
-                     prompt = prompt)
+                     prompt = prompt,
+                     model =  values$gemini_api_model,
+                     outputSize = values$gemini_output_size)
   } else {
     res <- 'To access this feature, please provide a valid Gemini AI API key. You can obtain your API key by visiting the official <a href="https://aistudio.google.com/" target="_blank">Google AI Studio website</a>.'
   }
@@ -639,58 +700,6 @@ geminiWaitingMessage <- function(values, activeTab){
          }
   )
   return(values)
-}
-
-geminiContextualOutput <- function(values, activeTab){
-
-    switch(activeTab,
-           "mainInfo"={
-             messageTxt <- values$MainInfoGemini
-           },
-           "threeFieldPlot"={
-             messageTxt <- values$TFPGemini
-           },
-           "authorsProdOverTime"={
-             messageTxt <- values$ApotGemini
-           },
-           "correspAuthorCountry"={
-             messageTxt <- values$MostRelCountriesGemini
-           },
-           "mostLocalCitDoc"={
-             messageTxt <- values$MostLocCitDocsGemini
-           },
-           "trendTopic"={
-             messageTxt <- values$trendTopicsGemini
-           },
-           "ReferenceSpect"={
-             messageTxt <- values$rpysGemini
-           },
-           "coOccurenceNetwork" = {
-             messageTxt <- values$cocGemini
-           },
-           "thematicMap"={
-             messageTxt <- values$TMGemini
-           },
-           "thematicEvolution"={
-             messageTxt <- values$TEGemini
-           },
-           "factorialAnalysis"={
-             messageTxt <- values$CSGemini
-           },
-           "coCitationNetwork"={
-             messageTxt <- values$cocitGemini
-           },
-           "historiograph"={
-             messageTxt <- values$histGemini
-           },
-           "collabNetwork"={
-             messageTxt <- values$colGemini
-           },
-           "collabWorldMap"={
-             messageTxt <- values$WMGemini
-           }
-    )
-    return(messageTxt)
 }
 
 geminiSave <- function(values, activeTab){
@@ -892,23 +901,23 @@ html_to_blocks <- function(raw_html){
 }
 
 # Peaks identification in RPYS
-rpysPeaks <- function(res, n=10){
-  df_peaks <- res$rpysTable %>%
-    arrange(Year) %>%
-    mutate(
-      is_peak = (diffMedian5 > lag(diffMedian5)) & (diffMedian5 > lead(diffMedian5))
-    ) %>%
-    filter(is_peak) %>%
-    arrange(desc(diffMedian5)) %>%
-    slice_head(n = n)  
-  
-  df2 <- res$CR %>% 
-    group_by(Year) %>% 
-    slice_max(Freq, n=3) %>% 
-    filter(Year %in% df_peaks$Year)
-  
-  return(peaks=df2)
-}
+# rpysPeaks <- function(res, n=10){
+#   df_peaks <- res$rpysTable %>%
+#     arrange(Year) %>%
+#     mutate(
+#       is_peak = (diffMedian5 > lag(diffMedian5)) & (diffMedian5 > lead(diffMedian5))
+#     ) %>%
+#     filter(is_peak) %>%
+#     arrange(desc(diffMedian5)) %>%
+#     slice_head(n = n)  
+#   
+#   df2 <- res$CR %>% 
+#     group_by(Year) %>% 
+#     slice_max(Freq, n=3) %>% 
+#     filter(Year %in% df_peaks$Year)
+#   
+#   return(peaks=df2)
+# }
 
 # Thematic Map top 3 documents for each cluster
 doc2clust <- function(res, n=3){
@@ -951,4 +960,23 @@ hist2docs <- function(df, n=20){
   df %>% 
     slice_max(order_by = LCS, n=n) %>% 
     select(short_label,title_orig)
+}
+
+# Top 10 peaks in RPYS
+rpysPeaks <- function(res, n=10){
+  df_peaks <- res$rpysTable %>%
+    arrange(Year) %>%
+    mutate(
+      is_peak = (diffMedian > lag(diffMedian)) & (diffMedian > lead(diffMedian))
+    ) %>%
+    dplyr::filter(is_peak) %>%
+    arrange(desc(diffMedian)) %>%
+    slice_head(n = n)  
+  
+  df2 <- res$CR %>% 
+    group_by(Year) %>% 
+    slice_max(Freq, n=3, with_ties = FALSE) %>% 
+    dplyr::filter(Year %in% df_peaks$Year)
+  
+  return(peaks=df2)
 }

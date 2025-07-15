@@ -3,7 +3,10 @@ source("libraries.R", local=TRUE)
 source("biblioShot.R", local=TRUE)
 source("biblioAI.R", local=TRUE)
 
-suppressMessages(libraries())
+suppressMessages(res <- libraries())
+if (!res) {
+  stop("Biblioshiny cannot be loaded, some packages are missing. Please check your internet connection and try again.")
+}
 
 #### SERVER ####
 server <- function(input, output,session){
@@ -109,7 +112,15 @@ To ensure the functionality of Biblioshiny,
   values$ApiOk <- 0
   values$checkControlBar <-FALSE
   
-  ## gemini api
+  ## Diachronic networks
+  values$index_coc <- 0
+  values$playing_coc <- TRUE
+  values$paused_coc <- FALSE
+  values$index_col <- 0
+  values$playing_col <- TRUE
+  values$paused_col <- FALSE
+  
+  ## gemini api and model
   home <- homeFolder()
   path_gemini_key <- paste0(home,"/.biblio_gemini_key.txt", collapse="")
   # check if sub directory exists
@@ -117,8 +128,12 @@ To ensure the functionality of Biblioshiny,
   values$collection_description <- NULL
   values$gemini_additional <- NULL
   
-  ## NOTIFICATION ITEM ----
+  path_gemini_model <- paste0(home,"/.biblio_gemini_model.txt", collapse="")
+  gemini_api_model <- loadGeminiModel(path_gemini_model)
+  values$gemini_api_model <- gemini_api_model[1]
+  values$gemini_output_size <- gemini_api_model[2]
   
+  ## NOTIFICATION ITEM ----
   output$notificationMenu <- renderMenu({
     notifTot <- notifications()
     values$nots <- apply(notifTot, 1, function(row) {
@@ -229,6 +244,7 @@ To ensure the functionality of Biblioshiny,
   
   observeEvent(input$gemini_btn, {
     values$gemini_additional <- input$gemini_additional ## additional info to Gemini prompt
+    #values$gemini_api_model <- input$gemini_api_model
     values <- geminiWaitingMessage(values, input$sidebarmenu)
     values <- geminiGenerate(values, input$sidebarmenu, values$gemini_additional,values$gemini_model_parameters, input)
   })
@@ -294,6 +310,8 @@ To ensure the functionality of Biblioshiny,
       management <- management %>% mergeKeywords(force = T)
       values$M <- management
       values$Morig = management
+      values$SCdf <- wcTable(management)
+      values$COdf <- countryTable(management)
       values$Histfield = "NA"
       values$results = list("NA")
       values$rest_sidebar <- TRUE
@@ -537,6 +555,8 @@ To ensure the functionality of Biblioshiny,
     M <- M %>% mergeKeywords(force = F)
     values$M <- M
     values$Morig = M
+    values$SCdf <- wcTable(M)
+    values$COdf <- countryTable(M)
     values$Histfield = "NA"
     values$results = list("NA")
     if (ncol(values$M)>1){values$rest_sidebar <- TRUE}
@@ -583,6 +603,8 @@ To ensure the functionality of Biblioshiny,
     
     values$M <- M
     values$Morig = M
+    values$SCdf <- wcTable(M)
+    values$COdf <- countryTable(M)
     values$nMerge <- attr(M,"nMerge")
     values$Histfield = "NA"
     values$results = list("NA")
@@ -787,7 +809,6 @@ To ensure the functionality of Biblioshiny,
             tags$h4("Data in the column CR could be truncated.",
                     style = "color: firebrick;")
           ),
-          #text = "Some documents have too long a list of references that cannot be saved in excel (>32767 characters).\nData in the column CR could be truncated",
           title = "Please save the collection using the 'RData' format",
           type = "warning",
           width =  "50%", ##NEW ----
@@ -1113,6 +1134,8 @@ To ensure the functionality of Biblioshiny,
                values$ApiOk <- 1
                values$M <- M
                values$Morig = M
+               values$SCdf <- wcTable(M)
+               values$COdf <- countryTable(M)
                if (ncol(values$M)>1){values$rest_sidebar <- TRUE}
                if (ncol(values$M)>1){showModal(missingModal(session))}
                values$Histfield = "NA"
@@ -1164,73 +1187,233 @@ To ensure the functionality of Biblioshiny,
              columnShort=NULL, columnSmall=NULL, round=2, title="", button=FALSE, escape=FALSE, selection=FALSE,scrollX=TRUE)
   }
   
-  output$textDim <-  renderUI({
-    str1=paste("Documents    ",dim(values$M)[1]," of ",dim(values$Morig)[1])
-    str2=paste("Sources      ",length(unique(values$M$SO))," of ", length(unique(values$Morig$SO)))
-    str3=paste("Authors      ",length(unique(unlist(strsplit(values$M$AU,";"))))," of ", length(unique(unlist(strsplit(values$Morig$AU,";")))))
-    HTML(paste("<pre class='tab'>",str1, str2, str3, sep = '<br/>'))
+  # FILTERS MENU ----
+  
+  #### Box about Filter Results ----
+  output$textDim <- renderUI({
+    n_doc_current <- dim(values$M)[1]
+    n_doc_total <- dim(values$Morig)[1]
+    
+    n_sources_current <- length(unique(values$M$SO))
+    n_sources_total <- length(unique(values$Morig$SO))
+    
+    n_authors_current <- length(unique(unlist(strsplit(values$M$AU, ";"))))
+    n_authors_total <- length(unique(unlist(strsplit(values$Morig$AU, ";"))))
+    
+    HTML(paste0(
+      "<div class='fade-in' style='
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 15px 20px;
+      background-color: #ffffff;
+      font-family: monospace;
+      font-size: 15px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+      margin-top: 15px;
+    '>",
+      
+      "<div style='display: flex; justify-content: space-between;'>",
+      "<div style='flex: 1; font-weight: bold;'>Documents</div>",
+      "<div style='flex: 1; text-align: right;'>", n_doc_current, " of ", n_doc_total, "</div>",
+      "</div>",
+      
+      "<div style='display: flex; justify-content: space-between; margin-top: 5px;'>",
+      "<div style='flex: 1; font-weight: bold;'>Sources</div>",
+      "<div style='flex: 1; text-align: right;'>", n_sources_current, " of ", n_sources_total, "</div>",
+      "</div>",
+      
+      "<div style='display: flex; justify-content: space-between; margin-top: 5px;'>",
+      "<div style='flex: 1; font-weight: bold;'>Authors</div>",
+      "<div style='flex: 1; text-align: right;'>", n_authors_current, " of ", n_authors_total, "</div>",
+      "</div>",
+      
+      "</div>"
+    ))
   })
   
-  output$selectType <- renderUI({
+  #### Journal List Message ----
+  output$journal_list_ui <- renderUI({
+    req(input$journal_list_upload)
+    div(id = "journal_list_helptext", 
+        helpText("Journal list loaded. Now it will be used to filter the results.", style = "color:#dc3545"),
+        div(align = "center",
+        actionBttn(
+          inputId = "viewJournals", label = strong("View List"),
+          width = "50%", style = "pill", color = "primary", size="s",
+          icon = icon(name = "eye", lib = "font-awesome")
+        )),
+        br()
+        )
+  })
+  
+  observeEvent(input$viewJournals,{
+    journal_list_html <- paste0("<ul style='padding-left: 20px;'>",
+                                paste0("<li>", stringi::stri_trans_totitle(values$journal_list), "</li>", collapse = ""),
+                                "</ul>")
+
+    content_html <- paste0(
+      "<div style='max-height: 300px; overflow-y: auto; text-align: left;'>",
+      journal_list_html,
+      "</div>"
+    )
+    
+    
+    shinyWidgets::show_alert(
+      title = "Journal List Loaded",
+      text = HTML(content_html),
+      type = "info",
+      html = TRUE,
+      btn_labels = "OK"
+    )
+  })
+  
+  observeEvent(input$journal_list_upload, {
+    req(input$journal_list_upload)
+    
+    journals<- read_journal_list(input$journal_list_upload$datapath)
+    values$journal_list <- journals
+    journal_list_html <- paste0("<ul style='padding-left: 20px;'>",
+                                paste0("<li>", stringi::stri_trans_totitle(journals), "</li>", collapse = ""),
+                                "</ul>")
+    
+    content_html <- paste0(
+      "<div style='max-height: 300px; overflow-y: auto; text-align: left;'>",
+      journal_list_html,
+      "</div>"
+    )
+    
+    shinyWidgets::show_alert(
+      title = "Journal List Loaded",
+      text = HTML(content_html),
+      type = "info",
+      html = TRUE,
+      btn_labels = "OK"
+    )
+
+  })
+  
+  #### Update Filter Inputs ----
+  observe({
+    req(values$Morig) 
+    if (!"TCpY" %in% names(values$Morig)){
+      values$Morig <- values$Morig %>% 
+        mutate(Age = as.numeric(substr(Sys.time(),1,4)) - PY+1,
+               TCpY = round(TC/Age,2)) %>% 
+        group_by(PY) %>% 
+        mutate(NTC = TC/mean(TC, na.rm=T)) %>% 
+        as.data.frame()
+    }
+
     artType=sort(unique(values$Morig$DT))
-    selectInput("selectType", "Document Type", 
-                choices = artType,
-                selected = artType,
-                multiple =TRUE )
-  })
-  
-  output$selectLA <- renderUI({
     if ("LA" %in% names(values$Morig)){
       LA <- sort(unique(values$Morig$LA))} else {
         values$Morig$LA <- "N.A."
         LA <- "N.A."
       }
-    selectInput("selectLA", "Language", 
-                choices = LA,
-                selected = LA,
-                multiple =TRUE )
+    
+    updateSelectizeInput(session, "selectType", choices = artType, selected = artType, server = TRUE)
+    updateSelectizeInput(session, "selectLA", choices = LA, selected = LA, server = TRUE)
+    updateSliderInput(session, "sliderPY", min = min(values$Morig$PY,na.rm=T), max = max(values$Morig$PY,na.rm=T), value = c(min(values$Morig$PY,na.rm=T), max(values$Morig$PY,na.rm=T)))
+    updateMultiInput(session, "subject_category", choices = sort(unique(values$SCdf$WC)), selected = sort(unique(values$SCdf$WC)))
+    updateSliderInput(session, "sliderTC", min = 0, max = max(values$Morig$TC), value = c(0, max(values$Morig$TC)))
+    updateSliderInput(session, "sliderTCpY", min = floor(min(values$Morig$TCpY, na.rm=T)),
+                      max = ceiling(max(values$Morig$TCpY,na.rm=T)), step=0.1,
+                      value = c(floor(min(values$Morig$TCpY, na.rm=T)),ceiling(max(values$Morig$TCpY,na.rm=T))))
   })
   
-  output$sliderPY <- renderUI({
-    sliderInput("sliderPY", "Publication Year", min = min(values$Morig$PY,na.rm=T),sep="",
-                max = max(values$Morig$PY,na.rm=T), value = c(min(values$Morig$PY,na.rm=T),max(values$Morig$PY,na.rm=T)))
+  observe({
+    req(values$SCdf)
+    updateMultiInput(session, "subject_category", choices = sort(unique(values$SCdf$WC)), selected = sort(unique(values$SCdf$WC)))
+    if (length(unique(values$SCdf$WC)) == 1){
+      if (unique(values$SCdf$WC) == "N.A.") shinyjs::hide("subject_category")
+  } else{
+      shinyjs::show("subject_category")
+    }
+  })
+
+  observe({
+    req(values$Morig) # assicurati che i dati siano già caricati
+    CO <- sort(unique(values$COdf %>% dplyr::filter(continent %in% input$region) %>% pull(CO)))
+    updateMultiInput(session, "country", choices = CO, selected = CO)
   })
   
-  output$selectSource <- renderUI({
-    SO=sort(unique(values$Morig$SO))
-    selectInput("selectSource", "Source", 
-                choices = SO,
-                selected = SO,
-                multiple = TRUE)
-  })
-  
-  output$sliderTCpY <- renderUI({
-    Y <- as.numeric(substr(Sys.time(),1,4))
-    values$Morig <- values$Morig %>% 
-      mutate(Age = Y - PY+1,
-             TCpY = round(TC/Age,2)) %>% 
-      group_by(PY) %>% 
-      mutate(NTC = TC/mean(TC, na.rm=T)) %>% 
-      as.data.frame()
-    sliderInput("sliderTCpY", "Average Citations per Year", min = floor(min(values$Morig$TCpY, na.rm=T)),
-                max = ceiling(max(values$Morig$TCpY,na.rm=T)), step=0.1,
-                value = c(floor(min(values$Morig$TCpY, na.rm=T)),ceiling(max(values$Morig$TCpY,na.rm=T))))
-  })
-  
-  ## Update filtered data ----
+  #### Update filtered data ----
   observeEvent(input$applyFilter, {
+    DTfiltered()
     updateTabItems(session, "sidebarmenu", "filters")
   })
   
+  #### Reset Filters ----
+  observeEvent(input$resetFilter, {
+    values$M <- values$Morig
+    updateTabItems(session, "sidebarmenu", "filters")
+    
+    # reset del fileInput
+    shinyjs::reset("journal_list_upload")
+    shinyjs::hide("journal_list_helptext")
+    values$journal_list <- unique(values$Morig$SO)
+    
+    if (!"TCpY" %in% names(values$Morig)){
+      values$Morig <- values$Morig %>% 
+        mutate(Age = as.numeric(substr(Sys.time(),1,4)) - PY+1,
+               TCpY = round(TC/Age,2)) %>% 
+        group_by(PY) %>% 
+        mutate(NTC = TC/mean(TC, na.rm=T)) %>% 
+        as.data.frame()
+    }
+    
+    artType=sort(unique(values$Morig$DT))
+    if ("LA" %in% names(values$Morig)){
+      LA <- sort(unique(values$Morig$LA))} else {
+        values$Morig$LA <- "N.A."
+        LA <- "N.A."
+      }
+    
+    updateSelectizeInput(session, "selectType", choices = artType, selected = artType, server = TRUE)
+    updateSelectizeInput(session, "selectLA", choices = LA, selected = LA, server = TRUE)
+    updateSliderInput(session, "sliderPY", min = min(values$Morig$PY,na.rm=T), max = max(values$Morig$PY,na.rm=T), value = c(min(values$Morig$PY,na.rm=T), max(values$Morig$PY,na.rm=T)))
+    updateMultiInput(session, "subject_category", choices = sort(unique(values$SCdf$WC)), selected = sort(unique(values$SCdf$WC)))
+    
+    updateSelectizeInput(session, "region", 
+                         selected = c("AFRICA", "ASIA", "EUROPE", "NORTH AMERICA", "SOUTH AMERICA", "SEVEN SEAS (OPEN OCEAN)", "OCEANIA","Unknown")) # supponendo sia già calcolato
+    CO <- sort(unique(values$COdf %>% dplyr::filter(continent %in% input$region) %>% pull(CO)))
+    updateMultiInput(session, "country", choices = unique(CO), selected = CO)
+    updateSelectInput(session, "bradfordSources",selected = "all")
+    updateSliderInput(session, "sliderTC", min = 0, max = max(values$Morig$TC), value = c(0, max(values$Morig$TC)))
+    updateSliderInput(session, "sliderTCpY", min = floor(min(values$Morig$TCpY, na.rm=T)),
+                      max = ceiling(max(values$Morig$TCpY,na.rm=T)), step=0.1,
+                      value = c(floor(min(values$Morig$TCpY, na.rm=T)),ceiling(max(values$Morig$TCpY,na.rm=T))))
+  })
+  
+  #### Filter Data Reactive Function ----
   DTfiltered <- eventReactive(input$applyFilter,{
     M <- values$Morig
     B <- bradford(M)$table
-    M <- M %>%
-      dplyr::filter(PY >= input$sliderPY[1], PY <= input$sliderPY[2]) %>%
-      dplyr::filter(TCpY >= input$sliderTCpY[1], TCpY <= input$sliderTCpY[2]) %>%
-      dplyr::filter(DT %in% input$selectType) %>%
-      dplyr::filter(LA %in% input$selectLA)
+    # list of documents per subject categories
+    wc <- values$SCdf %>%
+      dplyr::filter(WC %in% input$subject_category) %>%
+      pull(SR) %>% unique()
+    # list of documents per country
+    co <- values$COdf %>%
+      dplyr::filter(CO %in% input$country) %>%
+      pull(SR) %>% unique()
     
+    if (!is.null(values$journal_list)){
+      M <- M %>% 
+        dplyr::filter(SO %in% values$journal_list) # filter by journal list
+    }
+    
+  M <- M %>%
+      dplyr::filter(PY >= input$sliderPY[1], PY <= input$sliderPY[2]) %>% # publication year
+      dplyr::filter(TCpY >= input$sliderTCpY[1], TCpY <= input$sliderTCpY[2]) %>% # average citations per year
+      dplyr::filter(TC >= input$sliderTC[1], TC <= input$sliderTC[2]) %>% # total citations
+      dplyr::filter(DT %in% input$selectType) %>% # document type
+      dplyr::filter(LA %in% input$selectLA) %>% # language
+      dplyr::filter(SR %in% wc) %>% # subject categories
+      dplyr::filter(SR %in% co) # countries
+      
     switch(input$bradfordSources,
            "core"={
              so <- B$SO[B$Zone %in% "Zone 1"]
@@ -1240,14 +1423,31 @@ To ensure the functionality of Biblioshiny,
            },
            "all"={so <- B$SO})
     M <- M %>%
-      filter(SO %in% so)
+      dplyr::filter(SO %in% so)
     
     values<-initial(values)
     row.names(M) <- M$SR
     class(M) <- c("bibliometrixDB", "data.frame")
     values$M <- M
+  })
+  
+  #### Show Filtered Data Modal ----
+  observeEvent(input$viewDataFilter,{
+    showModal(modalDialog(
+      title = "Filtered Data",
+      size = "l",
+      DT::DTOutput("dataFiltered"),
+      footer = tagList(
+        #downloadButton("collection.save", "Save Filtered Data"),
+        modalButton("Close")
+      )
+    ))
+  })
+  
+  output$dataFiltered <- DT::renderDT({
+    DTfiltered()
     Mdisp <- values$M %>%
-      mutate(across(everything(), ~ substring(., 1, 150))) %>%
+      select(SR, AU, TI, SO, PY, LA, DT, TC, TCpY, DI) %>%
       as.data.frame()
     
     if (dim(Mdisp)[1]>0){
@@ -1256,9 +1456,6 @@ To ensure the functionality of Biblioshiny,
     }else{Mdisp=data.frame(Message="Empty collection", row.names = " ")}
   })
   
-  output$dataFiltered <- DT::renderDT({
-    DTfiltered()
-  })
   
   # OVERVIEW ----
   ### Main Info ----
@@ -2779,14 +2976,16 @@ To ensure the functionality of Biblioshiny,
   
   ### Reference Spectroscopy ---- 
   RPYS <- eventReactive(input$applyRPYS,{
-    timespan <- c(-Inf,Inf)
+    timespan <- c(max(values$M$PY, na.rm = TRUE)-100, max(values$M$PY, na.rm = TRUE)-3)
     if (!is.na(input$rpysMinYear)){
       timespan[1] <- input$rpysMinYear
     }
     if (!is.na(input$rpysMaxYear)){
       timespan[2] <- input$rpysMaxYear
     }
-    values$res <- rpys(values$M, sep=input$rpysSep, timespan=timespan, graph=FALSE)
+    timespan <- sort(timespan)
+    values$res <- rpys(values$M, sep=input$rpysSep, timespan=timespan, median.window = input$rpysMedianWindow, graph=FALSE)
+    values$res$peaks <- rpysPeaks(values$res, n=10)
   })
   
   output$RSplot.save <- downloadHandler(
@@ -2832,9 +3031,30 @@ To ensure the functionality of Biblioshiny,
              selection=FALSE)
   })
   
+  output$rpysSequence <- DT::renderDT({
+    RPYS()
+    paperClass <- ifelse(input$rpysInfluential=="Not Influent","",input$rpysInfluential)
+    crData <- values$res$Sequences %>% dplyr::filter(regexpr(paperClass,Class)>-1)
+    crData$link <- paste0('<a href=\"https://scholar.google.it/scholar?hl=en&as_sdt=0%2C5&q=',crData$CR,'\" target=\"_blank\">','link','</a>')
+    crData <- crData %>% select(RPY, CR, Freq, link, sequence, Class)
+    names(crData)=c("Year", "Reference", "Local Citations", "Google link","Citation Sequence", "Sequence Type")
+    DTformat(crData, nrow=10, filename="RPYS_InfluentialReferences", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
+  })
+  
+  output$rpysPeaks <- DT::renderDT({
+    RPYS()
+    crData <- values$res$peaks
+    names(crData)=c("Year", "Reference", "Local Citations")
+    DTformat(crData, nrow=10, filename="RPYS_Top10Peaks", pagelength=TRUE, left=NULL, right=NULL, numeric=NULL, dom=TRUE, 
+             size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=2, title="", button=TRUE, escape=FALSE, 
+             selection=FALSE)
+  })
+  
   observeEvent(input$reportRPYS,{
     if(!is.null(values$res$CR)){
-      list_df <- list(values$res$CR, values$res$rpysTable)
+      list_df <- list(values$res$CR, values$res$rpysTable,values$res$Sequences,values$res$peaksDF)
       list_plot <- list(values$res$spectroscopy)
       wb <- addSheetToReport(list_df,list_plot,sheetname = "RPYS", wb=values$wb)
       values$wb <- wb
@@ -3580,6 +3800,19 @@ To ensure the functionality of Biblioshiny,
                                shape=input$coc.shape, net=values$cocnet, shadow=(input$coc.shadow=="Yes"), edgesize=input$edgesize, noOverlap=input$noOverlap)
     values$cocOverlay <- overlayPlotly(values$COCnetwork$VIS)
     values$degreePlot <- degreePlot(values$cocnet)
+    ## values for network over time
+    # years <- sort(unique(c(values$COCnetwork$VIS$x$nodes$year_med)))
+    values$years_coc <- sort(unique(c(values$M %>% drop_na(PY) %>% pull(PY))))
+    values$index_coc = 0
+    values$playing_coc = FALSE
+    values$paused_coc = FALSE
+    values$current_year_coc = min(values$years_coc)
+    
+    output$year_slider_cocUI <- renderUI({
+      sliderInput("year_slider_coc", "Year", min = min(values$years_coc), max = max(values$years_coc),
+                  value =min(values$years_coc), step = 1, animate = FALSE, width = "100%",
+                  ticks = FALSE, round = TRUE, sep="")
+    })
   })
   
   output$cocPlot <- renderVisNetwork({  
@@ -3591,6 +3824,95 @@ To ensure the functionality of Biblioshiny,
     COCnetwork()
     values$cocOverlay
   })
+  
+  ## Co-Occurrence Network over Time ####
+  observe({
+    req(values$COCnetwork$VIS)
+    invalidateLater(as.numeric(input$speed_coc), session)
+    isolate({
+      #years <- sort(unique(c(values$COCnetwork$VIS$x$nodes$year_med)))
+      # years <- sort(unique(c(values$M %>% drop_na(PY) %>% pull(PY))))
+      if (values$playing_coc && !values$paused_coc && values$index_coc < length(values$years_coc)) {
+        values$index_coc <- values$index_coc + 1
+        yr <- values$years_coc[values$index_coc]
+        values$current_year_coc <- yr
+        updateSliderInput(session, "year_slider_coc", value = yr, min = min(values$years_coc), max = max(values$years_coc))
+      }
+    })
+  })
+  
+  # funzione per creare la rete
+  render_network_coc <- reactive({
+    req(values$COCnetwork$VIS)
+    selected_year <- values$current_year_coc
+    show_nodes <- values$COCnetwork$VIS$x$nodes %>% filter(year_med <= selected_year) %>% mutate(title = paste(title,year_med, sep=" "))
+    show_edges <- values$COCnetwork$VIS$x$edges %>% filter(from %in% show_nodes$id & to %in% show_nodes$id)
+    
+    coords <- show_nodes %>% select(x, y) %>% as.matrix()
+    
+    values$COCnetworkOverTime <- visNetwork::visNetwork(nodes = show_nodes, edges = show_edges, type = "full", smooth = TRUE, physics = FALSE) %>%
+      visNetwork::visNodes(shadow = TRUE, shape = "dot", font = list(color = show_nodes$font.color, size = show_nodes$font.size, vadjust = show_nodes$font.vadjust)) %>%
+      visNetwork::visIgraphLayout(layout = "layout.norm", layoutMatrix = coords, type = "full") %>%
+      visNetwork::visEdges(smooth = list(type = "horizontal")) %>%
+      visNetwork::visOptions(highlightNearest = list(enabled = T, hover = T, degree = 1), nodesIdSelection = T) %>%
+      visNetwork::visInteraction(dragNodes = TRUE, navigationButtons = F, hideEdgesOnDrag = TRUE, zoomSpeed = 0.4) %>%
+      visNetwork::visOptions(manipulation = FALSE, height = "100%", width = "100%")
+    values$COCnetworkOverTime
+  })
+  
+  # aggiorna rete quando cambia lo slider
+  observeEvent(input$year_slider_coc, {
+    values$current_year_coc <- as.numeric(input$year_slider_coc)
+    output$cocOverTime <- renderVisNetwork({ render_network_coc() })
+  })
+  
+  output$cocYearUI <- renderUI({
+    req(values$current_year_coc)
+    h3(paste(watchEmoji(values$current_year_coc), values$current_year_coc), style = "text-align: left; color: #0e4770; font-weight: bold;")
+  })
+
+  # start
+  observeEvent(input$start_coc, {
+    # years <- sort(unique(c(values$COCnetwork$VIS$x$nodes$year_med)))
+    # years <- sort(unique(c(values$M %>% drop_na(PY) %>% pull(PY))))
+    values$index_coc <- 0
+    values$playing_coc <- TRUE
+    values$paused_coc <- FALSE
+    values$current_year_coc <- min(values$years_coc)
+    #shinyjs::hide("export_coc")
+    updateSliderInput(session, "year_slider_coc", value = min(values$years_coc))
+    output$cocOverTime <- renderVisNetwork({ render_network_coc() })
+  })
+  
+  observeEvent(input$pause_coc, {
+    values$paused_coc <- !values$paused_coc
+      # if paused show the button "export_coc" else hide it
+    if (values$paused_coc) {
+      output$export_cocUI <- renderUI({
+        actionButton("export_coc", "⬇ Export", width = "90%")
+      })
+    } else {
+      output$export_cocUI <- renderUI({})
+    }
+  })
+  
+  # reset
+  observeEvent(input$reset_coc, {
+    values$playing_coc <- FALSE
+    values$paused_coc <- FALSE
+    values$index_coc <- 0
+    # years <- sort(unique(c(values$COCnetwork$VIS$x$nodes$year_med)))
+    # years <- sort(unique(c(values$M %>% drop_na(PY) %>% pull(PY))))
+    values$current_year_coc <- min(values$years_coc)
+    updateSliderInput(session, "year_slider_coc", value = min(values$years_coc))
+    output$cocOverTime <- renderVisNetwork({
+      nodes <- values$COCnetwork$VIS$x$nodes %>% filter(year_med < 0)
+      edges <- values$COCnetwork$VIS$x$edges %>% filter(from %in% nodes$id)
+      visNetwork(nodes = nodes, edges = edges)
+    })
+  })
+  
+  ### end Network over Time ----
   
   # gemini button for word network
   output$cocGeminiUI <- renderUI({
@@ -3606,13 +3928,9 @@ To ensure the functionality of Biblioshiny,
       tmpdir <- tempdir()
       owd <- setwd(tmpdir)
       on.exit(setwd(owd))
-      # print(tmpdir)
-      #igraph::write.graph(values$obj$graph_pajek,file=file, format="pajek")
       myfile <- paste("mynetwork-", Sys.Date(), sep="")
       files <- paste0(myfile, c(".net",".vec",".clu"))
       graph2Pajek(values$cocnet$graph, filename=myfile)
-      # print(files)
-      # print(dir())
       zip::zip(file,files)
     },
     contentType = "zip"
@@ -4487,12 +4805,26 @@ To ensure the functionality of Biblioshiny,
                                noOverlap=input$colNoOverlap)
     values$colOverlay <- overlayPlotly(values$COLnetwork$VIS)
     values$degreePlot <-degreePlot(values$colnet)
+    # years <- sort(unique(c(values$COLnetwork$VIS$x$nodes$year_med)))
+    values$years_col <- sort(unique(c(values$M %>% drop_na(PY) %>% pull(PY))))
+    values$index_col <- 0
+    values$playing_col <- FALSE
+    values$paused_col <- FALSE
+    values$current_year_col <- min(values$years_col)
+    
     if (is.null(dim(values$colnet$cluster_res))){
       values$colnet$cluster_res <- data.frame(Node=NA, Cluster=NA, Betweenness=NA, 
                                                                              Closeness = NA, PageRank = NA)
+    
     }else{
       names(values$colnet$cluster_res) <- c("Node", "Cluster", "Betweenness", "Closeness", "PageRank")
     }
+    
+    output$year_slider_colUI <- renderUI({
+      sliderInput("year_slider_col", "Year", min = min(values$years_col), max = max(values$years_col),
+                  value =min(values$years_col), step = 1, animate = FALSE, width = "100%",
+                  ticks = FALSE, round = TRUE, sep="")
+    })
     
   })
   output$colPlot <- renderVisNetwork({  
@@ -4503,6 +4835,90 @@ To ensure the functionality of Biblioshiny,
   output$colOverlay <- renderPlotly({
     COLnetwork()
     values$colOverlay
+  })
+  
+  ## Collaboration Network over Time ####
+  observe({
+    req(values$COLnetwork$VIS)
+    invalidateLater(as.numeric(input$speed_col), session)
+    isolate({
+      # years <- sort(unique(c(values$COLnetwork$VIS$x$nodes$year_med)))
+      if (values$playing_col && !values$paused_col && values$index_col < length(values$years_col)) {
+        values$index_col <- values$index_col + 1
+        yr <- values$years_col[values$index_col]
+        values$current_year_col <- yr
+        updateSliderInput(session, "year_slider_col", value = yr, min = min(values$years_col), max = max(values$years_col))
+      }
+    })
+  })
+  
+  # funzione per creare la rete
+  render_network_col <- reactive({
+    req(values$COLnetwork$VIS)
+    selected_year_col <- values$current_year_col
+    show_nodes <- values$COLnetwork$VIS$x$nodes %>% filter(year_med <= selected_year_col) %>% mutate(title = paste(title,year_med, sep=" "))
+    show_edges <- values$COLnetwork$VIS$x$edges %>% filter(from %in% show_nodes$id & to %in% show_nodes$id)
+    
+    coords <- show_nodes %>% select(x, y) %>% as.matrix()
+    
+    values$COLnetworkOverTime <- visNetwork::visNetwork(nodes = show_nodes, edges = show_edges, type = "full", smooth = TRUE, physics = FALSE) %>%
+      visNetwork::visNodes(shadow = TRUE, shape = "dot", font = list(color = show_nodes$font.color, size = show_nodes$font.size, vadjust = show_nodes$font.vadjust)) %>%
+      visNetwork::visIgraphLayout(layout = "layout.norm", layoutMatrix = coords, type = "full") %>%
+      visNetwork::visEdges(smooth = list(type = "horizontal")) %>%
+      visNetwork::visOptions(highlightNearest = list(enabled = T, hover = T, degree = 1), nodesIdSelection = T) %>%
+      visNetwork::visInteraction(dragNodes = TRUE, navigationButtons = F, hideEdgesOnDrag = TRUE, zoomSpeed = 0.4) %>%
+      visNetwork::visOptions(manipulation = FALSE, height = "100%", width = "100%")
+    
+    values$COLnetworkOverTime
+  })
+  
+  # aggiorna rete quando cambia lo slider
+  observeEvent(input$year_slider_col, {
+    values$current_year_col <- as.numeric(input$year_slider_col)
+    output$colOverTime<- renderVisNetwork({ render_network_col() })
+  })
+  
+  output$colYearUI <- renderUI({
+    req(values$current_year_col)
+    h3(paste(watchEmoji(values$current_year_col), values$current_year_col), style = "text-align: left; color: #0e4770; font-weight: bold;")
+  })
+  
+  # start
+  observeEvent(input$start_col, {
+    # years <- sort(unique(c(values$COLnetwork$VIS$x$nodes$year_med)))
+    values$index_col <- 0
+    values$playing_col <- TRUE
+    values$paused_col <- FALSE
+    values$current_year_col <- min(values$years_col)
+    updateSliderInput(session, "year_slider_col", value = min(values$years_col))
+    output$colOverTime <- renderVisNetwork({ render_network_col() })
+  })
+  
+  # pausa
+  observeEvent(input$pause_col, {
+    values$paused_col <- !values$paused_col
+    if (values$paused_col) {
+      output$export_colUI <- renderUI({
+        actionButton("export_col", "⬇ Export", width = "90%")
+      })
+    } else {
+      output$export_colUI <- renderUI({})
+    }
+  })
+  
+  # reset
+  observeEvent(input$reset_col, {
+    values$playing_col <- FALSE
+    values$paused_col <- FALSE
+    values$index_col <- 0
+    # years <- sort(unique(c(values$COCnetwork$VIS$x$nodes$year_med)))
+    values$current_year_col <- min(values$years_col)
+    updateSliderInput(session, "year_slider_col", value = min(values$years_col))
+    output$colOverTime <- renderVisNetwork({
+      nodes <- values$COLnetwork$VIS$x$nodes %>% filter(year_med < 0)
+      edges <- values$COLnetwork$VIS$x$edges %>% filter(from %in% nodes$id)
+      visNetwork(nodes = nodes, edges = edges)
+    })
   })
   
   # gemini button for word network
@@ -4538,6 +4954,7 @@ To ensure the functionality of Biblioshiny,
              size='100%', filter="top", columnShort=NULL, columnSmall=NULL, round=3, title="", button=TRUE, escape=FALSE, 
              selection=FALSE)
   })   
+  
   
   #### save coc network image as html ####
   output$networkCol.fig <- downloadHandler(
@@ -4730,6 +5147,11 @@ To ensure the functionality of Biblioshiny,
     screenShot(values$COCnetwork$VIS, filename=filename, type="vis")
   })
   
+  observeEvent(input$export_coc,{
+    filename = paste("Co_occurrenceNetwork-Year-",values$current_year_coc, "__",  gsub(" |:","",Sys.time()), ".png", sep="")
+    screenShot(values$COCnetworkOverTime, filename=filename, type="vis")
+  })
+  
   observeEvent(input$screenCOCIT,{
     filename = paste("Co_citationNetwork-", "_",  gsub(" |:","",Sys.time()), ".png", sep="")
     screenShot(values$COCITnetwork$VIS, filename=filename, type="vis")
@@ -4743,6 +5165,11 @@ To ensure the functionality of Biblioshiny,
   observeEvent(input$screenCOL,{
     filename = paste("Collaboration_Network-", "_",  gsub(" |:","",Sys.time()), ".png", sep="")
     screenShot(values$COLnetwork$VIS, filename=filename, type="vis")
+  })
+  
+  observeEvent(input$export_col,{
+    filename = paste("Collaboration_Network-Year-",values$current_year_col, "__",  gsub(" |:","",Sys.time()), ".png", sep="")
+    screenShot(values$COLnetworkOverTime, filename=filename, type="vis")
   })
   
   ## TALL EXPORT ----
@@ -4845,6 +5272,104 @@ To ensure the functionality of Biblioshiny,
       output$status <- renderText(paste0("✅ API key has been set: ",last))
     }
   })
+  
+  output$geminiOutputSize <- renderUI({
+      list(
+      selectInput(
+        inputId = "gemini_output_size",
+        label = "Max Output (in tokens)",
+        selected = ifelse(is.null(values$gemini_output_size), "medium", values$gemini_output_size),
+        choices = c("Medium" = "medium", "Large" = "large")
+      ),
+      conditionalPanel(
+        condition = "input.gemini_output_size == 'medium'",
+        helpText(strong("Free Tier Output:")),
+        helpText(em("Medium -> 16384 Tokens"))
+      ),
+      conditionalPanel(
+        condition = "input.gemini_output_size == 'large'",
+        helpText(strong("Free Tier Output:")),
+        helpText(em("Large -> 32768 Tokens"))
+      )
+      )
+    })
+  
+  output$geminiModelChoice <- renderUI({
+    list(
+      selectInput(
+        inputId = "gemini_api_model",
+        label = "Select the Gemini Model",
+        choices = c(
+          "Gemini 2.5 Flash" = "2.5-flash",
+          "Gemini 2.5 Flash Lite Preview 06-17" = "2.5-flash-lite-preview-06-17",
+          "Gemini 2.0 Flash" = "2.0-flash",
+          "Gemini 2.0 Flash Lite" = "2.0-flash-lite",
+          "Gemini 1.5 Flash" = "1.5-flash",
+          "Gemini 1.5 Flash Lite" = "1.5-flash-8b"
+        ),
+        selected = ifelse(is.null(values$gemini_api_model), "2.0-flash", values$gemini_api_model)
+      ),
+      conditionalPanel(
+        condition = "input.gemini_api_model == '2.5-flash'",
+        helpText(strong("Free Tier Rate Limits:")),
+        helpText(em("Request per Minutes: 10", tags$br(),
+                    "Requests per Day: 500", tags$br(),
+                    "Latency time: High"))
+      ),
+      conditionalPanel(
+        condition = "input.gemini_api_model == '2.5-flash-lite-preview-06-17'",
+        helpText(strong("Free Tier Rate Limits:")),
+        helpText(em("Request per Minutes: 15", tags$br(),
+                    "Requests per Day: 500", tags$br(),
+                    "Latency time: Low"))
+      ),
+      conditionalPanel(
+        condition = "input.gemini_api_model == '2.0-flash-lite'",
+        helpText(strong("Free Tier Rate Limits:")),
+        helpText(em("Request per Minutes: 30", tags$br(),
+                    "Requests per Day: 1500",tags$br(),
+                    "Latency time: Low"))
+      ),
+      conditionalPanel(
+        condition = "input.gemini_api_model == '2.0-flash'",
+        helpText(strong("Free Tier Rate Limits:")),
+        helpText(em("Request per Minutes: 15", tags$br(),
+                    "Requests per Day: 1500",tags$br(),
+                    "Latency time: Medium"))
+      ),
+      conditionalPanel(
+        condition = "input.gemini_api_model == '1.5-flash'",
+        helpText(strong("Free Tier Rate Limits:")),
+        helpText(em("Request per Minutes: 15", tags$br(),
+                    "Requests per Day: 1500",tags$br(),
+                    "Latency time: Medium"))
+      ),
+      conditionalPanel(
+        condition = "input.gemini_api_model == '1.5-flash-8b'",
+        helpText(strong("Free Tier Rate Limits:")),
+        helpText(em("Request per Minutes: 15", tags$br(),
+                    "Requests per Day: 1500",tags$br(),
+                    "Latency time: Low"))
+      )
+    )
+  })
+  
+  observeEvent(input$gemini_api_model, {
+    if (!is.null(input$gemini_api_model)){
+      saveGeminiModel(model=c(input$gemini_api_model,input$gemini_output_model), file=paste0(homeFolder(),"/.biblio_gemini_model.txt", collapse=""))
+      values$gemini_api_model <- input$gemini_api_model
+      values$gemini_output_size <- input$gemini_output_size
+    }
+  })
+
+  observeEvent(input$gemini_output_size, {
+    if (!is.null(input$gemini_output_size)){
+      saveGeminiModel(model=c(input$gemini_api_model,input$gemini_output_size), file=paste0(homeFolder(),"/.biblio_gemini_model.txt", collapse=""))
+      values$gemini_api_model <- input$gemini_api_model
+      values$gemini_output_size <- input$gemini_output_size
+    }
+  })
+  
   
   observeEvent(input$set_key, {
     key <- input$api_key
