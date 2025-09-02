@@ -1,7 +1,7 @@
 9768293a52649775264a3c6cefdf74f7 *COPYING
-34bb525e277a0f641ab7ea6c24f66d49 *DESCRIPTION
+619dbcba230217d617314051943ee3da *DESCRIPTION
 f842e190f493474c44d4d61fcd5678c0 *NAMESPACE
-ed45ec913e0e2700ad18b6069c5312af *NEWS
+61c80d6085787489729dfd03c723d49b *NEWS
 23190f776e0d8efece89f51fdb735f76 *R/Hindex.R
 31828e77977de7ed412754ff4a8c1b31 *R/apiOA2df.R
 78c84af64cda3a088ee52bf45cb16055 *R/authorProdOverTime.R
@@ -73,7 +73,7 @@ f7db88a61fa950c523e027c524bbe0a3 *R/thematicEvolution.R
 f4d1f8b68ff643d32cbfdcccb735742f *R/trim.leading.R
 5d34aa39a5596265b1c5ef0c463070cf *R/trimES.R
 e1e4a9fc0273f82df212db836ff6515e *R/zzz.R
-43a310227c399f1db43e629bf487b442 *build/partial.rdb
+fcd193ed1e7ecbca1dcd3cc02cc5cbf0 *build/partial.rdb
 65aac7b5c639bc59711fbd0f2b853816 *data/bibtag.rda
 7b6ff86bcc5d061021ed0d57f329c87d *data/countries.rda
 4e73e7ac60bc975068e65922850f447c *data/customTheme.rda
@@ -82,11 +82,11 @@ e1e4a9fc0273f82df212db836ff6515e *R/zzz.R
 ecb5496c3b6f6382ee18aeb65b5b4727 *inst/CITATION
 07c49035350986be35ea3bd810d806ba *inst/biblioshiny/biblioAI.R
 d39a4251c3167aea967226ce462d6963 *inst/biblioshiny/biblioShot.R
-11fff8962b694616f6e44b365e5783ae *inst/biblioshiny/helpContent.R
-3bdeeed563eacb12cd3d26565933c146 *inst/biblioshiny/libraries.R
-a0cff02577ba1498b058a902aceedffd *inst/biblioshiny/server.R
-9ae2a288648f383924033e2e529b0926 *inst/biblioshiny/ui.R
-49b44fbec81139ab4d91eb9b19c06af4 *inst/biblioshiny/utils.R
+addba83c856ea4ded434ca1cbec9cbdf *inst/biblioshiny/helpContent.R
+a4ab2618f2b06ec0d1f53c6918017954 *inst/biblioshiny/libraries.R
+3183a3e07d190a1745ddb408cacb08c0 *inst/biblioshiny/server.R
+baa9cd3c9d5d1435b6f3d3472222d488 *inst/biblioshiny/ui.R
+d97d0cb8635beeada5e50e96e068b11a *inst/biblioshiny/utils.R
 e02e0a166e76fc93f149009f7c8a9251 *inst/biblioshiny/www/ai_small2.gif
 02b12f9a41d32159003317bd49b5622a *inst/biblioshiny/www/logo.jpg
 8b56f22c72d6a2110e1da77611f30fcd *inst/biblioshiny/www/logo2.jpg
