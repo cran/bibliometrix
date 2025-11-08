@@ -1,11 +1,5 @@
 # ### packages for biblishiny()
 libraries <- function() {
-  is_windows <- tolower(Sys.info()[["sysname"]]) == "windows"
-  if (!is_windows & !require(pak, quietly = TRUE)) {
-    install.packages("pak")
-    if (!require(pak, quietly = TRUE)) return(FALSE)
-  }
-  
   all_ok <- TRUE
   
   parse_pkg <- function(pkg_str) {
@@ -42,19 +36,15 @@ libraries <- function() {
     }
     
     if (need_install) {
-      if (is_windows) {
-        install.packages(pkg)
-      } else {
-        pak::pkg_install(pkg, ask= FALSE)
-      }
+      install.packages(pkg)
     }
     
     return(require(pkg, character.only = TRUE, quietly = TRUE))
   }
   
   pkgs <- c(
-    "httr2", "base64enc", "bibliometrix", "zip", "shiny", "igraph", "DT", 
-    "ggplot2", "wordcloud2", "ggmap", "maps", 
+    "httr2", "base64enc", "bibliometrix", "zip", "shiny", "igraph", "DT", "stringr","contentanalysis",
+    "ggplot2", "wordcloud2", "ggmap", "maps", "pdftools (>= 3.6.0)", "tidytext",
     "visNetwork", "plotly", "fontawesome", "shinydashboardPlus", 
     "shinydashboard", "shinyjs", "curl (>= 6.3.0)","RCurl", "openxlsx", "shinyWidgets", 
     "chromote", "pagedown", "Matrix", "dimensionsR", "pubmedR", 

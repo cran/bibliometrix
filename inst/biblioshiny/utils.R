@@ -44,7 +44,10 @@ total_downloads <- function(
     pkg_name
   )
 
-  if (!is_Online(timeout = 1, url)) {
+  # if (!is_Online(timeout = 1, url)) {
+  #   return(NA)
+  # }
+  if (!check_online(host = url, timeout = 1, method = "http")) {
     return(NA)
   }
 
@@ -180,6 +183,7 @@ countryTable <- function(M) {
 }
 
 # LOAD FUNCTIONS -----
+
 formatDB <- function(obj) {
   ext <- sub(".*\\.", "", obj[1])
   switch(
@@ -290,6 +294,16 @@ watchEmoji <- function(i) {
   emoji[i]
 }
 
+## RESET MODAL DIALOG INPUTS
+resetModalButtons <- function(session) {
+  session$sendCustomMessage("button_id", "null")
+  session$sendCustomMessage("button_id2", "null")
+  # session$sendCustomMessage("click", "null")
+  # session$sendCustomMessage("click-dend", "null")
+  # runjs("Shiny.setInputValue('plotly_click-A', null);")
+  return(session)
+}
+
 
 # DATA TABLE FORMAT ----
 DTformat <- function(
@@ -311,7 +325,8 @@ DTformat <- function(
   escape = FALSE,
   selection = FALSE,
   scrollX = FALSE,
-  scrollY = FALSE
+  scrollY = FALSE,
+  summary = FALSE
 ) {
   if ("text" %in% names(df)) {
     df <- df %>%
@@ -340,6 +355,91 @@ DTformat <- function(
       targets = 0:(length(names(df)) - 1)
     ))
   }
+
+  initComplete <- NULL
+  # Summary Button
+  if (summary == "documents" & "Paper" %in% names(df)) {
+    df <- df %>%
+      mutate(
+        Summary = paste0(
+          '<div style="display: flex; justify-content: center; align-items: center; height: 100%; width: 100%;">',
+          '<button id="custom_btn" style="',
+          'width: 24px; height: 24px; ',
+          'border-radius: 50%; ',
+          'border: none; ',
+          'background: linear-gradient(135deg, #4285f4 0%, #1976d2 100%); ',
+          'color: white; ',
+          'cursor: pointer; ',
+          'display: flex; ',
+          'align-items: center; ',
+          'justify-content: center; ',
+          'box-shadow: 0 2px 4px rgba(0,0,0,0.2); ',
+          'transition: all 0.3s ease; ',
+          '" ',
+          'onmouseover="this.style.transform=\'scale(1.1)\'; this.style.boxShadow=\'0 4px 8px rgba(0,0,0,0.3)\';" ',
+          'onmouseout="this.style.transform=\'scale(1)\'; this.style.boxShadow=\'0 2px 4px rgba(0,0,0,0.2)\';" ',
+          'onclick="Shiny.onInputChange(\'button_id\', \'',
+          Paper,
+          '\')">',
+          '<i class="fas fa-search-plus" style="font-size: 14px;"></i>',
+          '</button>',
+          '</div>'
+        )
+      ) %>%
+      select(Summary, everything())
+  } else if (summary == "historiograph" & "Paper" %in% names(df)) {
+    df <- df %>%
+      mutate(
+        Summary = paste0(
+          '<div style="display: flex; justify-content: center; align-items: center; height: 100%; width: 100%;">',
+          '<button id="custom_btn" style="',
+          'width: 32px; height: 32px; ',
+          'border-radius: 50%; ',
+          'border: none; ',
+          'background: linear-gradient(135deg, #4285f4 0%, #1976d2 100%); ',
+          'color: white; ',
+          'cursor: pointer; ',
+          'display: flex; ',
+          'align-items: center; ',
+          'justify-content: center; ',
+          'box-shadow: 0 2px 4px rgba(0,0,0,0.2); ',
+          'transition: all 0.3s ease; ',
+          '" ',
+          'onmouseover="this.style.transform=\'scale(1.1)\'; this.style.boxShadow=\'0 4px 8px rgba(0,0,0,0.3)\';" ',
+          'onmouseout="this.style.transform=\'scale(1)\'; this.style.boxShadow=\'0 2px 4px rgba(0,0,0,0.2)\';" ',
+          'onclick="Shiny.onInputChange(\'button_id\', \'',
+          SR,
+          '\')">',
+          '<i class="fas fa-search-plus" style="font-size: 14px;"></i>',
+          '</button>',
+          '</div>'
+        )
+      ) %>%
+      select(Summary, everything()) %>%
+      select(-SR)
+  } else if (summary == "authors" & "Author" %in% names(df)) {
+    df <- df %>%
+      # mutate(Bio = paste0('<button id="custom_btn2" onclick="Shiny.onInputChange(\'button_id2\', \'', Author, '\')">▶️</button>')) %>%
+      # select(Bio, everything()) %>%
+      mutate(
+        Author = paste0(
+          '<span class="author-link" onclick="show_author_modal(\'',
+          gsub("'", "\\\\'", Author),
+          '\')">',
+          Author,
+          '</span>'
+        )
+      )
+    initComplete = JS(
+      "function(settings, json) {",
+      "  window.show_author_modal = function(author) {",
+      "    Shiny.setInputValue('selected_author', author, {priority: 'event'});",
+      "  };",
+      "}"
+    )
+    escape = FALSE
+  }
+
   if (isTRUE(button)) {
     if (isTRUE(pagelength)) {
       buttons <- list(
@@ -416,6 +516,7 @@ DTformat <- function(
         "  $(thead).css('font-size', '1em');",
         "}"
       ),
+      initComplete = initComplete,
       colReorder = TRUE,
       fixedHeader = TRUE,
       pageLength = nrow,
@@ -584,6 +685,1669 @@ strSynPreview <- function(string) {
   HTML(paste("<pre>", "File Preview: ", str1, "</pre>", sep = "<br/>"))
 }
 
+
+### LIFE CYCLE PLOTLY FUNCTION ----
+
+#' Plot Life Cycle Analysis Results with ggplot2
+#'
+#' Creates ggplot2 plots from lifeCycle analysis results
+#'
+#' @param results Output from lifeCycle() function
+#' @param plot_type Character, either "annual" or "cumulative" to specify which plot to generate
+#'
+#' @return A ggplot2 object
+#'
+#' @export
+ggplotLifeCycle <- function(results, plot_type = c("annual", "cumulative")) {
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package 'ggplot2' is required but not installed.")
+  }
+
+  plot_type <- match.arg(plot_type)
+
+  # Extract data
+  complete_curve <- results$complete_curve
+  observed_data <- results$data
+  params <- results$parameters_real_years
+  metrics <- results$metrics
+  K <- params$K
+  tm_year <- params$tm_year
+  R2 <- metrics$R_squared
+
+  if (plot_type == "annual") {
+    # Plot 1: Annual Publications
+    max_annual <- max(complete_curve$annual, na.rm = TRUE)
+
+    p <- ggplot() +
+      geom_line(
+        data = complete_curve,
+        aes(x = year, y = annual),
+        color = "blue",
+        linewidth = 1
+      ) +
+      geom_point(
+        data = observed_data,
+        aes(x = PY, y = n),
+        color = "blue",
+        size = 3
+      ) +
+      geom_vline(
+        xintercept = tm_year,
+        linetype = "dashed",
+        color = "red",
+        linewidth = 0.7
+      ) +
+      annotate(
+        "text",
+        x = tm_year,
+        y = max_annual * 0.95,
+        label = sprintf("Peak: %.1f", tm_year),
+        hjust = -0.1,
+        color = "red",
+        size = 3.5
+      ) +
+      annotate(
+        "text",
+        x = max(complete_curve$year),
+        y = max_annual * 1.05,
+        label = sprintf("R² = %.3f", R2),
+        hjust = 1,
+        size = 4
+      ) +
+      labs(
+        title = "Life Cycle - Annual Publications",
+        x = "Year",
+        y = "Publications (Annual)"
+      ) +
+      scale_y_continuous(limits = c(0, max_annual * 1.1)) +
+      theme_minimal(base_size = 12) +
+      theme(
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+        panel.grid.minor = element_blank()
+      )
+
+    return(p)
+  } else if (plot_type == "cumulative") {
+    # Plot 2: Cumulative Publications
+    reference_lines <- data.frame(
+      y = c(K * 0.5, K * 0.9, K * 0.99),
+      label = c("50%", "90%", "99%")
+    )
+
+    p <- ggplot() +
+      geom_line(
+        data = complete_curve,
+        aes(x = year, y = cumulative),
+        color = "darkgreen",
+        linewidth = 1
+      ) +
+      geom_point(
+        data = observed_data,
+        aes(x = PY, y = cumulative),
+        color = "darkgreen",
+        size = 3
+      ) +
+      geom_hline(
+        data = reference_lines,
+        aes(yintercept = y),
+        linetype = "dotted",
+        color = "gray50",
+        linewidth = 0.5
+      ) +
+      geom_text(
+        data = reference_lines,
+        aes(x = min(complete_curve$year), y = y, label = label),
+        hjust = 0,
+        vjust = -0.5,
+        size = 3,
+        color = "gray50"
+      ) +
+      labs(
+        title = "Cumulative Growth Curve",
+        x = "Year",
+        y = "Cumulative Publications"
+      ) +
+      scale_y_continuous(limits = c(0, K * 1.05)) +
+      theme_minimal(base_size = 12) +
+      theme(
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+        panel.grid.minor = element_blank()
+      )
+
+    return(p)
+  }
+}
+
+#' Plot Life Cycle Analysis with Plotly
+#'
+#' Creates interactive plotly visualizations from lifeCycle results
+#' for use in biblioshiny
+#'
+#' @param results Output from lifeCycle() function
+#' @param plot_type Character: "annual" or "cumulative" (default: "annual")
+#'
+#' @return A plotly object
+#'
+plotLifeCycle <- function(results, plot_type = c("annual", "cumulative")) {
+  if (!requireNamespace("plotly", quietly = TRUE)) {
+    stop(
+      "Package 'plotly' is required. Please install it with: install.packages('plotly')"
+    )
+  }
+
+  plot_type <- match.arg(plot_type)
+
+  # Extract data
+  df <- results$data
+  complete <- results$complete_curve
+  params <- results$parameters_real_years
+  metrics <- results$metrics
+
+  # Separate observed and forecast
+  last_obs_year <- max(df$PY)
+  observed <- complete[complete$year <= last_obs_year, ]
+  forecast <- complete[complete$year > last_obs_year, ]
+
+  if (plot_type == "annual") {
+    # === ANNUAL PUBLICATIONS PLOT ===
+
+    p <- plotly::plot_ly()
+
+    # Observed curve (historical fit)
+    p <- p %>%
+      plotly::add_trace(
+        data = observed,
+        x = ~year,
+        y = ~annual,
+        type = 'scatter',
+        mode = 'lines',
+        name = 'Logistic fit',
+        line = list(color = '#1f77b4', width = 2),
+        hovertemplate = paste0(
+          '<b>Year:</b> %{x}<br>',
+          '<b>Annual:</b> %{y:.0f}<br>',
+          '<extra></extra>'
+        )
+      )
+
+    # Forecast curve
+    if (nrow(forecast) > 0) {
+      p <- p %>%
+        plotly::add_trace(
+          data = forecast,
+          x = ~year,
+          y = ~annual,
+          type = 'scatter',
+          mode = 'lines',
+          name = 'Forecast',
+          line = list(color = '#1f77b4', width = 2, dash = 'dash'),
+          hovertemplate = paste0(
+            '<b>Year:</b> %{x}<br>',
+            '<b>Projected:</b> %{y:.0f}<br>',
+            '<extra></extra>'
+          )
+        )
+    }
+
+    # Observed data points
+    p <- p %>%
+      plotly::add_trace(
+        data = df,
+        x = ~PY,
+        y = ~n,
+        type = 'scatter',
+        mode = 'markers',
+        name = 'Observed',
+        marker = list(color = '#1f77b4', size = 8),
+        hovertemplate = paste0(
+          '<b>Year:</b> %{x}<br>',
+          '<b>Publications:</b> %{y}<br>',
+          '<extra></extra>'
+        )
+      )
+
+    # Peak year line
+    p <- p %>%
+      plotly::add_trace(
+        x = c(params$tm_year, params$tm_year),
+        y = c(0, max(complete$annual) * 1.1),
+        type = 'scatter',
+        mode = 'lines',
+        name = paste0('Peak year (', round(params$tm_year, 1), ')'),
+        line = list(color = 'red', width = 1.5, dash = 'dash'),
+        hoverinfo = 'name'
+      )
+
+    # Layout
+    p <- p %>%
+      plotly::layout(
+        title = list(
+          text = sprintf(
+            "Life Cycle - Annual Publications<br><sup>R² = %.3f | Peak = %.0f publications in %.1f</sup>",
+            metrics$R_squared,
+            params$peak_annual,
+            params$tm_year
+          ),
+          x = 0.5,
+          xanchor = 'center'
+        ),
+        xaxis = list(
+          title = "Year",
+          showgrid = FALSE
+        ),
+        yaxis = list(
+          title = "Publications (Annual)",
+          showgrid = TRUE,
+          gridcolor = '#f0f0f0',
+          rangemode = 'tozero'
+        ),
+        hovermode = 'closest',
+        showlegend = TRUE,
+        legend = list(
+          x = 0.02,
+          y = 0.98,
+          bgcolor = 'rgba(255, 255, 255, 0.8)',
+          bordercolor = '#ddd',
+          borderwidth = 1
+        ),
+        plot_bgcolor = 'white',
+        paper_bgcolor = 'white'
+      )
+  } else {
+    # === CUMULATIVE PUBLICATIONS PLOT ===
+
+    K <- params$K
+
+    p <- plotly::plot_ly()
+
+    # Observed curve
+    p <- p %>%
+      plotly::add_trace(
+        data = observed,
+        x = ~year,
+        y = ~cumulative,
+        type = 'scatter',
+        mode = 'lines',
+        name = 'Logistic fit',
+        line = list(color = '#2ca02c', width = 2),
+        hovertemplate = paste0(
+          '<b>Year:</b> %{x}<br>',
+          '<b>Cumulative:</b> %{y:.0f}<br>',
+          '<b>% of K:</b> %{customdata:.1f}%<br>',
+          '<extra></extra>'
+        ),
+        customdata = ~ (cumulative / K * 100)
+      )
+
+    # Forecast curve
+    if (nrow(forecast) > 0) {
+      p <- p %>%
+        plotly::add_trace(
+          data = forecast,
+          x = ~year,
+          y = ~cumulative,
+          type = 'scatter',
+          mode = 'lines',
+          name = 'Forecast',
+          line = list(color = '#2ca02c', width = 2, dash = 'dash'),
+          hovertemplate = paste0(
+            '<b>Year:</b> %{x}<br>',
+            '<b>Projected:</b> %{y:.0f}<br>',
+            '<b>% of K:</b> %{customdata:.1f}%<br>',
+            '<extra></extra>'
+          ),
+          customdata = ~ (cumulative / K * 100)
+        )
+    }
+
+    # Observed data points
+    p <- p %>%
+      plotly::add_trace(
+        data = df,
+        x = ~PY,
+        y = ~cumulative,
+        type = 'scatter',
+        mode = 'markers',
+        name = 'Observed',
+        marker = list(color = '#2ca02c', size = 8),
+        hovertemplate = paste0(
+          '<b>Year:</b> %{x}<br>',
+          '<b>Cumulative:</b> %{y:.0f}<br>',
+          '<b>% of K:</b> %{customdata:.1f}%<br>',
+          '<extra></extra>'
+        ),
+        customdata = ~ (cumulative / K * 100)
+      )
+
+    # Reference lines (50%, 90%, 99%)
+    ref_levels <- data.frame(
+      level = c(0.5, 0.9, 0.99),
+      label = c("50%", "90%", "99%")
+    )
+
+    for (i in 1:nrow(ref_levels)) {
+      p <- p %>%
+        plotly::add_trace(
+          x = c(min(complete$year), max(complete$year)),
+          y = c(K * ref_levels$level[i], K * ref_levels$level[i]),
+          type = 'scatter',
+          mode = 'lines',
+          name = ref_levels$label[i],
+          line = list(color = 'gray', width = 1, dash = 'dot'),
+          hovertemplate = paste0(
+            '<b>',
+            ref_levels$label[i],
+            ' of K</b><br>',
+            '<b>Value:</b> ',
+            round(K * ref_levels$level[i]),
+            '<br>',
+            '<extra></extra>'
+          ),
+          showlegend = FALSE
+        )
+
+      # Add annotations
+      p <- p %>%
+        plotly::add_annotations(
+          x = min(complete$year),
+          y = K * ref_levels$level[i],
+          text = ref_levels$label[i],
+          xanchor = 'left',
+          yanchor = 'middle',
+          showarrow = FALSE,
+          font = list(size = 10, color = 'gray')
+        )
+    }
+
+    # Layout
+    p <- p %>%
+      plotly::layout(
+        title = list(
+          text = sprintf(
+            "Cumulative Growth Curve<br><sup>Saturation (K) = %.0f publications</sup>",
+            K
+          ),
+          x = 0.5,
+          xanchor = 'center'
+        ),
+        xaxis = list(
+          title = "Year",
+          showgrid = FALSE
+        ),
+        yaxis = list(
+          title = "Cumulative Publications",
+          showgrid = TRUE,
+          gridcolor = '#f0f0f0',
+          rangemode = 'tozero',
+          range = c(0, K * 1.05)
+        ),
+        hovermode = 'closest',
+        showlegend = TRUE,
+        legend = list(
+          x = 0.02,
+          y = 0.98,
+          bgcolor = 'rgba(255, 255, 255, 0.8)',
+          bordercolor = '#ddd',
+          borderwidth = 1
+        ),
+        plot_bgcolor = 'white',
+        paper_bgcolor = 'white'
+      )
+  }
+
+  return(p)
+}
+
+### AUTHOR BIO SKETCH ----
+
+#### GLOBAL PROFILE ----
+# Function to get all unique authors from papers with valid DOI only
+get_all_authors <- function(df, separator = ";") {
+  authors_column <- df$AU
+  doi_column <- if ("DI" %in% names(df)) df$DI else NULL
+
+  # If doi_column is provided, filter authors based on valid DOI
+  if (!is.null(doi_column)) {
+    # Identify entries with valid DOI (not NA and not "<NA>")
+    valid_doi <- !is.na(doi_column) & doi_column != "<NA>" & doi_column != ""
+
+    # Filter authors column based on valid DOI
+    authors_column <- authors_column[valid_doi]
+  }
+
+  # Handle NA and empty strings in authors column
+  valid_entries <- authors_column[!is.na(authors_column) & authors_column != ""]
+
+  # Return empty character vector if no valid entries
+  if (length(valid_entries) == 0) {
+    return(character(0))
+  }
+
+  # Split all author strings using the specified separator
+  all_authors <- unlist(strsplit(valid_entries, separator, fixed = TRUE))
+
+  # Remove leading and trailing whitespace from each author name
+  all_authors_clean <- trimws(all_authors)
+
+  # Remove empty elements that might result from splitting
+  all_authors_clean <- all_authors_clean[all_authors_clean != ""]
+
+  # Remove [ANONYMOUS] entries
+  all_authors_clean <- all_authors_clean[all_authors_clean != "[ANONYMOUS]"]
+
+  # Return unique authors only
+  return(unique(all_authors_clean %>% sort()))
+}
+
+
+authorCard <- function(selected_author, values) {
+  req(selected_author)
+  works_exact <- findAuthorWorks(
+    selected_author,
+    values$M,
+    exact_match = TRUE
+  ) %>%
+    filter(!is.na(doi))
+  if (nrow(works_exact) == 0) {
+    return(HTML("No works found for this author.", type = "error"))
+  }
+  author_position <- works_exact$author_position[1]
+  doi <- works_exact$doi[1]
+  on_line <- check_online()
+
+  if (on_line) {
+    if (!is.null(values$author_data)) {
+      author_data <- values$author_data
+    } else {
+      author_data <- tibble(AUid = character(), display_name = character())
+    }
+
+    if (selected_author %in% author_data$AUid) {
+      AU_data <- author_data %>% dplyr::filter(AUid == selected_author)
+    } else {
+      suppressWarnings(
+        AU_data <- tryCatch(
+          {
+            authorBio(author_position = author_position, doi = doi)
+          },
+          error = function(e) {
+            NULL
+          }
+        )
+      )
+      # check if AUid is a tibble
+      if (is.data.frame(AU_data)) {
+        author_data <- bind_rows(
+          author_data,
+          AU_data %>%
+            mutate(AUid = selected_author)
+        )
+        values$author_data <- author_data
+      } else {
+        return(HTML("No author data found.", type = "error"))
+      }
+    }
+    # values$author_data <- author_data
+    card <- create_author_bio_card(
+      AU_data,
+      width = "100%",
+      show_trends = TRUE,
+      show_topics = TRUE,
+      max_topics = 20
+    )
+  } else {
+    card <- HTML(
+      "No internet connection. Unable to fetch author data.",
+      type = "error"
+    )
+  }
+}
+
+create_empty_author_bio_card <- function(
+  author_name = "Author Name",
+  width = "100%",
+  message = "Author data not found or not yet retrieved"
+) {
+  # Metrics cards with placeholder values
+  metrics_cards <- fluidRow(
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center; opacity: 0.7;",
+        h4("--", style = "margin: 0; font-size: 24px;"),
+        p(
+          "Publications",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    ),
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center; opacity: 0.7;",
+        h4("--", style = "margin: 0; font-size: 24px;"),
+        p(
+          "Citations",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    ),
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center; opacity: 0.7;",
+        h4("--", style = "margin: 0; font-size: 24px;"),
+        p(
+          "H-Index",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    ),
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center; opacity: 0.7;",
+        h4("--", style = "margin: 0; font-size: 24px;"),
+        p(
+          "2yr Mean Cit.",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    )
+  )
+
+  # Empty trend chart placeholder
+  trend_chart <- tagList(
+    h4(
+      "Publication Trends (Last 10 Years)",
+      style = "margin-top: 20px; color: #95A5A6;"
+    ),
+    div(
+      style = "height: 200px; background: #f8f9fa; border-radius: 8px; padding: 15px; 
+                 display: flex; align-items: center; justify-content: center;",
+      div(
+        style = "text-align: center; color: #95A5A6;",
+        tags$i(
+          class = "fa fa-chart-bar",
+          style = "font-size: 48px; margin-bottom: 10px; opacity: 0.3;"
+        ),
+        br(),
+        "No trend data available"
+      )
+    )
+  )
+
+  # Empty topics section
+  topics_section <- tagList(
+    h4("Main Research Topics", style = "margin-top: 20px; color: #95A5A6;"),
+    div(
+      class = "topics-container",
+      style = "text-align: center; padding: 20px; 
+                                            background: #f8f9fa; border-radius: 8px;",
+      div(
+        style = "color: #95A5A6;",
+        tags$i(
+          class = "fa fa-tags",
+          style = "font-size: 36px; margin-bottom: 10px; opacity: 0.3;"
+        ),
+        br(),
+        "No research topics available"
+      )
+    )
+  )
+
+  # Main card UI
+  div(
+    class = "author-bio-card-empty",
+    style = paste0(
+      "width: ",
+      width,
+      "; background: white; 
+                   border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+                   padding: 25px; margin: 15px 0; font-family: 'Segoe UI', Tahoma, sans-serif;
+                   opacity: 0.8; border: 2px dashed #bdc3c7;"
+    ),
+
+    # Header section
+    div(
+      class = "author-header",
+      style = "border-bottom: 2px solid #ecf0f1; padding-bottom: 20px;",
+      fluidRow(
+        column(
+          8,
+          h2(
+            author_name,
+            style = "margin: 0 0 10px 0; color: #95A5A6; font-weight: 600;"
+          ),
+          h5(
+            "Institution not available",
+            style = "margin: 0 0 5px 0; color: #BDC3C7; font-weight: 400;"
+          ),
+          p(
+            "📍 Country not available",
+            style = "margin: 0 0 10px 0; color: #BDC3C7;"
+          )
+        ),
+        column(
+          4,
+          div(
+            style = "text-align: right; padding-top: 10px;",
+            div(
+              tags$span("ORCID not available", style = "color: #95A5A6;"),
+              style = "margin-bottom: 8px;"
+            ),
+            div(tags$span(
+              "OpenAlex Profile not available",
+              style = "color: #95A5A6;"
+            ))
+          )
+        )
+      )
+    ),
+
+    # Info message
+    div(
+      style = "margin: 20px 0; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; 
+                 border-radius: 8px; color: #856404;",
+      tags$i(class = "fa fa-info-circle", style = "margin-right: 8px;"),
+      strong("Information: "),
+      message
+    ),
+
+    # Metrics section
+    div(
+      style = "margin: 20px 0;",
+      h4(
+        "Bibliometric Indicators",
+        style = "margin-bottom: 15px; color: #95A5A6;"
+      ),
+      metrics_cards
+    ),
+
+    # Additional metrics
+    div(
+      style = "margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;",
+      fluidRow(
+        column(6, strong("i10-Index: "), span("--", style = "color: #95A5A6;")),
+        column(
+          6,
+          strong("OpenAlex ID: "),
+          span(
+            "Not available",
+            style = "color: #95A5A6; font-family: monospace; font-size: 12px;"
+          )
+        )
+      )
+    ),
+
+    # Trends and topics placeholders
+    trend_chart,
+    topics_section,
+
+    # Footer
+    div(
+      style = "margin-top: 25px; padding-top: 15px; border-top: 1px solid #ecf0f1; 
+                 font-size: 11px; color: #95A5A6; text-align: center;",
+      paste(
+        "Please retrieve author data to view bibliometric information -",
+        format(Sys.time(), "%Y-%m-%d %H:%M")
+      )
+    )
+  )
+}
+
+create_author_bio_card <- function(
+  author_data,
+  width = "100%",
+  show_trends = TRUE,
+  show_topics = TRUE,
+  max_topics = 5
+) {
+  # Extract key information safely
+  author_name <- author_data$display_name[1] %||% "Unknown Author"
+  institution <- author_data$primary_affiliation[1] %||%
+    author_data$last_known_institutions[[1]]$display_name[1] %||%
+    "Institution not available"
+  institution_ror <- author_data$primary_affiliation_ror[1] %||%
+    author_data$last_known_institutions[[1]]$ror[1] %||%
+    NA
+  country <- author_data$primary_affiliation_country[1] %||%
+    author_data$last_known_institutions[[1]]$country_code[1] %||%
+    "Country not available"
+
+  works_count <- author_data$works_count[1] %||% 0
+  citations <- author_data$cited_by_count[1] %||% 0
+  h_index <- author_data$h_index[1] %||% 0
+  i10_index <- author_data$i10_index[1] %||% 0
+  mean_citedness <- author_data$`2yr_mean_citedness`[1] %||% 0
+
+  orcid <- author_data$orcid[1]
+  position_type <- author_data$author_position_type[1] %||% "author"
+  is_corresponding <- author_data$is_corresponding[1] %||% FALSE
+
+  # Create ORCID link if available
+  orcid_link <- if (!is.null(orcid) && !is.na(orcid)) {
+    tags$a(
+      href = orcid,
+      target = "_blank",
+      tags$img(src = "ORCID.jpg", style = "height: 16px; margin-right: 5px;"),
+      "ORCID Profile",
+      style = "text-decoration: none; color: #338B13;"
+    )
+  } else {
+    tags$span("ORCID not available", style = "color: #666;")
+  }
+
+  # Create OpenAlex link
+  openalex_id <- gsub("https://openalex.org/", "", author_data$id[1])
+  openalex_link <- tags$a(
+    href = paste0("https://openalex.org/", openalex_id),
+    target = "_blank",
+    tags$img(src = "openalex.jpg", style = "height: 16px; margin-right: 5px;"),
+    "OpenAlex Profile",
+    style = "text-decoration: none; color: #E74C3C;"
+  )
+
+  # Format numbers with thousands separator
+  format_number <- function(x) {
+    if (is.null(x) || is.na(x)) {
+      return("0")
+    }
+    format(x, big.mark = ",", scientific = FALSE)
+  }
+
+  # Create metrics cards
+  metrics_cards <- fluidRow(
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center;",
+        h4(format_number(works_count), style = "margin: 0; font-size: 24px;"),
+        p(
+          "Publications",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    ),
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center;",
+        h4(format_number(citations), style = "margin: 0; font-size: 24px;"),
+        p(
+          "Citations",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    ),
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center;",
+        h4(h_index, style = "margin: 0; font-size: 24px;"),
+        p(
+          "H-Index",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    ),
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center;",
+        h4(round(mean_citedness, 1), style = "margin: 0; font-size: 24px;"),
+        p(
+          "2yr Mean Cit.",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    )
+  )
+
+  # Create publication trend chart if requested
+  trend_chart <- if (show_trends && !is.null(author_data$counts_by_year[[1]])) {
+    counts_data <- author_data$counts_by_year[[1]]
+    recent_data <- counts_data[
+      counts_data$year >= (max(counts_data$year) - 9),
+    ]
+    # Order by year from oldest to newest
+    recent_data <- recent_data[order(recent_data$year), ]
+
+    tagList(
+      h4(
+        "Publication Trends (Last 10 Years)",
+        style = "margin-top: 20px; color: #2C3E50;"
+      ),
+      div(
+        style = "height: 200px; background: #f8f9fa; border-radius: 8px; padding: 15px;",
+        # Simple bar chart representation
+        div(
+          style = "display: flex; align-items: end; height: 170px; gap: 3px;",
+          lapply(1:nrow(recent_data), function(i) {
+            height_pct <- (recent_data$works_count[i] /
+              max(recent_data$works_count, na.rm = TRUE)) *
+              100
+            div(
+              style = paste0(
+                "background: linear-gradient(to top, #3498db, #2980b9); 
+                                   height: ",
+                height_pct,
+                "%; 
+                                   width: ",
+                100 / nrow(recent_data) - 1,
+                "%; 
+                                   border-radius: 3px 3px 0 0;
+                                   position: relative;"
+              ),
+              div(
+                style = "position: absolute; bottom: -20px; font-size: 10px; 
+                               width: 100%; text-align: center; color: #666;",
+                recent_data$year[i]
+              ),
+              div(
+                style = "position: absolute; top: -15px; font-size: 9px; 
+                               width: 100%; text-align: center; color: #333; font-weight: bold;",
+                recent_data$works_count[i]
+              )
+            )
+          })
+        )
+      )
+    )
+  } else {
+    NULL
+  }
+
+  # Create research topics section if requested
+  topics_section <- if (show_topics && !is.null(author_data$topics[[1]])) {
+    topics_data <- author_data$topics[[1]]
+    top_topics <- topics_data[topics_data$type == "topic", ][
+      1:min(max_topics, sum(topics_data$type == "topic")),
+    ] %>%
+      sample_frac(size = 1)
+
+    # Calculate font sizes based on counts
+    if (nrow(top_topics) > 0) {
+      min_count <- min(top_topics$count, na.rm = TRUE)
+      max_count <- max(top_topics$count, na.rm = TRUE)
+      min_font_size <- 10
+      max_font_size <- 18
+
+      # Calculate proportional font sizes
+      font_sizes <- if (max_count == min_count) {
+        rep(min_font_size, nrow(top_topics))
+      } else {
+        min_font_size +
+          (top_topics$count - min_count) /
+            (max_count - min_count) *
+            (max_font_size - min_font_size)
+      }
+    }
+
+    tagList(
+      h4("Main Research Topics", style = "margin-top: 20px; color: #2C3E50;"),
+      div(
+        class = "topics-container",
+        style = "text-align: center;",
+        lapply(1:nrow(top_topics), function(i) {
+          if (!is.na(top_topics$display_name[i]) && !is.na(top_topics$id[i])) {
+            tags$a(
+              href = top_topics$id[i],
+              target = "_blank",
+              class = "topic-badge",
+              style = paste0(
+                "display: inline-block; background: ",
+                colorlist()[i],
+                # sample(
+                # c("#3498db", "#e74c3c", "#2ecc71", "#f39c12", "#9b59b6"),
+                # 1),
+                "; opacity: 0.7; color: white; padding: 5px 10px; margin: 3px; 
+                            border-radius: 15px; font-weight: 500; text-decoration: none;
+                            font-size: ",
+                round(font_sizes[i], 1),
+                "px;"
+              ),
+              paste0(top_topics$display_name[i], " (", top_topics$count[i], ")")
+            )
+          }
+        })
+      )
+    )
+  } else {
+    NULL
+  }
+
+  institution_link <- tags$a(
+    href = institution_ror,
+    target = "_blank",
+    institution
+    # ,style = "text-decoration: none; color: #E74C3C;"
+  )
+
+  # Main card UI
+  div(
+    class = "author-bio-card",
+    style = paste0(
+      "width: ",
+      width,
+      "; background: white; 
+                   border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+                   padding: 25px; margin: 15px 0; font-family: 'Segoe UI', Tahoma, sans-serif;"
+    ),
+
+    # Header section
+    div(
+      class = "author-header",
+      style = "border-bottom: 2px solid #ecf0f1; padding-bottom: 20px;",
+      fluidRow(
+        column(
+          8,
+          h2(
+            author_name,
+            style = "margin: 0 0 10px 0; color: #2C3E50; font-weight: 600;"
+          ),
+          h5(
+            institution_link,
+            style = "margin: 0 0 5px 0; color: #7F8C8D; font-weight: 400;"
+          ),
+          p(paste("📍", country), style = "margin: 0 0 10px 0; color: #95A5A6;")
+        ),
+        column(
+          4,
+          div(
+            style = "text-align: right; padding-top: 10px;",
+            div(orcid_link, style = "margin-bottom: 8px;"),
+            div(openalex_link)
+          )
+        )
+      )
+    ),
+
+    # Metrics section
+    div(
+      style = "margin: 20px 0;",
+      h4(
+        "Bibliometric Indicators",
+        style = "margin-bottom: 15px; color: #2C3E50;"
+      ),
+      metrics_cards
+    ),
+
+    # Additional metrics
+    div(
+      style = "margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;",
+      fluidRow(
+        column(
+          6,
+          strong("i10-Index: "),
+          span(i10_index, style = "color: #2980b9;")
+        ),
+        column(
+          6,
+          strong("OpenAlex ID: "),
+          span(
+            openalex_id,
+            style = "color: #666; font-family: monospace; font-size: 12px;"
+          )
+        )
+      )
+    ),
+
+    # Trends and topics
+    trend_chart,
+    topics_section,
+
+    # Footer with source information
+    div(
+      style = "margin-top: 25px; padding-top: 15px; border-top: 1px solid #ecf0f1; 
+                 font-size: 11px; color: #95A5A6; text-align: center;",
+      paste(
+        "Data retrieved from OpenAlex on",
+        format(author_data$query_timestamp[1], "%Y-%m-%d %H:%M")
+      )
+    )
+  )
+}
+
+# Wrapper function for use in Shiny renderUI
+
+render_author_bio_card <- function(author_data, ...) {
+  renderUI({
+    create_author_bio_card(author_data, ...)
+  })
+}
+
+#### LOCAL PROFILE ----
+create_local_author_bio_card <- function(
+  local_author_data,
+  selected_author,
+  max_py = 2024,
+  width = "100%",
+  show_trends = TRUE,
+  show_keywords = TRUE,
+  max_keywords = 8,
+  max_works_display = 100
+) {
+  # Extract author information
+  author_name <- to_title_case(selected_author)
+
+  # Calculate metrics from local data
+  works_count <- nrow(local_author_data)
+  total_citations <- sum(as.numeric(local_author_data$TC), na.rm = TRUE)
+  years <- as.numeric(local_author_data$PY)
+  current_year <- as.numeric(format(Sys.Date(), "%Y"))
+
+  # Calculate mean citations per year (weighted by age of publications)
+  publication_ages <- current_year - years
+  publication_ages[publication_ages <= 0] <- 1 # Avoid division by zero
+  mean_citations_per_year <- mean(
+    as.numeric(local_author_data$TC) / publication_ages,
+    na.rm = TRUE
+  )
+
+  # Calculate additional metrics
+  years_active <- max(years, na.rm = TRUE) - min(years, na.rm = TRUE) + 1
+  avg_citations_per_work <- total_citations / works_count
+
+  # Calculate h-index (simplified version)
+  citations_sorted <- sort(as.numeric(local_author_data$TC), decreasing = TRUE)
+  h_index <- sum(citations_sorted >= seq_along(citations_sorted))
+
+  # Get most recent years for activity
+  recent_years <- years[years >= (max_py - 4)]
+  recent_productivity <- length(recent_years)
+
+  # Format numbers with thousands separator
+  format_number <- function(x) {
+    if (is.null(x) || is.na(x)) {
+      return("0")
+    }
+    format(round(x), big.mark = ",", scientific = FALSE)
+  }
+
+  # Create metrics cards
+  metrics_cards <- fluidRow(
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center;",
+        h4(format_number(works_count), style = "margin: 0; font-size: 24px;"),
+        p(
+          "Publications",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    ),
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center;",
+        h4(
+          format_number(total_citations),
+          style = "margin: 0; font-size: 24px;"
+        ),
+        p(
+          "Total Citations",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    ),
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center;",
+        h4(h_index, style = "margin: 0; font-size: 24px;"),
+        p(
+          "H-Index (Local)",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    ),
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center;",
+        h4(
+          round(mean_citations_per_year, 1),
+          style = "margin: 0; font-size: 24px;"
+        ),
+        p(
+          "Cit./Year",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    )
+  )
+
+  # Create publication trend chart if requested
+  trend_chart <- if (show_trends && length(years) > 0) {
+    # Create yearly publication counts
+    year_counts <- table(years)
+    year_df <- data.frame(
+      year = as.numeric(names(year_counts)),
+      count = as.numeric(year_counts)
+    )
+    # Get recent 10 years
+    recent_years_range <- max(year_df$year) - 9
+    recent_data <- year_df[year_df$year >= recent_years_range, ]
+    # Fill missing years with 0
+    all_years <- recent_years_range:max(year_df$year)
+    complete_data <- data.frame(year = all_years)
+    complete_data <- merge(complete_data, recent_data, all = TRUE)
+    complete_data$count[is.na(complete_data$count)] <- 0
+    complete_data <- complete_data[order(complete_data$year), ]
+
+    if (nrow(complete_data) > 0) {
+      tagList(
+        h4(
+          "Publication Trends (Last 10 Years)",
+          style = "margin-top: 20px; color: #2C3E50;"
+        ),
+        div(
+          style = "height: 200px; background: #f8f9fa; border-radius: 8px; padding: 15px;",
+          div(
+            style = "display: flex; align-items: end; height: 170px; gap: 3px;",
+            lapply(1:nrow(complete_data), function(i) {
+              max_count <- max(complete_data$count, na.rm = TRUE)
+              height_pct <- if (max_count > 0) {
+                (complete_data$count[i] / max_count) * 100
+              } else {
+                0
+              }
+              div(
+                style = paste0(
+                  "background: linear-gradient(to top, #3498db, #2980b9); 
+                                     height: ",
+                  max(height_pct, 2),
+                  "%; 
+                                     width: ",
+                  100 / nrow(complete_data) - 1,
+                  "%; 
+                                     border-radius: 3px 3px 0 0;
+                                     position: relative;"
+                ),
+                div(
+                  style = "position: absolute; bottom: -20px; font-size: 10px; 
+                                 width: 100%; text-align: center; color: #666;",
+                  complete_data$year[i]
+                ),
+                div(
+                  style = "position: absolute; top: -15px; font-size: 9px; 
+                                 width: 100%; text-align: center; color: #333; font-weight: bold;",
+                  complete_data$count[i]
+                )
+              )
+            })
+          )
+        )
+      )
+    }
+  } else {
+    NULL
+  }
+
+  # Create keywords section if requested
+  keywords_section <- if (show_keywords && "DE" %in% names(local_author_data)) {
+    # Extract and process keywords
+    all_keywords <- unlist(strsplit(
+      paste(local_author_data$DE, collapse = ";"),
+      ";"
+    ))
+    all_keywords <- to_title_case(trimws(toupper(all_keywords)))
+    all_keywords <- all_keywords[all_keywords != "" & !is.na(all_keywords)]
+
+    if (length(all_keywords) > 0) {
+      keyword_freq <- sort(table(all_keywords), decreasing = TRUE)
+      top_keywords <- head(keyword_freq, max_keywords)
+      top_keywords <- top_keywords[sample(length(top_keywords))] # Shuffle order
+
+      # Calculate font sizes based on frequency
+      if (length(top_keywords) > 0) {
+        min_freq <- min(top_keywords)
+        max_freq <- max(top_keywords)
+        min_font_size <- 10
+        max_font_size <- 18
+
+        font_sizes <- if (max_freq == min_freq) {
+          rep(min_font_size, length(top_keywords))
+        } else {
+          min_font_size +
+            (top_keywords - min_freq) /
+              (max_freq - min_freq) *
+              (max_font_size - min_font_size)
+        }
+      }
+
+      tagList(
+        h4("Main Keywords", style = "margin-top: 20px; color: #2C3E50;"),
+        div(
+          class = "keywords-container",
+          style = "text-align: center;",
+          lapply(1:length(top_keywords), function(i) {
+            colors <- c(
+              "#3498db",
+              "#e74c3c",
+              "#2ecc71",
+              "#f39c12",
+              "#9b59b6",
+              "#1abc9c",
+              "#34495e",
+              "#e67e22"
+            )
+            color <- colors[((i - 1) %% length(colors)) + 1]
+
+            tags$span(
+              class = "keyword-badge",
+              style = paste0(
+                "display: inline-block; background: ",
+                color,
+                "; opacity: 0.8; color: white; padding: 5px 12px; margin: 3px; 
+                            border-radius: 15px; font-weight: 500;
+                            font-size: ",
+                round(font_sizes[i], 1),
+                "px;"
+              ),
+              paste0(names(top_keywords)[i], " (", top_keywords[i], ")")
+            )
+          })
+        )
+      )
+    }
+  } else {
+    NULL
+  }
+
+  # Create works list (scrollable)
+  works_section <- if (nrow(local_author_data) > 0) {
+    # Prepare works data
+    works_to_show <- head(
+      local_author_data[
+        order(as.numeric(local_author_data$PY), decreasing = TRUE),
+      ],
+      max_works_display
+    )
+
+    works_list <- lapply(1:nrow(works_to_show), function(i) {
+      work <- works_to_show[i, ]
+      title <- work$TI %||% "Title not available"
+      journal <- work$SO %||% "Journal not available"
+      year <- work$PY %||% "Year not available"
+      doi <- work$DI %||% ""
+      citations <- as.numeric(work$TC) %||% 0
+
+      # Create DOI link if available
+      doi_link <- if (!is.null(doi) && !is.na(doi) && doi != "") {
+        tags$a(
+          href = paste0("https://doi.org/", doi),
+          target = "_blank",
+          style = "color: #3498db; text-decoration: none; font-size: 11px;",
+          paste0("DOI: ", doi)
+        )
+      } else {
+        tags$span(
+          "DOI not available",
+          style = "color: #95a5a6; font-size: 11px;"
+        )
+      }
+
+      div(
+        class = "work-item",
+        style = "border-bottom: 1px solid #ecf0f1; padding: 12px 0; margin: 0;",
+        div(
+          style = "margin-bottom: 8px;",
+          tags$h6(
+            title,
+            style = "margin: 0 0 5px 0; color: #2c3e50; font-weight: 600; line-height: 1.3;"
+          )
+        ),
+        div(
+          style = "margin-bottom: 8px;",
+          tags$span(
+            journal,
+            style = "color: #7f8c8d; font-style: italic; font-size: 13px; margin-right: 15px;"
+          ),
+          tags$span(
+            paste0("(", year, ")"),
+            style = "color: #95a5a6; font-size: 13px; margin-right: 15px;"
+          ),
+          tags$span(
+            paste0("Citations: ", format_number(citations)),
+            style = "color: #e74c3c; font-weight: 500; font-size: 12px;"
+          )
+        ),
+        div(style = "margin-top: 5px;", doi_link)
+      )
+    })
+
+    tagList(
+      h4(
+        paste0("Publications (", nrow(local_author_data), " total)"),
+        style = "margin-top: 20px; color: #2C3E50;"
+      ),
+      div(
+        class = "works-container",
+        style = "max-height: 400px; overflow-y: auto; background: #f8f9fa; 
+                   border-radius: 8px; padding: 15px; border: 1px solid #e9ecef;",
+        works_list
+      )
+    )
+  } else {
+    NULL
+  }
+
+  # Main card UI
+  div(
+    class = "local-author-bio-card",
+    style = paste0(
+      "width: ",
+      width,
+      "; background: white; 
+                   border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+                   padding: 25px; margin: 15px 0; font-family: 'Segoe UI', Tahoma, sans-serif;"
+    ),
+
+    # Header section
+    div(
+      class = "author-header",
+      style = "border-bottom: 2px solid #ecf0f1; padding-bottom: 20px;",
+      h2(
+        author_name,
+        style = "margin: 0 0 10px 0; color: #2C3E50; font-weight: 600;"
+      ),
+      p(
+        "📊 Local Collection Profile",
+        style = "margin: 0 0 10px 0; color: #7F8C8D; font-style: italic;"
+      )
+    ),
+
+    # Metrics section
+    div(
+      style = "margin: 20px 0;",
+      h4(
+        "Local Bibliometric Indicators",
+        style = "margin-bottom: 15px; color: #2C3E50;"
+      ),
+      metrics_cards
+    ),
+
+    # Additional metrics
+    div(
+      style = "margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;",
+      fluidRow(
+        column(
+          4,
+          strong("Years Active: "),
+          span(years_active, style = "color: #2980b9;")
+        ),
+        column(
+          4,
+          strong("Avg Cit./Work: "),
+          span(round(avg_citations_per_work, 1), style = "color: #27ae60;")
+        ),
+        column(
+          4,
+          strong("Recent Activity (5yr): "),
+          span(recent_productivity, style = "color: #e74c3c;")
+        )
+      )
+    ),
+
+    # Trends and keywords
+    trend_chart,
+    keywords_section,
+
+    # Works section
+    works_section,
+
+    # Footer with source information
+    div(
+      style = "margin-top: 25px; padding-top: 15px; border-top: 1px solid #ecf0f1; 
+                 font-size: 11px; color: #95A5A6; text-align: center;",
+      paste(
+        "Local collection data analyzed on",
+        format(Sys.time(), "%Y-%m-%d %H:%M")
+      )
+    )
+  )
+}
+
+create_empty_local_author_bio_card <- function(
+  author_name = "Author Name Not Available",
+  width = "100%",
+  message = "Local author data not found or not yet processed"
+) {
+  # Metrics cards with placeholder values
+  metrics_cards <- fluidRow(
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center; opacity: 0.7;",
+        h4("--", style = "margin: 0; font-size: 24px;"),
+        p(
+          "Publications",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    ),
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center; opacity: 0.7;",
+        h4("--", style = "margin: 0; font-size: 24px;"),
+        p(
+          "Total Citations",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    ),
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center; opacity: 0.7;",
+        h4("--", style = "margin: 0; font-size: 24px;"),
+        p(
+          "H-Index (Local)",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    ),
+    column(
+      3,
+      div(
+        class = "metric-card",
+        style = "background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%); 
+                        color: white; padding: 15px; border-radius: 8px; text-align: center; opacity: 0.7;",
+        h4("--", style = "margin: 0; font-size: 24px;"),
+        p(
+          "Cit./Year",
+          style = "margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;"
+        )
+      )
+    )
+  )
+
+  # Empty trend chart placeholder
+  trend_chart <- tagList(
+    h4(
+      "Publication Trends (Last 10 Years)",
+      style = "margin-top: 20px; color: #95A5A6;"
+    ),
+    div(
+      style = "height: 200px; background: #f8f9fa; border-radius: 8px; padding: 15px; 
+                 display: flex; align-items: center; justify-content: center; border: 1px solid #e9ecef;",
+      div(
+        style = "text-align: center; color: #95A5A6;",
+        tags$div(
+          "📊",
+          style = "font-size: 48px; margin-bottom: 10px; opacity: 0.3;"
+        ),
+        br(),
+        "No trend data available"
+      )
+    )
+  )
+
+  # Empty keywords section
+  keywords_section <- tagList(
+    h4("Main Keywords", style = "margin-top: 20px; color: #95A5A6;"),
+    div(
+      class = "keywords-container",
+      style = "text-align: center; padding: 20px; 
+                                             background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;",
+      div(
+        style = "color: #95A5A6;",
+        tags$div(
+          "🏷️",
+          style = "font-size: 36px; margin-bottom: 10px; opacity: 0.3;"
+        ),
+        br(),
+        "No keywords available"
+      )
+    )
+  )
+
+  # Empty works section
+  works_section <- tagList(
+    h4("Publications (0 total)", style = "margin-top: 20px; color: #95A5A6;"),
+    div(
+      class = "works-container",
+      style = "height: 200px; background: #f8f9fa; border-radius: 8px; padding: 15px; 
+                 border: 1px solid #e9ecef; display: flex; align-items: center; justify-content: center;",
+      div(
+        style = "text-align: center; color: #95A5A6;",
+        tags$div(
+          "📄",
+          style = "font-size: 48px; margin-bottom: 10px; opacity: 0.3;"
+        ),
+        br(),
+        "No publications available",
+        br(),
+        tags$small(
+          "Publications will appear here when local data is processed",
+          style = "font-style: italic; opacity: 0.7;"
+        )
+      )
+    )
+  )
+
+  # Main card UI
+  div(
+    class = "local-author-bio-card-empty",
+    style = paste0(
+      "width: ",
+      width,
+      "; background: white; 
+                   border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+                   padding: 25px; margin: 15px 0; font-family: 'Segoe UI', Tahoma, sans-serif;
+                   opacity: 0.8; border: 2px dashed #bdc3c7;"
+    ),
+
+    # Header section
+    div(
+      class = "author-header",
+      style = "border-bottom: 2px solid #ecf0f1; padding-bottom: 20px;",
+      h2(
+        author_name,
+        style = "margin: 0 0 10px 0; color: #95A5A6; font-weight: 600;"
+      ),
+      p(
+        "📊 Local Collection Profile",
+        style = "margin: 0 0 10px 0; color: #BDC3C7; font-style: italic;"
+      )
+    ),
+
+    # Info message
+    div(
+      style = "margin: 20px 0; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; 
+                 border-radius: 8px; color: #856404;",
+      tags$span("ℹ️", style = "margin-right: 8px; font-size: 16px;"),
+      strong("Information: "),
+      message
+    ),
+
+    # Metrics section
+    div(
+      style = "margin: 20px 0;",
+      h4(
+        "Local Bibliometric Indicators",
+        style = "margin-bottom: 15px; color: #95A5A6;"
+      ),
+      metrics_cards
+    ),
+
+    # Additional metrics
+    div(
+      style = "margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;",
+      fluidRow(
+        column(
+          4,
+          strong("Years Active: "),
+          span("--", style = "color: #95A5A6;")
+        ),
+        column(
+          4,
+          strong("Avg Cit./Work: "),
+          span("--", style = "color: #95A5A6;")
+        ),
+        column(
+          4,
+          strong("Recent Activity (5yr): "),
+          span("--", style = "color: #95A5A6;")
+        )
+      )
+    ),
+
+    # Trends, keywords, and works placeholders
+    trend_chart,
+    keywords_section,
+    works_section,
+
+    # Footer
+    div(
+      style = "margin-top: 25px; padding-top: 15px; border-top: 1px solid #ecf0f1; 
+                 font-size: 11px; color: #95A5A6; text-align: center;",
+      paste(
+        "Please process local collection data to view bibliometric information -",
+        format(Sys.time(), "%Y-%m-%d %H:%M")
+      )
+    )
+  )
+}
+
+# Helper function for safe extraction (null coalescing operator)
+`%||%` <- function(x, y) if (is.null(x) || is.na(x) || length(x) == 0) y else x
+
+
 # from igraph to png file
 igraph2PNG <- function(x, filename, width = 10, height = 7, dpi = 75) {
   V(x)$centr <- centr_betw(x)$res
@@ -715,45 +2479,106 @@ reduceRefs <- function(A) {
   return(A)
 }
 
-check_online <- function(host = "8.8.8.8", min_success = 1) {
-  # Use ping command to test connectivity (works on Windows, Linux, Mac)
-  ping_cmd <- if (.Platform$OS.type == "windows") {
-    sprintf("ping -n %d %s", min_success, host)
-  } else {
-    sprintf("ping -c %d %s", min_success, host)
-  }
+check_online <- function(
+  host = "8.8.8.8",
+  timeout = 5,
+  # min_success = 1,
+  method = "ping" # method = c("ping", "socket", "http")
+) {
+  #method <- match.arg(method)
 
-  result <- suppressWarnings(system(
-    ping_cmd,
-    intern = TRUE,
-    ignore.stderr = TRUE
-  ))
-
-  success <- any(grepl("time=", result, ignore.case = TRUE))
-
-  if (success) {
-    # message("✅ Host is reachable.")
-    # Extract average latency (optional)
-    latency_line <- result[grepl("time=", result)]
-    times <- as.numeric(sub(".*time=([0-9.]+).*", "\\1", latency_line))
-    avg_time <- mean(times, na.rm = TRUE)
-    # message(sprintf("📶 Average latency: %.1f ms", avg_time))
-    if (avg_time < 200) {
-      return(TRUE)
+  if (method == "ping") {
+    # Usa solo il codice di ritorno, non analizza l'output
+    ping_cmd <- if (.Platform$OS.type == "windows") {
+      sprintf("ping -n 1 -w %d %s", timeout * 1000, host)
     } else {
-      return(FALSE)
+      sprintf("ping -c 1 -W %d %s", timeout, host)
     }
-    #return(TRUE)
-  } else {
-    #message(FALSE)
-    return(FALSE)
+    exit_code <- suppressWarnings(system(
+      ping_cmd,
+      ignore.stdout = TRUE,
+      ignore.stderr = TRUE
+    ))
+    return(exit_code == 0)
+  } else if (method == "socket") {
+    # Connessione TCP a DNS Google (porta 53)
+    tryCatch(
+      {
+        con <- socketConnection(
+          host = host,
+          port = 53,
+          blocking = TRUE,
+          open = "r+",
+          timeout = timeout
+        )
+        close(con)
+        return(TRUE)
+      },
+      error = function(e) {
+        return(FALSE)
+      }
+    )
+  } else if (method == "http") {
+    # Richiesta HTTP
+    tryCatch(
+      {
+        # check if host start with http or https and add if missing
+        if (!grepl("^https?://", host)) {
+          host <- paste0("https://", host)
+        }
+
+        # con <- url("https://www.google.com", open = "rb")
+        con <- url(host, open = "rb")
+        on.exit(close(con))
+        readLines(con, n = 1, warn = FALSE)
+        return(TRUE)
+      },
+      error = function(e) {
+        return(FALSE)
+      }
+    )
   }
 }
+
+# check_online <- function(host = "8.8.8.8", min_success = 1) {
+#   # Use ping command to test connectivity (works on Windows, Linux, Mac)
+#   ping_cmd <- if (.Platform$OS.type == "windows") {
+#     sprintf("ping -n %d %s", min_success, host)
+#   } else {
+#     sprintf("ping -c %d %s", min_success, host)
+#   }
+#
+#   result <- suppressWarnings(system(
+#     ping_cmd,
+#     intern = TRUE,
+#     ignore.stderr = TRUE
+#   ))
+#
+#   success <- any(grepl("time=", result, ignore.case = TRUE))
+#
+#   if (success) {
+#     # message("✅ Host is reachable.")
+#     # Extract average latency (optional)
+#     latency_line <- result[grepl("time=", result)]
+#     times <- as.numeric(sub(".*time=([0-9.]+).*", "\\1", latency_line))
+#     avg_time <- mean(times, na.rm = TRUE)
+#     # message(sprintf("📶 Average latency: %.1f ms", avg_time))
+#     if (avg_time < 200) {
+#       return(TRUE)
+#     } else {
+#       return(FALSE)
+#     }
+#     #return(TRUE)
+#   } else {
+#     #message(FALSE)
+#     return(FALSE)
+#   }
+# }
 
 notifications <- function() {
   ## check connection and download notifications
   #online <- is_online()
-  online <- check_online(host = "www.bibliometrix.org", min_success = 1)
+  online <- check_online(host = "www.bibliometrix.org")
   location <- "https://www.bibliometrix.org/bs_notifications/biblioshiny_notifications.csv"
   notifOnline <- NULL
   if (isTRUE(online)) {
@@ -802,11 +2627,11 @@ notifications <- function() {
       # notifOnline <- notifOnline %>%
       #   dplyr::slice_head(n = 5)
       notifTot <- notifOnline %>%
-        filter(action == TRUE) %>%
+        dplyr::filter(action == TRUE) %>%
         mutate(status = "danger") %>%
         dplyr::slice_head(n = 5)
       notifOnline %>%
-        filter(action == TRUE) %>%
+        dplyr::filter(action == TRUE) %>%
         write.csv(file = file, quote = FALSE, row.names = FALSE)
     },
     # both files exist.
@@ -823,7 +2648,7 @@ notifications <- function() {
         ) %>%
         select(nots, href, action, status) %>%
         arrange(status) %>%
-        filter(action == TRUE) %>%
+        dplyr::filter(action == TRUE) %>%
         dplyr::slice_head(n = 5)
       notifTot %>%
         select(-status) %>%
@@ -878,6 +2703,20 @@ initial <- function(values) {
   }
 
   return(values)
+}
+
+resetAnalysis <- function() {
+  # reset menus
+  output$lifeCycleSummaryUIid <- renderUI({
+    div()
+  })
+  output$DLCPlotYear <- renderUI({
+    div()
+  })
+
+  output$DLCPlotCum <- renderUI({
+    div()
+  })
 }
 
 ### TALL Export functions ----
@@ -1860,7 +3699,8 @@ historiograph <- function(input, values) {
   )
   # values$Histfield="done"
   # }
-
+  values$histResults$histData <- values$histResults$histData %>%
+    tibble::rownames_to_column(var = "SR")
   # titlelabel <- input$titlelabel
   values$histlog <- (values$histPlot <- histPlot(
     values$histResults,
@@ -1871,6 +3711,7 @@ historiograph <- function(input, values) {
     label = input$titlelabel,
     verbose = FALSE
   ))
+
   values$histResults$histData$DOI <- paste0(
     '<a href=\"https://doi.org/',
     values$histResults$histData$DOI,
@@ -1878,6 +3719,7 @@ historiograph <- function(input, values) {
     values$histResults$histData$DOI,
     "</a>"
   )
+
   values$histResults$histData <- values$histResults$histData %>%
     left_join(
       values$histPlot$layout %>%
@@ -1889,6 +3731,7 @@ historiograph <- function(input, values) {
     select(!color) %>%
     group_by(cluster) %>%
     arrange(Year, .by_group = TRUE)
+
   return(values)
 }
 
@@ -2116,6 +3959,7 @@ cocNetwork <- function(input, values) {
       cluster = input$cocCluster,
       remove.isolates = (input$coc.isolates == "yes"),
       community.repulsion = input$coc.repulsion / 2,
+      seed = values$random_seed,
       verbose = FALSE
     )
 
@@ -2278,12 +4122,20 @@ socialStructure <- function(input, values) {
   ) {
     values$colField <- input$colField
 
-    # values$cluster="walktrap"
+    if (!"nAU" %in% names(values$M)) {
+      values$M$nAU <- str_count(values$M$AU, ";") + 1
+    }
+
     switch(
       input$colField,
       COL_AU = {
+        if (input$col.filterMaxAuthors) {
+          M_AU <- values$M %>% filter(nAU <= 20)
+        } else {
+          M_AU <- values$M
+        }
         values$ColNetRefs <- biblioNetwork(
-          values$M,
+          M_AU,
           analysis = "collaboration",
           network = "authors",
           n = n,
@@ -3804,6 +5656,7 @@ dfLabel <- function() {
     "MainInfo",
     "AnnualSciProd",
     "AnnualCitPerYear",
+    "LifeCycle",
     "ThreeFieldsPlot",
     "MostRelSources",
     "MostLocCitSources",
@@ -3852,6 +5705,7 @@ dfLabel <- function() {
     "Main Information",
     "Annual Scientific Production",
     "Annual Citation Per Year",
+    "Life Cycle of Publications",
     "Three-Field Plot",
     "Most Relevant Sources",
     "Most Local Cited Sources",
@@ -4153,367 +6007,261 @@ overlayPlotly <- function(VIS) {
 }
 
 
-menuList <- function(values) {
-  TC <- ISI <- MLCS <- MLCA <- AFF <- MCC <- DB_TC <- DB_CR <- CR <- FALSE
-  if (!"TC" %in% values$missTags) {
-    TC <- TRUE
-  }
-  if ("ISI" %in% values$M$DB[1] & !"CR" %in% values$missTags) {
-    MLCS <- TRUE
-  }
-  if ("ISI" %in% values$M$DB[1] & !"CR" %in% values$missTags) {
-    MLCA <- TRUE
-  }
-  if ("ISI" %in% values$M$DB[1]) {
-    ISI <- TRUE
-  }
-  if (!"C1" %in% values$missTags) {
-    AFF <- TRUE
-  }
-  if (!"CR" %in% values$missTags) {
-    CR <- TRUE
-  }
-  if (!"TC" %in% values$missTags & !"C1" %in% values$missTags) {
-    MCC <- TRUE
-  }
-  if (sum(c("SCOPUS", "ISI") %in% values$M$DB[1]) > 0) {
-    DB_CR <- TRUE
-  }
-  if (sum(c("SCOPUS", "ISI", "OPENALEX", "LENS") %in% values$M$DB[1]) > 0) {
-    DB_TC <- TRUE
-  }
+# MENU VISIBILITY MANAGEMENT ----
+# This function updates visibility of submenu items based on metadata availability
+updateMenuVisibility <- function(session, values) {
+  # Extract metadata availability flags
+  TC <- !("TC" %in% values$missTags)
+  MLCS <- MLCA <- ("ISI" %in% values$M$DB[1] & !"CR" %in% values$missTags)
+  ISI <- ("ISI" %in% values$M$DB[1])
+  AFF <- !("C1" %in% values$missTags)
+  CR <- !("CR" %in% values$missTags)
+  MCC <- (!"TC" %in% values$missTags & !"C1" %in% values$missTags)
+  DB_CR <- (sum(c("SCOPUS", "ISI") %in% values$M$DB[1]) > 0)
+  DB_TC <- (sum(c("SCOPUS", "ISI", "OPENALEX", "LENS") %in% values$M$DB[1]) > 0)
 
-  # out <- list(TC,ISI,MLCS,AFF,MCC,DB_TC,DB_CR,CR)
-  out <- NULL
-
-  L <- list()
-
-  L[[length(L) + 1]] <-
-    menuItem("Filters", tabName = "filters", icon = fa_i(name = "filter"))
-
-  L[[length(L) + 1]] <-
-    menuItem(
-      "Overview",
-      tabName = "overview",
-      icon = fa_i(name = "table"),
-      startExpanded = FALSE,
-      menuSubItem(
-        "Main Information",
-        tabName = "mainInfo",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      menuSubItem(
-        "Annual Scientific Production",
-        tabName = "annualScPr",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      if (isTRUE(TC)) {
-        menuSubItem(
-          "Average Citations per Year",
-          tabName = "averageCitPerYear",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      menuSubItem(
-        "Three-Field Plot",
-        tabName = "threeFieldPlot",
-        icon = icon("chevron-right", lib = "glyphicon")
-      )
-    )
-
-  L[[length(L) + 1]] <-
-    menuItem(
-      "Sources",
-      tabName = "sources",
-      icon = fa_i(name = "book"),
-      startExpanded = FALSE,
-      menuSubItem(
-        "Most Relevant Sources",
-        tabName = "relevantSources",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      if (isTRUE(MLCS)) {
-        menuSubItem(
-          "Most Local Cited Sources",
-          tabName = "localCitedSources",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      menuSubItem(
-        "Bradford's Law",
-        tabName = "bradford",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      if (isTRUE(TC)) {
-        menuSubItem(
-          "Sources' Local Impact",
-          tabName = "sourceImpact",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      menuSubItem(
-        "Sources' Production over Time",
-        tabName = "sourceDynamics",
-        icon = icon("chevron-right", lib = "glyphicon")
-      )
-    )
-
-  AU <-
-    menuItem(
-      "Authors",
-      tabName = "authors",
-      icon = fa_i(name = "user"),
-      startExpanded = FALSE,
-      "Authors",
-      menuSubItem(
-        "Most Relevant Authors",
-        tabName = "mostRelAuthors",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      if (isTRUE(MLCA)) {
-        menuSubItem(
-          "Most Local Cited Authors",
-          tabName = "mostLocalCitedAuthors",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      menuSubItem(
-        "Authors' Production over Time",
-        tabName = "authorsProdOverTime",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      menuSubItem(
-        "Lotka's Law",
-        tabName = "lotka",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      if (isTRUE(TC)) {
-        menuSubItem(
-          "Authors' Local Impact",
-          tabName = "authorImpact",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      if (isTRUE(AFF)) {
-        "Affiliations"
-      },
-      if (isTRUE(AFF)) {
-        menuSubItem(
-          "Most Relevant Affiliations",
-          tabName = "mostRelAffiliations",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      if (isTRUE(AFF)) {
-        menuSubItem(
-          "Affiliations' Production over Time",
-          tabName = "AffOverTime",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      if (isTRUE(AFF)) {
-        "Countries"
-      },
-      if (isTRUE(AFF)) {
-        menuSubItem(
-          "Corresponding Author's Countries",
-          tabName = "correspAuthorCountry",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      if (isTRUE(AFF)) {
-        menuSubItem(
-          "Countries' Scientific Production",
-          tabName = "countryScientProd",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      if (isTRUE(AFF)) {
-        menuSubItem(
-          "Countries' Production over Time",
-          tabName = "COOverTime",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      if (isTRUE(MCC)) {
-        menuSubItem(
-          "Most Cited Countries",
-          tabName = "mostCitedCountries",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      }
-    )
-
-  L[[length(L) + 1]] <- AU
-
-  DOC <-
-    menuItem(
-      "Documents",
-      tabName = "documents",
-      icon = fa_i(name = "layer-group"),
-      startExpanded = FALSE,
-      if (isTRUE(TC) | isTRUE(DB_TC)) {
-        "Documents"
-      },
-      if (isTRUE(TC)) {
-        menuSubItem(
-          "Most Global Cited Documents",
-          tabName = "mostGlobalCitDoc",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      if (isTRUE(DB_TC) & isTRUE(CR) & isTRUE(TC)) {
-        menuSubItem(
-          "Most Local Cited Documents",
-          tabName = "mostLocalCitDoc",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      if (isTRUE(DB_CR)) {
-        "Cited References"
-      },
-      if (isTRUE(DB_CR)) {
-        menuSubItem(
-          "Most Local Cited References",
-          tabName = "mostLocalCitRef",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      if (isTRUE(DB_CR)) {
-        menuSubItem(
-          "References Spectroscopy",
-          tabName = "ReferenceSpect",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
-      },
-      "Words",
-      menuSubItem(
-        "Most Frequent Words",
-        tabName = "mostFreqWords",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      menuSubItem(
-        "WordCloud",
-        tabName = "wcloud",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      menuSubItem(
-        "TreeMap",
-        tabName = "treemap",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      menuSubItem(
-        "Words' Frequency over Time",
-        tabName = "wordDynamics",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      menuSubItem(
-        "Trend Topics",
-        tabName = "trendTopic",
-        icon = icon("chevron-right", lib = "glyphicon")
-      )
-    )
-
-  L[[length(L) + 1]] <- DOC
-
-  L[[length(L) + 1]] <-
-    menuItem(
-      "Clustering",
-      tabName = "clustering",
-      icon = fa_i(name = "spinner"),
-      startExpanded = FALSE,
-      menuSubItem(
-        "Clustering by Coupling",
-        tabName = "coupling",
-        icon = icon("chevron-right", lib = "glyphicon")
-      )
-    )
-
-  L[[length(L) + 1]] <-
-    menuItem(
-      "Conceptual Structure",
-      tabName = "concepStructure",
-      icon = fa_i(name = "spell-check"),
-      startExpanded = FALSE,
-      "Network Approach",
-      menuSubItem(
-        "Co-occurence Network",
-        tabName = "coOccurenceNetwork",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      menuSubItem(
-        "Thematic Map",
-        tabName = "thematicMap",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      menuSubItem(
-        "Thematic Evolution",
-        tabName = "thematicEvolution",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      "Factorial Approach",
-      menuSubItem(
-        "Factorial Analysis",
-        tabName = "factorialAnalysis",
-        icon = icon("chevron-right", lib = "glyphicon")
-      )
-    )
-
-  if (!"CR" %in% values$missTags) {
-    L[[length(L) + 1]] <-
-      menuItem(
-        "Intellectual Structure",
-        tabName = "intStruct",
-        icon = fa_i(name = "gem"),
-        startExpanded = FALSE,
-        menuSubItem(
-          "Co-citation Network",
-          tabName = "coCitationNetwork",
-          icon = icon("chevron-right", lib = "glyphicon")
-        ),
-        if (isTRUE(DB_TC) & isTRUE(CR)) {
-          menuSubItem(
-            "Historiograph",
-            tabName = "historiograph",
-            icon = icon("chevron-right", lib = "glyphicon")
-          )
+  # Build JavaScript code to show/hide submenu items based on metadata
+  js_code <- "
+    // Helper function to find submenu item by text within a parent
+    function findSubmenuItem(parentText, itemText) {
+      var parent = null;
+      $('.sidebar-menu > .treeview').each(function() {
+        if ($(this).find('> a > span').first().text().trim() === parentText) {
+          parent = $(this);
+          return false;
         }
-      )
+      });
+      
+      if (parent) {
+        var found = null;
+        parent.find('ul.treeview-menu > li').each(function() {
+          var text = $(this).find('a span').first().text().trim();
+          if (text === itemText) {
+            found = $(this);
+            return false;
+          }
+        });
+        return found;
+      }
+      return null;
+    }
+    
+    // Helper function to find section header (text-only li)
+    function findSectionHeader(parentText, headerText) {
+      var parent = null;
+      $('.sidebar-menu > .treeview').each(function() {
+        if ($(this).find('> a > span').first().text().trim() === parentText) {
+          parent = $(this);
+          return false;
+        }
+      });
+      
+      if (parent) {
+        var found = null;
+        parent.find('ul.treeview-menu > li').each(function() {
+          if ($(this).children('a').length === 0 && $(this).text().trim() === headerText) {
+            found = $(this);
+            return false;
+          }
+        });
+        return found;
+      }
+      return null;
+    }
+  "
+
+  # Add conditional visibility for Sources submenu items
+  if (MLCS) {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Sources', 'Most Local Cited Sources')?.show();"
+    )
+  } else {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Sources', 'Most Local Cited Sources')?.hide();"
+    )
   }
 
-  L[[length(L) + 1]] <-
-    menuItem(
-      "Social Structure",
-      tabName = "socialStruct",
-      icon = fa_i("users"),
-      startExpanded = FALSE,
-      menuSubItem(
-        "Collaboration Network",
-        tabName = "collabNetwork",
-        icon = icon("chevron-right", lib = "glyphicon")
-      ),
-      if (isTRUE(AFF)) {
-        menuSubItem(
-          "Countries' Collaboration World Map",
-          tabName = "collabWorldMap",
-          icon = icon("chevron-right", lib = "glyphicon")
-        )
+  if (TC) {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Sources', 'Sources\\' Local Impact')?.show();"
+    )
+  } else {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Sources', 'Sources\\' Local Impact')?.hide();"
+    )
+  }
+
+  # Add conditional visibility for Authors submenu items
+  if (MLCA) {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Authors', 'Most Local Cited Authors')?.show();"
+    )
+  } else {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Authors', 'Most Local Cited Authors')?.hide();"
+    )
+  }
+
+  if (TC) {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Authors', 'Authors\\' Local Impact')?.show();"
+    )
+  } else {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Authors', 'Authors\\' Local Impact')?.hide();"
+    )
+  }
+
+  # Affiliations section
+  if (AFF) {
+    js_code <- paste0(
+      js_code,
+      "
+    findSectionHeader('Authors', 'Affiliations')?.show();
+    findSubmenuItem('Authors', 'Most Relevant Affiliations')?.show();
+    findSubmenuItem('Authors', 'Affiliations\\' Production over Time')?.show();
+    findSectionHeader('Authors', 'Countries')?.show();
+    findSubmenuItem('Authors', 'Corresponding Author\\'s Countries')?.show();
+    findSubmenuItem('Authors', 'Countries\\' Scientific Production')?.show();
+    findSubmenuItem('Authors', 'Countries\\' Production over Time')?.show();
+    "
+    )
+  } else {
+    js_code <- paste0(
+      js_code,
+      "
+    findSectionHeader('Authors', 'Affiliations')?.hide();
+    findSubmenuItem('Authors', 'Most Relevant Affiliations')?.hide();
+    findSubmenuItem('Authors', 'Affiliations\\' Production over Time')?.hide();
+    findSectionHeader('Authors', 'Countries')?.hide();
+    findSubmenuItem('Authors', 'Corresponding Author\\'s Countries')?.hide();
+    findSubmenuItem('Authors', 'Countries\\' Scientific Production')?.hide();
+    findSubmenuItem('Authors', 'Countries\\' Production over Time')?.hide();
+    "
+    )
+  }
+
+  if (MCC) {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Authors', 'Most Cited Countries')?.show();"
+    )
+  } else {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Authors', 'Most Cited Countries')?.hide();"
+    )
+  }
+
+  # Documents submenu items
+  if (TC) {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Documents', 'Most Global Cited Documents')?.show();"
+    )
+  } else {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Documents', 'Most Global Cited Documents')?.hide();"
+    )
+  }
+
+  if (DB_TC && CR && TC) {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Documents', 'Most Local Cited Documents')?.show();"
+    )
+  } else {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Documents', 'Most Local Cited Documents')?.hide();"
+    )
+  }
+
+  # Cited References section
+  if (DB_CR) {
+    js_code <- paste0(
+      js_code,
+      "
+    findSectionHeader('Documents', 'Cited References')?.show();
+    findSubmenuItem('Documents', 'Most Local Cited References')?.show();
+    findSubmenuItem('Documents', 'References Spectroscopy')?.show();
+    "
+    )
+  } else {
+    js_code <- paste0(
+      js_code,
+      "
+    findSectionHeader('Documents', 'Cited References')?.hide();
+    findSubmenuItem('Documents', 'Most Local Cited References')?.hide();
+    findSubmenuItem('Documents', 'References Spectroscopy')?.hide();
+    "
+    )
+  }
+
+  # Intellectual Structure - hide entire menu if no CR
+  if (!CR) {
+    js_code <- paste0(
+      js_code,
+      "
+    $('.sidebar-menu .treeview').each(function() {
+      if ($(this).find('> a > span').first().text().trim() === 'Intellectual Structure') {
+        $(this).hide();
       }
+    });
+    "
+    )
+  } else {
+    js_code <- paste0(
+      js_code,
+      "
+    $('.sidebar-menu .treeview').each(function() {
+      if ($(this).find('> a > span').first().text().trim() === 'Intellectual Structure') {
+        $(this).show();
+      }
+    });
+    "
     )
 
-  L[[length(L) + 1]] <- menuItem(
-    "Report",
-    tabName = "report",
-    icon = fa_i(name = "list-alt")
-  )
+    if (DB_TC && CR) {
+      js_code <- paste0(
+        js_code,
+        "\nfindSubmenuItem('Intellectual Structure', 'Historiograph')?.show();"
+      )
+    } else {
+      js_code <- paste0(
+        js_code,
+        "\nfindSubmenuItem('Intellectual Structure', 'Historiograph')?.hide();"
+      )
+    }
+  }
 
-  L[[length(L) + 1]] <- menuItem(
-    "TALL Export",
-    tabName = "tall",
-    icon = icon("text-size", lib = "glyphicon")
-  )
+  # Social Structure
+  if (AFF) {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Social Structure', 'Countries\\' Collaboration World Map')?.show();"
+    )
+  } else {
+    js_code <- paste0(
+      js_code,
+      "\nfindSubmenuItem('Social Structure', 'Countries\\' Collaboration World Map')?.hide();"
+    )
+  }
 
-  # L[[length(L) + 1]] <- menuItem("Settings", tabName = "settings", icon = fa_i(name = "sliders"))
+  # Execute the JavaScript code
+  shinyjs::runjs(js_code)
+
+  # Update list of disabled menu items for navigation control
+  out <- character(0)
 
   if (!isTRUE(TC)) {
     out <- c(
@@ -4558,10 +6306,7 @@ menuList <- function(values) {
   }
 
   values$out <- out
-
-  return(L)
 }
-
 
 # find home folder
 homeFolder <- function() {

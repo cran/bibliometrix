@@ -1,8 +1,23 @@
 utils::globalVariables(c(
-  "params", "Cluster_Label", "Occurrences", "Words",
-  "Cluster_Label.y", "Cluster_Label.x", "min", "tot",
-  "len.x", "len.y", "Occurrences.x", "Occurrences.y", "tot.x",
-  "tot.y", "Cluster.x", "Cluster.y", "Occ", "name", "group"
+  "params",
+  "Cluster_Label",
+  "Occurrences",
+  "Words",
+  "Cluster_Label.y",
+  "Cluster_Label.x",
+  "min",
+  "tot",
+  "len.x",
+  "len.y",
+  "Occurrences.x",
+  "Occurrences.y",
+  "tot.x",
+  "tot.y",
+  "Cluster.x",
+  "Cluster.y",
+  "Occ",
+  "name",
+  "group"
 ))
 #' Perform a Thematic Evolution Analysis
 #'
@@ -29,6 +44,9 @@ utils::globalVariables(c(
 #' @param remove.terms is a character vector. It contains a list of additional terms to delete from the documents before term extraction. The default is \code{remove.terms = NULL}.
 #' @param synonyms is a character vector. Each element contains a list of synonyms, separated by ";",  that will be merged into a single term (the first word contained in the vector element). The default is \code{synonyms = NULL}.
 #' @param cluster is a character. It indicates the type of cluster to perform among ("optimal", "louvain","leiden", "infomap","edge_betweenness","walktrap", "spinglass", "leading_eigen", "fast_greedy").
+#' @param seed is numerical. It indicates the seed for random number generator to obtain always the same results. Default value is \code{seed = 1234}.
+#' @param assign.evolution.colors is a list. If \code{assignEvolutionColors = list(assign = TRUE)}, colors are assigned to lineages based on the highest weighted inclusion value. If a list is provided, it must contain the arguments \code{assignEvolutionColors = list(assign = c(TRUE, FALSE), measure=("inclusion","stability", "weighted"))}.
+#' Default is \code{assign.evolution.colors = list(assign=TRUE, measure="weighted")}. If assign = FALSE, measure argument is ignored.
 #' @return a list containing:
 #' \tabular{lll}{
 #' \code{nets}\tab   \tab The thematic nexus graph for each comparison\cr
@@ -38,9 +56,9 @@ utils::globalVariables(c(
 #' @examples
 #' \dontrun{
 #' data(management, package = "bibliometrixData")
-#' years <- c(2004, 2015)
+#' years=c(2004,2008,2015)
 #'
-#' nexus <- thematicEvolution(management, field = "ID", years = years, n = 100, minFreq = 2)
+#' nexus <- thematicEvolution(management,field="DE",years=years,n=100,minFreq=2)
 #' }
 #'
 #' @seealso \code{\link{thematicMap}} function to create a thematic map based on co-word network analysis and clustering.
@@ -49,7 +67,23 @@ utils::globalVariables(c(
 #'
 #' @export
 
-thematicEvolution <- function(M, field = "ID", years, n = 250, minFreq = 2, size = 0.5, ngrams = 1, stemming = FALSE, n.labels = 1, repel = TRUE, remove.terms = NULL, synonyms = NULL, cluster = "walktrap") {
+thematicEvolution <- function(
+  M,
+  field = "ID",
+  years,
+  n = 250,
+  minFreq = 2,
+  size = 0.5,
+  ngrams = 1,
+  stemming = FALSE,
+  n.labels = 1,
+  repel = TRUE,
+  remove.terms = NULL,
+  synonyms = NULL,
+  cluster = "louvain",
+  seed = 1234,
+  assign.evolution.colors = list(assign = TRUE, measure = "weighted")
+) {
   list_df <- timeslice(M, breaks = years)
   K <- length(list_df)
   S <- net <- res <- list()
@@ -58,10 +92,21 @@ thematicEvolution <- function(M, field = "ID", years, n = 250, minFreq = 2, size
   for (k in 1:K) {
     Mk <- list_df[[k]]
     Y[k] <- paste(min(Mk$PY), "-", max(Mk$PY), sep = "", collapse = "")
-    resk <- thematicMap(Mk,
-      field = field, n = n, minfreq = minFreq, ngrams = ngrams,
-      stemming = stemming, size = size, n.labels = n.labels,
-      repel = repel, remove.terms = remove.terms, synonyms = synonyms, cluster = cluster, subgraphs = FALSE
+    resk <- thematicMap(
+      Mk,
+      field = field,
+      n = n,
+      minfreq = minFreq,
+      ngrams = ngrams,
+      stemming = stemming,
+      size = size,
+      n.labels = n.labels,
+      repel = repel,
+      remove.terms = remove.terms,
+      synonyms = synonyms,
+      cluster = cluster,
+      subgraphs = FALSE,
+      seed = seed
     )
     resk$params <- resk$params %>% dplyr::filter(params != "minfreq")
     res[[k]] <- resk
@@ -78,25 +123,27 @@ thematicEvolution <- function(M, field = "ID", years, n = 250, minFreq = 2, size
     res1 <- res[[(k - 1)]]
     res2 <- res[[(k)]]
     if (res1$nclust == 0 | res2$nclust == 0) {
-      cat(paste("\nNo topics in the period ", k - 1, " with this set of input parameters\n\n"))
+      cat(paste(
+        "\nNo topics in the period ",
+        k - 1,
+        " with this set of input parameters\n\n"
+      ))
       return(list(check = FALSE))
     }
-    res1$words$Cluster <- paste(res1$clusters$name[res1$words$Cluster],
-      "--", Y[k - 1],
-      sep = ""
-    )
-    res1$clusters$label <- paste(res1$clusters$name, "--",
+    res1$words$Cluster <- paste(
+      res1$clusters$name[res1$words$Cluster],
+      "--",
       Y[k - 1],
       sep = ""
     )
-    res2$words$Cluster <- paste(res2$clusters$name[res2$words$Cluster],
-      "--", Y[k],
-      sep = ""
-    )
-    res2$clusters$label <- paste(res2$clusters$name, "--",
+    res1$clusters$label <- paste(res1$clusters$name, "--", Y[k - 1], sep = "")
+    res2$words$Cluster <- paste(
+      res2$clusters$name[res2$words$Cluster],
+      "--",
       Y[k],
       sep = ""
     )
+    res2$clusters$label <- paste(res2$clusters$name, "--", Y[k], sep = "")
     cluster1 <- res1$words %>%
       group_by(Cluster_Label) %>%
       mutate(len = length(Words), tot = sum(Occurrences))
@@ -110,22 +157,30 @@ thematicEvolution <- function(M, field = "ID", years, n = 250, minFreq = 2, size
         min = min(
           Occurrences.x,
           Occurrences.y
-        ), Occ = sum(Occurrences.x),
+        ),
+        Occ = sum(Occurrences.x),
         tot = min(tot.x, tot.y)
       ) %>%
       ungroup()
     B <- A %>%
       group_by(Cluster_Label.x, Cluster_Label.y) %>%
       summarise(
-        CL1 = Cluster.x[1], CL2 = Cluster.y[1],
+        CL1 = Cluster.x[1],
+        CL2 = Cluster.y[1],
         Words = paste0(Words, collapse = ";", sep = ""),
-        sum = sum(min), Inc_Weighted = sum(min) / min(tot),
-        Inc_index = length(Words) / min(
-          len.x,
-          len.y
-        ), Occ = Occ[1], Tot = tot[1],
-        Stability = length(Words) / (len.x[1] +
-          len.y[1] - length(Words))
+        sum = sum(min),
+        Inc_Weighted = sum(min) / min(tot),
+        Inc_index = length(Words) /
+          min(
+            len.x,
+            len.y
+          ),
+        Occ = Occ[1],
+        Tot = tot[1],
+        Stability = length(Words) /
+          (len.x[1] +
+            len.y[1] -
+            length(Words))
       ) %>%
       data.frame()
     incMatrix[[k - 1]] <- B
@@ -137,7 +192,10 @@ thematicEvolution <- function(M, field = "ID", years, n = 250, minFreq = 2, size
     }
   }
   edges <- INC[, c(
-    "CL1", "CL2", "Inc_index", "Inc_Weighted",
+    "CL1",
+    "CL2",
+    "Inc_index",
+    "Inc_Weighted",
     "Stability"
   )]
   # edges = edges[edges[, 3] > 0, ]
@@ -154,8 +212,12 @@ thematicEvolution <- function(M, field = "ID", years, n = 250, minFreq = 2, size
     cont <- cont + 1
   }
   names(edges) <- c(
-    "from", "to", "Inclusion", "Inc_Weighted",
-    "Stability", "group"
+    "from",
+    "to",
+    "Inclusion",
+    "Inc_Weighted",
+    "Stability",
+    "group"
   )
   edges$from <- as.numeric(edges$from)
   edges$to <- as.numeric(edges$to)
@@ -167,24 +229,32 @@ thematicEvolution <- function(M, field = "ID", years, n = 250, minFreq = 2, size
     mutate(slice = factor(group, labels = 1:K))
   Nodes <- data.frame()
   for (i in 1:K) {
-    Nodes <- rbind(Nodes, left_join(subset(nodes, nodes$slice == i), res[[i]]$clusters[c("color", "name")], by = "name"))
+    Nodes <- rbind(
+      Nodes,
+      left_join(
+        subset(nodes, nodes$slice == i),
+        res[[i]]$clusters[c("color", "name")],
+        by = "name"
+      )
+    )
   }
-  ################
+
   # Preparing data for plot
   Nodes$id <- 0:(nrow(Nodes) - 1)
-  Nodes <- Nodes %>% left_join(
-    rbind(
-      INC[, -c(1, 2)] %>% select(CL1, sum) %>% rename(label = CL1),
-      INC[, -c(1, 2)] %>% select(CL2, sum) %>% rename(label = CL2)
-    ) %>%
-      group_by(label) %>% reframe(sum = max(sum)),
-    by = "label"
-  )
+  Nodes <- Nodes %>%
+    left_join(
+      rbind(
+        INC[, -c(1, 2)] %>% select(CL1, sum) %>% rename(label = CL1),
+        INC[, -c(1, 2)] %>% select(CL2, sum) %>% rename(label = CL2)
+      ) %>%
+        group_by(label) %>%
+        reframe(sum = max(sum)),
+      by = "label"
+    )
   Nodes <- Nodes %>%
     group_by(slice) %>%
     mutate(sum = sum / sum(sum, na.rm = T)) %>%
     ungroup()
-  ###############
 
   params <- list(
     field = field,
@@ -201,11 +271,60 @@ thematicEvolution <- function(M, field = "ID", years, n = 250, minFreq = 2, size
     cluster = cluster
   )
 
-  params <- data.frame(params = names(unlist(params)), values = unlist(params), row.names = NULL)
-
-  results <- list(
-    Nodes = Nodes, Edges = edges, Data = INC[, -c(1, 2)],
-    check = TRUE, TM = res, Net = net, params = params
+  params <- data.frame(
+    params = names(unlist(params)),
+    values = unlist(params),
+    row.names = NULL
   )
-  return(results)
+
+  periods <- sort(unique(Nodes$group))
+
+  clusters <- data.frame(name = NULL, freq = NULL, group = NULL)
+
+  for (i in 1:length(res)) {
+    df <- res[[i]]$clusters %>%
+      select(name, freq)
+    df$group <- periods[i]
+    clusters <- bind_rows(clusters, df)
+  }
+
+  Nodes <- Nodes %>%
+    left_join(clusters, by = c("group", "name"))
+
+  edges$color <- "#D3D3D380"
+
+  nexus <- list(
+    Nodes = Nodes,
+    Edges = edges,
+    clusters = clusters,
+    Data = INC[, -c(1, 2)],
+    check = TRUE,
+    TM = res,
+    Net = net,
+    params = params
+  )
+
+  if (!is.list(assign.evolution.colors)) {
+    assign.evolution.colors <- list(assign = TRUE, measure = "weighted")
+  }
+
+  if (is.null(assign.evolution.colors$assign)) {
+    assign.evolution.colors <- list(assign = TRUE, measure = "weighted")
+  }
+
+  if (is.null(assign.evolution.colors$measure)) {
+    assign.evolution.colors$measure <- "weighted"
+  }
+
+  if (assign.evolution.colors$assign) {
+    ## Assign colors based on lineages
+    nexus <- assignEvolutionColors(
+      nexus = nexus,
+      threshold = 0.5,
+      palette = NULL,
+      use_measure = assign.evolution.colors$measure
+    )
+  }
+
+  return(nexus)
 }
