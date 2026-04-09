@@ -8,6 +8,7 @@ source("article_summary.R", local = TRUE)
 source("lifeCycleUI.R", local = TRUE)
 source("openalex_api.R", local = TRUE)
 source("pubmed_api.R", local = TRUE)
+source("Htmlboxformat.R", local = TRUE)
 
 suppressMessages(res <- libraries())
 
@@ -22,7 +23,127 @@ server <- function(input, output, session) {
   # Enable shinyjs
   shinyjs::useShinyjs()
 
-  session$onSessionEnded(stopApp)
+  # Resize all chart widgets when navigating back to a tab
+  # Fixes issue where async-rendered plots have wrong dimensions
+  resizeChartsJS <- '
+    setTimeout(function(){
+      // Resize plotly widgets
+      var plots = document.querySelectorAll(".js-plotly-plot");
+      if(plots.length > 0 && window.Plotly){
+        plots.forEach(function(p){
+          if(p.offsetParent !== null){
+            Plotly.Plots.resize(p);
+          }
+        });
+      }
+      // Resize visNetwork widgets
+      var visWidgets = document.querySelectorAll(".visNetwork");
+      visWidgets.forEach(function(el){
+        if(el.offsetParent !== null){
+          var widget = HTMLWidgets.find("#" + el.id);
+          if(widget && widget.network){
+            var container = el.parentElement;
+            if(container){
+              widget.network.setSize(container.offsetWidth + "px", container.offsetHeight + "px");
+              widget.network.fit();
+            }
+          }
+        }
+      });
+    }, 500);
+  '
+  observeEvent(input$sidebarmenu, {
+    shinyjs::runjs(resizeChartsJS)
+  })
+  observeEvent(input$activeTab, {
+    shinyjs::runjs(resizeChartsJS)
+  })
+
+  # Define JS functions for visNetwork canvas capture (DPI-aware)
+  session$onFlushed(
+    function() {
+      shinyjs::runjs(
+        '
+      window._captureVisCanvas = function(networkId, dpi, callback) {
+        var widget = HTMLWidgets.find("#" + networkId);
+        if (!widget || !widget.network) return;
+        var network = widget.network;
+        var canvas = network.canvas.frame.canvas;
+        var targetScale = (dpi || 96) / 96;
+
+        // Override window.devicePixelRatio so vis.js _setPixelRatio() picks it up
+        Object.defineProperty(window, "devicePixelRatio", {
+          value: targetScale, configurable: true
+        });
+
+        // redraw() is synchronous: setSize() reads devicePixelRatio, then _redraw() renders
+        network.redraw();
+        var dataURL = canvas.toDataURL("image/png");
+
+        // Restore original devicePixelRatio (unshadow the prototype getter)
+        delete window.devicePixelRatio;
+        network.redraw();
+
+        callback(dataURL);
+      };
+
+      window.captureVisExport = function(networkId, filename, dpi) {
+        _captureVisCanvas(networkId, dpi, function(dataURL) {
+          var link = document.createElement("a");
+          link.href = dataURL;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        });
+      };
+
+      window.captureVisReport = function(networkId, dpi) {
+        _captureVisCanvas(networkId, dpi, function(dataURL) {
+          Shiny.setInputValue("vis_canvas_report", {
+            data: dataURL
+          }, {priority: "event"});
+        });
+      };
+    '
+      )
+    },
+    once = TRUE
+  )
+
+  # Stop App button handler
+  observeEvent(input$stop_app, {
+    showModal(modalDialog(
+      title = "Stop Biblioshiny",
+      "Are you sure you want to stop the application?",
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("confirm_stop_app", "Stop", class = "btn-danger")
+      )
+    ))
+  })
+  observeEvent(input$confirm_stop_app, {
+    removeModal()
+    # Show goodbye page, try to close browser tab, then stop the R app
+    shinyjs::runjs(
+      "
+      document.title = 'Biblioshiny - Stopped';
+      document.body.innerHTML = '<div style=\"display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f5f5f5;font-family:Helvetica,Arial,sans-serif;\">' +
+        '<i class=\"fa fa-check-circle\" style=\"font-size:64px;color:#4CAF50;margin-bottom:20px;\"></i>' +
+        '<h2 style=\"color:#333;margin-bottom:10px;\">Biblioshiny has been stopped</h2>' +
+        '<p style=\"color:#777;font-size:16px;\">You can safely close this tab.</p>' +
+      '</div>';
+      setTimeout(function(){ window.close(); }, 1500);
+    "
+    )
+    # Delay stopApp() to allow the goodbye page to render
+    later::later(
+      function() {
+        stopApp()
+      },
+      delay = 2
+    )
+  })
 
   ## suppress warnings
   options(warn = -1)
@@ -35,16 +156,30 @@ server <- function(input, output, session) {
 
   #  Sys.setenv (CHROMOTE_CHROME = Chrome_url)
 
-  ## chrome configuration for shinyapps server
+  ## chrome configuration for server environments
+  is_headless <- identical(Sys.getenv("R_CONFIG_ACTIVE"), "shinyapps") ||
+    (Sys.info()["sysname"] == "Linux" && Sys.getenv("DISPLAY") == "")
 
-  if (identical(Sys.getenv("R_CONFIG_ACTIVE"), "shinyapps")) {
+  if (is_headless) {
+    message("Configurazione Chrome per ambiente headless")
     chromote::set_default_chromote_object(
       chromote::Chromote$new(chromote::Chrome$new(
         args = c(
-          "--disable-gpu",
-          "--no-sandbox",
-          "--disable-dev-shm-usage", # required bc the target easily crashes
-          c("--force-color-profile", "srgb")
+          "--headless=new", # Usa la nuova modalità headless
+          "--disable-gpu", # Disabilita GPU
+          "--no-sandbox", # Necessario per server
+          "--disable-dev-shm-usage", # Evita problemi memoria condivisa
+          "--disable-setuid-sandbox", # Sandbox alternativo
+          "--disable-software-rasterizer", # Disabilita rasterizer software
+          "--disable-extensions", # Niente estensioni
+          "--disable-background-networking", # Riduce processi background
+          "--disable-sync", # Disabilita sincronizzazione
+          "--metrics-recording-only", # Solo metriche
+          "--mute-audio", # Disabilita audio
+          "--no-first-run", # Salta primo avvio
+          "--disable-features=VizDisplayCompositor", # Disabilita compositor
+          "--force-color-profile=srgb", # Forza profilo colore
+          "--window-size=1920,1080" # Dimensione finestra virtuale
         )
       ))
     )
@@ -68,10 +203,16 @@ To ensure the functionality of Biblioshiny,
     Sys.setenv(CHROMOTE_CHROME = Chrome_url)
   }
 
+  # svuota la cartella temporanea
+  unlink(getWD(), recursive = TRUE)
+
   ## file upload max size
   maxUploadSize <- 200 # default value
   maxUploadSize <- getShinyOption("maxUploadSize", maxUploadSize)
   options(shiny.maxRequestSize = maxUploadSize * 1024^2)
+
+  ## max rows limit
+  max_rows <- getShinyOption("biblioshiny.max.rows", Inf)
 
   ## initial values
   selected_author <- reactiveVal()
@@ -109,11 +250,13 @@ To ensure the functionality of Biblioshiny,
     "First Author" = "AU1"
   )
 
-  ### setting values
+  ### setting values (defaults, may be overridden by saved settings below)
   values$dpi <- 300
+  values$report_dpi <- 72
   values$h <- 7
+  values$aspect <- 1.5  # Publication (3:2) default; Wide = 2.0
   #values$w <- 14
-  values$path <- paste(getwd(), "/", sep = "")
+  values$path <- paste0(getwd(), .Platform$file.sep)
   ###
 
   values$results <- list("NA")
@@ -128,6 +271,20 @@ To ensure the functionality of Biblioshiny,
   values$kk = 0
   values$M = data.frame(PY = 0)
   values$histsearch = "NA"
+
+  ## Computation cache keys and results
+  values$cache_TM_key <- NULL
+  values$cache_TE_key <- NULL
+  values$TE_computing <- FALSE
+  values$TE_error <- NULL
+  values$RPYS_ready <- 0
+  values$RPYS_computing <- FALSE
+  values$RPYS_error <- NULL
+  values$cache_HIST_key <- NULL
+  values$cache_HAu_key <- NULL
+  values$cache_HAu_result <- NULL
+  values$cache_HSo_key <- NULL
+  values$cache_HSo_result <- NULL
   values$citShortlabel = "NA"
   values$S = list("NA")
   values$GR = "NA"
@@ -158,16 +315,119 @@ To ensure the functionality of Biblioshiny,
 
   ## gemini api and model
   home <- homeFolder()
-  path_gemini_key <- paste0(home, "/.biblio_gemini_key.txt", collapse = "")
+  path_gemini_key <- file.path(home, ".biblio_gemini_key.txt")
   # check if sub directory exists
   values$geminiAPI <- load_api_key(path_gemini_key)
   values$collection_description <- NULL
   values$gemini_additional <- NULL
 
-  path_gemini_model <- paste0(home, "/.biblio_gemini_model.txt", collapse = "")
+  ## OpenAlex polite pool email
+  path_oa_email <- file.path(home, ".biblio_openalex_email.txt")
+  if (file.exists(path_oa_email)) {
+    oa_saved_email <- trimws(readLines(path_oa_email, warn = FALSE)[1])
+    if (!is.na(oa_saved_email) && nchar(oa_saved_email) >= 5) {
+      Sys.setenv(openalexR.mailto = oa_saved_email)
+      options(openalexR.mailto = oa_saved_email)
+      values$oaPoliteEmail <- oa_saved_email
+    } else {
+      values$oaPoliteEmail <- NULL
+    }
+  } else {
+    values$oaPoliteEmail <- NULL
+  }
+
+  ## OpenAlex API key
+  path_oa_apikey <- file.path(home, ".biblio_openalex_apikey.txt")
+  if (file.exists(path_oa_apikey)) {
+    oa_saved_apikey <- trimws(readLines(path_oa_apikey, warn = FALSE)[1])
+    if (!is.na(oa_saved_apikey) && nchar(oa_saved_apikey) >= 10) {
+      Sys.setenv(openalexR.apikey = oa_saved_apikey)
+      options(openalexR.apikey = oa_saved_apikey)
+      values$oaApiKey <- oa_saved_apikey
+    } else {
+      values$oaApiKey <- NULL
+    }
+  } else {
+    values$oaApiKey <- NULL
+  }
+
+  path_gemini_model <- file.path(home, ".biblio_gemini_model.txt")
   gemini_api_model <- loadGeminiModel(path_gemini_model)
   values$gemini_api_model <- gemini_api_model[1]
   values$gemini_output_size <- gemini_api_model[2]
+
+  ## Graph settings
+  path_graph_settings <- file.path(home, ".biblio_graph_settings.txt")
+  if (file.exists(path_graph_settings)) {
+    graph_settings <- readLines(path_graph_settings, warn = FALSE)
+    if (length(graph_settings) >= 3) {
+      saved_dpi <- suppressWarnings(as.numeric(graph_settings[1]))
+      saved_report_dpi <- suppressWarnings(as.numeric(graph_settings[2]))
+      saved_h <- suppressWarnings(as.numeric(graph_settings[3]))
+      if (!is.na(saved_dpi)) {
+        values$dpi <- saved_dpi
+      }
+      if (!is.na(saved_report_dpi)) {
+        values$report_dpi <- saved_report_dpi
+      }
+      if (!is.na(saved_h)) values$h <- saved_h
+      if (length(graph_settings) >= 4) {
+        saved_aspect <- suppressWarnings(as.numeric(graph_settings[4]))
+        if (!is.na(saved_aspect) && saved_aspect %in% c(1.5, 2.0)) {
+          values$aspect <- saved_aspect
+        }
+      }
+    }
+  }
+
+  ## Render settings sliders with saved values
+  output$dpi_slider <- renderUI({
+    sliderTextInput(
+      inputId = "dpi",
+      label = NULL,
+      grid = TRUE,
+      force_edges = TRUE,
+      choices = c("75", "150", "300", "600"),
+      width = "100%",
+      selected = as.character(as.integer(isolate(values$dpi)))
+    )
+  })
+  output$report_dpi_slider <- renderUI({
+    sliderTextInput(
+      inputId = "report_dpi",
+      label = NULL,
+      grid = TRUE,
+      force_edges = TRUE,
+      choices = c("72", "150", "300"),
+      width = "100%",
+      selected = as.character(as.integer(isolate(values$report_dpi)))
+    )
+  })
+  output$h_slider <- renderUI({
+    sliderTextInput(
+      inputId = "h",
+      label = NULL,
+      grid = TRUE,
+      force_edges = TRUE,
+      choices = seq(5, 15),
+      width = "100%",
+      selected = as.character(as.integer(isolate(values$h)))
+    )
+  })
+  output$aspect_radio <- renderUI({
+    radioGroupButtons(
+      inputId = "aspect",
+      label = NULL,
+      choices = c("Publication (3:2)" = "1.5", "Wide (2:1)" = "2"),
+      selected = as.character(isolate(values$aspect)),
+      justified = TRUE,
+      size = "sm",
+      status = "primary"
+    )
+  })
+
+  ## Setup async execution for AI calls
+  future::plan(future::multisession, workers = 2)
 
   # Show analysis menu items when data is loaded
   observeEvent(
@@ -179,6 +439,12 @@ To ensure the functionality of Biblioshiny,
         # Show menu items (IDs were added by JavaScript)
         shinyjs::show(
           "menu-filters",
+          anim = TRUE,
+          animType = "fade",
+          time = 0.3
+        )
+        shinyjs::show(
+          "menu-prisma",
           anim = TRUE,
           animType = "fade",
           time = 0.3
@@ -233,93 +499,643 @@ To ensure the functionality of Biblioshiny,
     ignoreInit = TRUE,
     once = TRUE
   )
+  # Help Menu URLs and Version
+  intro <- "https://www.bibliometrix.org/vignettes/Introduction_to_bibliometrix.html"
+  importData <- "https://www.bibliometrix.org/vignettes/Data-Importing-and-Converting.html"
+  slides <- "https://bibliometrix.org/biblioshiny/assets/player/KeynoteDHTMLPlayer.html#0"
+  biblioshinyVersion <- as.character(packageVersion("bibliometrix"))
+  ## Donation Card ----
+  observeEvent(input$show_donate, {
+    showModal(modalDialog(
+      title = div(
+        style = "text-align: center; margin-bottom: 10px;",
+        icon("heart", style = "color: #e74c3c; font-size: 26px;"),
+        span(
+          " Support Bibliometrix and Biblioshiny",
+          style = "font-size: 24px; font-weight: bold; color: #2c3e50; margin-left: 10px;"
+        )
+      ),
+      size = "m",
+      easyClose = TRUE,
+      footer = modalButton("Close"),
+
+      div(
+        style = "padding: 20px;",
+
+        # Messaggio principale
+        div(
+          style = "text-align: center; margin-bottom: 30px;",
+
+          div(
+            style = "font-size: 16px; color: #2c3e50; line-height: 1.8; margin-bottom: 20px;",
+            "Bibliometrix and Biblioshiny are free and open-source tools developed with passion by our research team.",
+            tags$br(),
+            "Your support helps us maintain and improve the project."
+          ),
+
+          div(
+            style = "font-size: 18px; color: #e74c3c; font-weight: bold; margin-bottom: 25px;",
+            icon("heart", style = "margin-right: 8px;"),
+            "Help us keep Bibliometrix and Biblioshiny free for everyone"
+          )
+        ),
+
+        # Card donazione principale
+        tags$a(
+          href = "https://www.bibliometrix.org/home/index.php/donation",
+          target = "_blank",
+          style = "text-decoration: none; display: block;",
+          div(
+            style = "background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(231, 76, 60, 0.3); transition: all 0.3s; cursor: pointer;",
+            onmouseover = "this.style.transform='translateY(-5px)'; this.style.boxShadow='0 8px 25px rgba(231, 76, 60, 0.4)';",
+            onmouseout = "this.style.transform='translateY(0)'; this.style.boxShadow='0 5px 20px rgba(231, 76, 60, 0.3)';",
+
+            div(
+              style = "text-align: center;",
+
+              # Icona grande
+              div(
+                style = "width: 80px; height: 80px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);",
+                icon(
+                  "hand-holding-heart",
+                  style = "color: #e74c3c; font-size: 35px;"
+                )
+              ),
+
+              # Titolo
+              div(
+                "Make a Donation",
+                style = "color: white; font-size: 24px; font-weight: bold; margin-bottom: 12px;"
+              ),
+
+              # Descrizione
+              div(
+                "Support the development and maintenance of Bibliometrix and Biblioshiny",
+                style = "color: rgba(255,255,255,0.95); font-size: 14px; margin-bottom: 20px; line-height: 1.6;"
+              ),
+
+              # Button
+              div(
+                icon("external-link-alt", style = "margin-right: 8px;"),
+                "Donate Now",
+                style = "color: #e74c3c; font-size: 16px; font-weight: 700; display: inline-block; padding: 12px 30px; background: white; border-radius: 8px; box-shadow: 0 3px 10px rgba(0,0,0,0.1);"
+              )
+            )
+          )
+        ),
+
+        # Info aggiuntive
+        div(
+          style = "margin-top: 25px; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #e74c3c;",
+
+          div(
+            icon("info-circle", style = "color: #3498db; margin-right: 8px;"),
+            strong("Why donate?", style = "color: #2c3e50; font-size: 14px;")
+          ),
+
+          div(
+            style = "margin-top: 10px; color: #7f8c8d; font-size: 13px; line-height: 1.6;",
+            tags$ul(
+              style = "margin: 10px 0; padding-left: 20px;",
+              tags$li("Keep the tool free and accessible"),
+              tags$li("Fund new features and improvements"),
+              tags$li("Support open-source research software"),
+              tags$li("Enable continuous maintenance and updates")
+            )
+          )
+        )
+      )
+    ))
+  })
+
+  ## Team Card ----
+  observeEvent(input$show_team, {
+    showModal(modalDialog(
+      title = div(
+        style = "text-align: center; margin-bottom: 10px;",
+        icon("users", style = "color: #3c8dbc; font-size: 26px;"),
+        span(
+          " Bibliometrix Creators",
+          style = "font-size: 24px; font-weight: bold; color: #2c3e50; margin-left: 10px;"
+        )
+      ),
+      size = "l",
+      easyClose = TRUE,
+      footer = modalButton("Close"),
+
+      # Creators Section
+      div(
+        style = "padding: 20px;",
+
+        div(
+          style = "margin-bottom: 35px;",
+          div(
+            style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 25px; margin-bottom: 10px;",
+
+            createAuthorCard(
+              name = "Massimo Aria",
+              title = "Full Professor of Statistics for Social Sciences",
+              affiliation = "University of Naples Federico II",
+              url = "https://www.massimoaria.com",
+              photo = "images/team/massimo_aria.jpg",
+              scholar = FALSE
+            ),
+
+            createAuthorCard(
+              name = "Corrado Cuccurullo",
+              title = "Full Professor of Corporate Governance",
+              affiliation = "University of Campania Luigi Vanvitelli",
+              url = "https://scholar.google.com/citations?user=mfW3fRwAAAAJ&hl=it",
+              photo = "images/team/corrado_cuccurullo.jpg",
+              scholar = FALSE
+            )
+          )
+        )
+      )
+    ))
+  })
+
+  ## Link Card ----
+  observeEvent(input$show_credits, {
+    showModal(modalDialog(
+      title = div(
+        style = "text-align: center; margin-bottom: 10px;",
+        icon("cube", style = "color: #667eea; font-size: 26px;"),
+        span(
+          " Credits",
+          style = "font-size: 24px; font-weight: bold; color: #2c3e50; margin-left: 10px;"
+        )
+      ),
+      size = "l",
+      easyClose = TRUE,
+      footer = modalButton("Close"),
+
+      div(
+        style = "padding: 15px; max-height: 70vh; overflow-y: auto;",
+
+        # Container con layout a griglia
+        div(
+          style = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;",
+
+          # Bibliometrix Website Card
+          tags$a(
+            href = "https://www.bibliometrix.org",
+            target = "_blank",
+            style = "text-decoration: none; display: block;",
+            div(
+              style = "background: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%); padding: 18px; border-radius: 10px; box-shadow: 0 4px 15px rgba(33, 147, 176, 0.3); transition: all 0.3s; cursor: pointer; height: 100%;",
+              onmouseover = "this.style.transform='translateY(-3px)'; this.style.boxShadow='0 6px 20px rgba(33, 147, 176, 0.4)';",
+              onmouseout = "this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(33, 147, 176, 0.3)';",
+
+              div(
+                style = "display: flex; align-items: center; margin-bottom: 10px;",
+                div(
+                  style = "width: 50px; height: 50px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; margin-right: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
+                  icon(
+                    "project-diagram",
+                    style = "color: #2193b0; font-size: 24px;"
+                  )
+                ),
+                div(
+                  div(
+                    "Bibliometrix",
+                    style = "color: white; font-size: 20px; font-weight: bold; margin-bottom: 3px;"
+                  ),
+                  div(
+                    "Official Website",
+                    style = "color: rgba(255,255,255,0.9); font-size: 12px;"
+                  )
+                )
+              ),
+
+              div(
+                style = "color: rgba(255,255,255,0.95); font-size: 12px; line-height: 1.5; margin-bottom: 10px;",
+                "Comprehensive R-Tool for Science Mapping and Bibliometric Analysis. Documentation, tutorials, and case studies."
+              ),
+
+              div(
+                icon("external-link-alt", style = "margin-right: 5px;"),
+                "Visit Website",
+                style = "color: white; font-size: 12px; font-weight: 600; display: inline-block; padding: 6px 12px; background: rgba(255,255,255,0.2); border-radius: 5px;"
+              )
+            )
+          ),
+
+          # Summer School Card
+          tags$a(
+            href = "https://www.bibliometrix.org/sssm",
+            target = "_blank",
+            style = "text-decoration: none; display: block;",
+            div(
+              style = "background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 18px; border-radius: 10px; box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3); transition: all 0.3s; cursor: pointer; height: 100%;",
+              onmouseover = "this.style.transform='translateY(-3px)'; this.style.boxShadow='0 6px 20px rgba(245, 87, 108, 0.4)';",
+              onmouseout = "this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(245, 87, 108, 0.3)';",
+
+              div(
+                style = "display: flex; align-items: center; margin-bottom: 10px;",
+                div(
+                  style = "width: 50px; height: 50px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; margin-right: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
+                  icon(
+                    "graduation-cap",
+                    style = "color: #f5576c; font-size: 24px;"
+                  )
+                ),
+                div(
+                  div(
+                    "SSSM",
+                    style = "color: white; font-size: 20px; font-weight: bold; margin-bottom: 3px;"
+                  ),
+                  div(
+                    "Summer School & Seminars",
+                    style = "color: rgba(255,255,255,0.9); font-size: 12px;"
+                  )
+                )
+              ),
+
+              div(
+                style = "color: rgba(255,255,255,0.95); font-size: 12px; line-height: 1.5; margin-bottom: 10px;",
+                "Summer School in Science Mapping. Advanced training courses, workshops, and seminars on bibliometric analysis and research evaluation."
+              ),
+
+              div(
+                icon("external-link-alt", style = "margin-right: 5px;"),
+                "Learn More",
+                style = "color: white; font-size: 12px; font-weight: 600; display: inline-block; padding: 6px 12px; background: rgba(255,255,255,0.2); border-radius: 5px;"
+              )
+            )
+          ),
+
+          # K-Synth Card
+          tags$a(
+            href = "https://www.k-synth.com",
+            target = "_blank",
+            style = "text-decoration: none; display: block;",
+            div(
+              style = "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 18px; border-radius: 10px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3); transition: all 0.3s; cursor: pointer; height: 100%;",
+              onmouseover = "this.style.transform='translateY(-3px)'; this.style.boxShadow='0 6px 20px rgba(102, 126, 234, 0.4)';",
+              onmouseout = "this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(102, 126, 234, 0.3)';",
+
+              div(
+                style = "display: flex; align-items: center; margin-bottom: 10px;",
+                div(
+                  style = "width: 50px; height: 50px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; margin-right: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
+                  icon(
+                    "watchman-monitoring",
+                    style = "color: #667eea; font-size: 24px;"
+                  )
+                ),
+                div(
+                  div(
+                    "K-Synth srl",
+                    style = "color: white; font-size: 20px; font-weight: bold; margin-bottom: 3px;"
+                  ),
+                  div(
+                    "Academic Spin-Off - Univ. Naples",
+                    style = "color: rgba(255,255,255,0.9); font-size: 12px;"
+                  )
+                )
+              ),
+
+              div(
+                style = "color: rgba(255,255,255,0.95); font-size: 12px; line-height: 1.5; margin-bottom: 10px;",
+                "Science-centric information & intelligence Specialist Firm. Research, consulting, and knowledge production through data science methods."
+              ),
+
+              div(
+                icon("external-link-alt", style = "margin-right: 5px;"),
+                "Visit K-Synth",
+                style = "color: white; font-size: 12px; font-weight: 600; display: inline-block; padding: 6px 12px; background: rgba(255,255,255,0.2); border-radius: 5px;"
+              )
+            )
+          ),
+
+          # GitHub Card
+          tags$a(
+            href = "https://github.com/massimoaria/bibliometrix",
+            target = "_blank",
+            style = "text-decoration: none; display: block;",
+            div(
+              style = "background: linear-gradient(135deg, #24292e 0%, #000000 100%); padding: 18px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); transition: all 0.3s; cursor: pointer; height: 100%;",
+              onmouseover = "this.style.transform='translateY(-3px)'; this.style.boxShadow='0 6px 20px rgba(0, 0, 0, 0.4)';",
+              onmouseout = "this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(0, 0, 0, 0.3)';",
+
+              div(
+                style = "display: flex; align-items: center; margin-bottom: 10px;",
+                div(
+                  style = "width: 50px; height: 50px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; margin-right: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
+                  icon("github", style = "color: #24292e; font-size: 24px;")
+                ),
+                div(
+                  div(
+                    "GitHub",
+                    style = "color: white; font-size: 20px; font-weight: bold; margin-bottom: 3px;"
+                  ),
+                  div(
+                    "Open Source Repository",
+                    style = "color: rgba(255,255,255,0.9); font-size: 12px;"
+                  )
+                )
+              ),
+
+              div(
+                style = "color: rgba(255,255,255,0.95); font-size: 12px; line-height: 1.5; margin-bottom: 10px;",
+                "Access the source code, report issues, contribute to development, and stay updated with the latest releases."
+              ),
+
+              div(
+                icon("external-link-alt", style = "margin-right: 5px;"),
+                "View Repository",
+                style = "color: white; font-size: 12px; font-weight: 600; display: inline-block; padding: 6px 12px; background: rgba(255,255,255,0.2); border-radius: 5px;"
+              )
+            )
+          )
+        )
+      )
+    ))
+  })
+
+  ## Help Menu ----
+  observeEvent(input$show_help, {
+    showModal(modalDialog(
+      title = div(
+        style = "text-align: center; margin-bottom: 10px;",
+        icon("question-circle", style = "color: #3498db; font-size: 26px;"),
+        span(
+          " Help Menu",
+          style = "font-size: 24px; font-weight: bold; color: #2c3e50; margin-left: 10px;"
+        )
+      ),
+      size = "l",
+      easyClose = TRUE,
+      footer = modalButton("Close"),
+
+      div(
+        style = "padding: 15px;",
+
+        # Container con layout a griglia
+        div(
+          style = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;",
+
+          # Package Tutorial Card
+          tags$a(
+            href = intro,
+            target = "_blank",
+            style = "text-decoration: none; display: block;",
+            div(
+              style = "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 18px; border-radius: 10px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3); transition: all 0.3s; cursor: pointer; height: 100%;",
+              onmouseover = "this.style.transform='translateY(-3px)'; this.style.boxShadow='0 6px 20px rgba(102, 126, 234, 0.4)';",
+              onmouseout = "this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(102, 126, 234, 0.3)';",
+
+              div(
+                style = "display: flex; align-items: center; margin-bottom: 10px;",
+                div(
+                  style = "width: 50px; height: 50px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; margin-right: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
+                  icon(
+                    "play-circle",
+                    style = "color: #667eea; font-size: 24px;"
+                  )
+                ),
+                div(
+                  div(
+                    "Package Tutorial",
+                    style = "color: white; font-size: 20px; font-weight: bold; margin-bottom: 3px;"
+                  ),
+                  div(
+                    "Getting Started Guide",
+                    style = "color: rgba(255,255,255,0.9); font-size: 12px;"
+                  )
+                )
+              ),
+
+              div(
+                style = "color: rgba(255,255,255,0.95); font-size: 12px; line-height: 1.5; margin-bottom: 10px;",
+                "Learn the basics of bibliometrix with our comprehensive interactive tutorial. Perfect for beginners."
+              ),
+
+              div(
+                icon("external-link-alt", style = "margin-right: 5px;"),
+                "Start Tutorial",
+                style = "color: white; font-size: 12px; font-weight: 600; display: inline-block; padding: 6px 12px; background: rgba(255,255,255,0.2); border-radius: 5px;"
+              )
+            )
+          ),
+
+          # Convert and Import Data Card
+          tags$a(
+            href = importData,
+            target = "_blank",
+            style = "text-decoration: none; display: block;",
+            div(
+              style = "background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); padding: 18px; border-radius: 10px; box-shadow: 0 4px 15px rgba(56, 239, 125, 0.3); transition: all 0.3s; cursor: pointer; height: 100%;",
+              onmouseover = "this.style.transform='translateY(-3px)'; this.style.boxShadow='0 6px 20px rgba(56, 239, 125, 0.4)';",
+              onmouseout = "this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(56, 239, 125, 0.3)';",
+
+              div(
+                style = "display: flex; align-items: center; margin-bottom: 10px;",
+                div(
+                  style = "width: 50px; height: 50px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; margin-right: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
+                  icon(
+                    "file-import",
+                    style = "color: #11998e; font-size: 24px;"
+                  )
+                ),
+                div(
+                  div(
+                    "Import Data",
+                    style = "color: white; font-size: 20px; font-weight: bold; margin-bottom: 3px;"
+                  ),
+                  div(
+                    "Data Conversion Guide",
+                    style = "color: rgba(255,255,255,0.9); font-size: 12px;"
+                  )
+                )
+              ),
+
+              div(
+                style = "color: rgba(255,255,255,0.95); font-size: 12px; line-height: 1.5; margin-bottom: 10px;",
+                "Step-by-step instructions on how to convert and import bibliographic data from various sources into bibliometrix."
+              ),
+
+              div(
+                icon("external-link-alt", style = "margin-right: 5px;"),
+                "View Guide",
+                style = "color: white; font-size: 12px; font-weight: 600; display: inline-block; padding: 6px 12px; background: rgba(255,255,255,0.2); border-radius: 5px;"
+              )
+            )
+          ),
+
+          # biblioshiny Tutorial Card
+          tags$a(
+            href = slides,
+            target = "_blank",
+            style = "text-decoration: none; display: block;",
+            div(
+              style = "background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 18px; border-radius: 10px; box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3); transition: all 0.3s; cursor: pointer; height: 100%;",
+              onmouseover = "this.style.transform='translateY(-3px)'; this.style.boxShadow='0 6px 20px rgba(245, 87, 108, 0.4)';",
+              onmouseout = "this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(245, 87, 108, 0.3)';",
+
+              div(
+                style = "display: flex; align-items: center; margin-bottom: 10px;",
+                div(
+                  style = "width: 50px; height: 50px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; margin-right: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
+                  icon(
+                    "file-powerpoint",
+                    style = "color: #f5576c; font-size: 24px;"
+                  )
+                ),
+                div(
+                  div(
+                    "biblioshiny Tutorial",
+                    style = "color: white; font-size: 20px; font-weight: bold; margin-bottom: 3px;"
+                  ),
+                  div(
+                    "Interactive Slides",
+                    style = "color: rgba(255,255,255,0.9); font-size: 12px;"
+                  )
+                )
+              ),
+
+              div(
+                style = "color: rgba(255,255,255,0.95); font-size: 12px; line-height: 1.5; margin-bottom: 10px;",
+                "Complete walkthrough of biblioshiny's web interface with practical examples and best practices for your analysis."
+              ),
+
+              div(
+                icon("external-link-alt", style = "margin-right: 5px;"),
+                "View Slides",
+                style = "color: white; font-size: 12px; font-weight: 600; display: inline-block; padding: 6px 12px; background: rgba(255,255,255,0.2); border-radius: 5px;"
+              )
+            )
+          ),
+
+          # Version Info Card
+          div(
+            style = "background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); padding: 18px; border-radius: 10px; box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3); height: 100%;",
+
+            div(
+              style = "display: flex; align-items: center; margin-bottom: 10px;",
+              div(
+                style = "width: 50px; height: 50px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; margin-right: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);",
+                icon("info-circle", style = "color: #3498db; font-size: 24px;")
+              ),
+              div(
+                div(
+                  "Version Info",
+                  style = "color: white; font-size: 20px; font-weight: bold; margin-bottom: 3px;"
+                ),
+                div(
+                  "Current Release",
+                  style = "color: rgba(255,255,255,0.9); font-size: 12px;"
+                )
+              )
+            ),
+
+            div(
+              style = "color: rgba(255,255,255,0.95); font-size: 12px; line-height: 1.5; margin-bottom: 10px;",
+              paste0(
+                "You are currently using biblioshiny version ",
+                biblioshinyVersion,
+                ". Check our GitHub repository for the latest updates and release notes."
+              )
+            ),
+
+            div(
+              icon("code-branch", style = "margin-right: 5px;"),
+              paste0("v", biblioshinyVersion),
+              style = "color: white; font-size: 12px; font-weight: 600; display: inline-block; padding: 6px 12px; background: rgba(255,255,255,0.2); border-radius: 5px;"
+            )
+          )
+        )
+      )
+    ))
+  })
 
   ## NOTIFICATION ITEM ----
-  output$notificationMenu <- renderMenu({
-    notifTot <- notifications()
-    values$nots <- apply(notifTot, 1, function(row) {
-      ## extract href from messages
-      if (is.na(row[["href"]])) {
-        href <- NULL
-      } else {
-        href <- paste(
-          "javascript:void(window.open('",
-          row[["href"]],
-          "', '_blank'))",
-          sep = ""
-        )
-      }
-
-      ## add bold to new messages and split the long ones in two rows
-      if (row[["status"]] == "danger") {
-        ### new messages
-        textRows <- paste("tags$strong('", row[["nots"]], "')", sep = "")
-        textRows <- strsplit(
-          substr(textRows, 1, 85),
-          "(?<=.{48})",
-          perl = TRUE
-        )[[1]]
-        if (length(textRows) > 1) {
-          textRows <- paste(
-            "tags$div(",
-            textRows[1],
-            "',tags$br(),'",
-            textRows[2],
-            ")",
-            sep = ""
-          )
-        } else {
-          textRows <- paste("tags$div(", textRows, ")", sep = "")
-        }
-      } else {
-        ## old messages
-        textRows <- strsplit(
-          substr(row[["nots"]], 1, 70),
-          "(?<=.{35})",
-          perl = TRUE
-        )[[1]]
-        if (length(textRows) > 1) {
-          textRows <- paste(
-            "tags$div('",
-            textRows[1],
-            "',tags$br(),'",
-            textRows[2],
-            "')",
-            sep = ""
-          )
-        } else {
-          textRows <- paste("tags$div('", textRows, "')", sep = "")
-        }
-      }
-
-      notificationItem(
-        text = eval(parse(text = textRows)),
-        icon = if (row[["status"]] == "danger") {
-          fa_i(name = "envelope")
-        } else {
-          fa_i(name = "envelope-open")
-        },
-        status = row[["status"]],
-        href = href
-      )
-    })
-
-    if ("danger" %in% notifTot[["status"]]) {
-      badge = "danger"
-      icon_name = "envelope"
-    } else {
-      badge = NULL
-      icon_name = "envelope-open"
-    }
-
-    dropdownMenu(
-      type = "notifications",
-      .list = values$nots,
-      headerText = "",
-      badgeStatus = NULL,
-      icon = fa_i(name = icon_name)
-    )
-  })
+  # output$notificationMenu <- renderMenu({
+  #   notifTot <- notifications()
+  #   values$nots <- apply(notifTot, 1, function(row) {
+  #     ## extract href from messages
+  #     if (is.na(row[["href"]])) {
+  #       href <- NULL
+  #     } else {
+  #       href <- paste(
+  #         "javascript:void(window.open('",
+  #         row[["href"]],
+  #         "', '_blank'))",
+  #         sep = ""
+  #       )
+  #     }
+  #
+  #     ## add bold to new messages and split the long ones in two rows
+  #     if (row[["status"]] == "danger") {
+  #       ### new messages
+  #       textRows <- paste("tags$strong('", row[["nots"]], "')", sep = "")
+  #       textRows <- strsplit(
+  #         substr(textRows, 1, 85),
+  #         "(?<=.{48})",
+  #         perl = TRUE
+  #       )[[1]]
+  #       if (length(textRows) > 1) {
+  #         textRows <- paste(
+  #           "tags$div(",
+  #           textRows[1],
+  #           "',tags$br(),'",
+  #           textRows[2],
+  #           ")",
+  #           sep = ""
+  #         )
+  #       } else {
+  #         textRows <- paste("tags$div(", textRows, ")", sep = "")
+  #       }
+  #     } else {
+  #       ## old messages
+  #       textRows <- strsplit(
+  #         substr(row[["nots"]], 1, 70),
+  #         "(?<=.{35})",
+  #         perl = TRUE
+  #       )[[1]]
+  #       if (length(textRows) > 1) {
+  #         textRows <- paste(
+  #           "tags$div('",
+  #           textRows[1],
+  #           "',tags$br(),'",
+  #           textRows[2],
+  #           "')",
+  #           sep = ""
+  #         )
+  #       } else {
+  #         textRows <- paste("tags$div('", textRows, "')", sep = "")
+  #       }
+  #     }
+  #
+  #     notificationItem(
+  #       text = eval(parse(text = textRows)),
+  #       icon = if (row[["status"]] == "danger") {
+  #         fa_i(name = "envelope")
+  #       } else {
+  #         fa_i(name = "envelope-open")
+  #       },
+  #       status = row[["status"]],
+  #       href = href
+  #     )
+  #   })
+  #
+  #   if ("danger" %in% notifTot[["status"]]) {
+  #     badge = "danger"
+  #     icon_name = "envelope"
+  #   } else {
+  #     badge = NULL
+  #     icon_name = "envelope-open"
+  #   }
+  #
+  #   dropdownMenu(
+  #     type = "notifications",
+  #     .list = values$nots,
+  #     headerText = "",
+  #     badgeStatus = NULL,
+  #     icon = fa_i(name = icon_name)
+  #   )
+  # })
 
   ## SIDEBAR MENU ----
 
@@ -390,7 +1206,10 @@ To ensure the functionality of Biblioshiny,
   ## observe Gemini copy2clipboard button
   observeEvent(input$copy_btn, {
     content <- geminiSave(values, input$sidebarmenu)
-    copy_to_clipboard(content)
+
+    content_to_send <- unname(as.character(content))
+    #copy_to_clipboard(content)
+    session$sendCustomMessage("copy_to_clipboard_js", content_to_send)
   })
 
   ## observe Gemini Save button
@@ -400,6 +1219,7 @@ To ensure the functionality of Biblioshiny,
     },
     content <- function(file) {
       txtOutput <- geminiSave(values, input$sidebarmenu)
+      req(txtOutput)
       writeLines(txtOutput, con = file)
     },
     contentType = "txt"
@@ -409,15 +1229,45 @@ To ensure the functionality of Biblioshiny,
 
   observeEvent(input$gemini_btn, {
     values$gemini_additional <- input$gemini_additional ## additional info to Gemini prompt
-    #values$gemini_api_model <- input$gemini_api_model
-    values <- geminiWaitingMessage(values, input$sidebarmenu)
-    values <- geminiGenerate(
-      values,
-      input$sidebarmenu,
-      values$gemini_additional,
-      values$gemini_model_parameters,
-      input
-    )
+    activeTab <- input$sidebarmenu
+    values <- geminiWaitingMessage(values, activeTab)
+
+    # Sync: prepare prompt and images
+    prep <- geminiPrepareAll(values, activeTab, input)
+    if (!prep$can_proceed) {
+      values[[prep$field]] <- prep$error_msg
+      return()
+    }
+
+    # Snapshot for future (no reactive refs)
+    prompt <- prep$prompt
+    image_paths <- prep$image_paths
+    model <- values$gemini_api_model
+    output_size <- values$gemini_output_size
+    field <- prep$field
+
+    # Async: API call in background
+    promises::future_promise(
+      {
+        gemini_ai(
+          image = image_paths,
+          prompt = prompt,
+          model = model,
+          outputSize = output_size
+        )
+      },
+      seed = TRUE
+    ) %...>%
+      (function(result) {
+        values[[field]] <- result
+        geminiCleanupFiles(image_paths)
+      }) %...!%
+      (function(err) {
+        values[[field]] <- paste("Error:", conditionMessage(err))
+        geminiCleanupFiles(image_paths)
+      })
+
+    NULL # Don't block the observer
   })
 
   observeEvent(input$applyLoad, {
@@ -487,31 +1337,104 @@ To ensure the functionality of Biblioshiny,
     # column will contain the local filenames where the data can
     # be found.
     if (input$load == "demo") {
-      data(management, package = "bibliometrixData")
-      values = initial(values)
-      row.names(management) <- management$SR
-      management <- management %>% mergeKeywords(force = T)
-      values$M <- management
-      values$Morig = management
-      values$SCdf <- wcTable(management)
-      values$COdf <- countryTable(management)
-      values$Histfield = "NA"
-      values$results = list("NA")
-      values$rest_sidebar <- TRUE
-      values$missingdf <- df <- missingData(values$M)$mandatoryTags
-      values$missTags <- NULL
-      # values$menu <- menuList(values)
-      updateMenuVisibility(session, values)
-      values$collection_description <- 'A collection of scientific articles about the use of bibliometric approaches in business and management disciplines. Period: 1985–2020. This collection was identified by retrieving all documents indexed under the subject categories “Management” and "Business" that contain at least one of the following terms in their topic fields: “science map”, "bibliometric*".'
-      #"Dataset 'Management':\nA collection of scientific articles about the use of bibliometric approaches in business and management disciplines. Period: 1985–2020."
+      values <- initial(values)
 
+      if (input$demoDataset == "book_dataset") {
+        M <- tryCatch(
+          loadBookDataset(),
+          error = function(e) {
+            showModal(modalDialog(
+              title = "Download Error",
+              paste("Failed to download the book dataset:", e$message),
+              easyClose = TRUE
+            ))
+            return(NULL)
+          }
+        )
+        if (is.null(M)) return()
+        row.names(M) <- M$SR
+        M <- M %>% mergeKeywords(force = TRUE)
+        values$M <- M
+        values$Morig <- M
+        values$collection_description <- 'The objective of this analysis is to map and synthesize the evolution of "Bibliometric and Scientometric research applied to Management and Business disciplines." This collection serves as a comprehensive proxy for understanding how science mapping techniques have matured within these fields, leveraging a dataset characterized by diverse methodological approaches and a robust institutional network. More specifically, we collected all original research articles, written in English, that employ bibliometric or scientometric methods, including science mapping, citation analysis, co-citation analysis, and bibliographic coupling, within the management and business fields, as indexed by Web of Science, over the period 1985--2025.'
+      } else {
+        data(management, package = "bibliometrixData")
+        row.names(management) <- management$SR
+        management <- management %>% mergeKeywords(force = TRUE)
+        values$M <- management
+        values$Morig <- management
+        values$collection_description <- 'A collection of scientific articles about the use of bibliometric approaches in business and management disciplines. Period: 1985\u20132020. This collection was identified by retrieving all documents indexed under the subject categories "Management" and "Business" that contain at least one of the following terms in their topic fields: "science map", "bibliometric*".'
+      }
+
+      values$SCdf <- wcTable(values$M)
+      values$COdf <- countryTable(values$M)
+      values$Histfield <- "NA"
+      values$results <- list("NA")
+      values$rest_sidebar <- TRUE
+      values$missingdf <- missingData(values$M)$mandatoryTags
+      values$missTags <- NULL
+      updateMenuVisibility(session, values)
       showModal(missingModal(session))
       return()
     }
     inFile <- input$file1
 
     if (!is.null(inFile) & input$load == "import") {
-      ext <- getFileNameExtension(inFile$datapath)
+      ext <- tools::file_ext(inFile$datapath)
+
+      ## ---- max.rows check ----
+      if (is.finite(max_rows)) {
+        # Derive format from original filename (inFile$name), not from temp path
+        orig_ext <- tolower(tools::file_ext(inFile$name[1]))
+        fmt <- switch(
+          orig_ext,
+          txt = if (input$dbsource == "pubmed") "pubmed" else "plaintext",
+          csv = "csv",
+          bib = "bibtex",
+          ciw = "plaintext",
+          xlsx = "excel",
+          zip = NULL, # countRecords will unzip and auto-detect
+          NULL
+        )
+        # For ZIP files, we need to give countRecords a file with .zip extension
+        file_to_check <- inFile$datapath[1]
+        if (orig_ext == "zip") {
+          zip_tmp <- paste0(file_to_check, ".zip")
+          file.copy(file_to_check, zip_tmp)
+          file_to_check <- zip_tmp
+        }
+        n_records <- tryCatch(
+          countRecords(file_to_check, dbsource = input$dbsource, format = fmt),
+          error = function(e) NA_integer_
+        )
+        if (orig_ext == "zip" && file.exists(zip_tmp)) {
+          file.remove(zip_tmp)
+        }
+
+        if (!is.na(n_records) && n_records > max_rows) {
+          showModal(modalDialog(
+            title = tags$strong(
+              icon("exclamation-triangle"),
+              " File too large"
+            ),
+            tags$p(
+              sprintf(
+                "The selected file contains %s records, which exceeds the maximum allowed limit of %s.",
+                format(n_records, big.mark = ","),
+                format(as.integer(max_rows), big.mark = ",")
+              )
+            ),
+            tags$p(
+              "Please reduce the number of records in your file and try again."
+            ),
+            footer = modalButton("OK"),
+            easyClose = TRUE
+          ))
+          return(NULL)
+        }
+      }
+      ## ---- end max.rows check ----
+
       switch(
         input$dbsource,
         isi = {
@@ -519,7 +1442,13 @@ To ensure the functionality of Biblioshiny,
             ext,
             ###  WoS ZIP Files
             zip = {
-              D <- utils::unzip(inFile$datapath)
+              # Crea un percorso per una cartella temporanea specifica per questa sessione
+              temp_exdir <- file.path(getWD(), "unzipped_files")
+
+              # Estrae i file nella cartella temporanea
+              # (exdir viene creata automaticamente se non esiste)
+              D <- utils::unzip(inFile$datapath, exdir = temp_exdir)
+              #D <- utils::unzip(inFile$datapath)
               withProgress(message = 'Conversion in progress', value = 0, {
                 M <- convert2df(
                   D,
@@ -528,6 +1457,7 @@ To ensure the functionality of Biblioshiny,
                 )
                 M <- authorNameFormat(M, input$authorName)
               })
+              on.exit(unlink(temp_exdir, recursive = TRUE))
             },
             ### WoS Txt/Bib Files
             {
@@ -547,18 +1477,29 @@ To ensure the functionality of Biblioshiny,
             ext,
             ###  Scopus ZIP Files
             zip = {
-              D <- utils::unzip(inFile$datapath)
+              # Crea un percorso per una cartella temporanea specifica per questa sessione
+              temp_exdir <- file.path(getWD(), "unzipped_files")
+
+              # Estrae i file nella cartella temporanea
+              # (exdir viene creata automaticamente se non esiste)
+              D <- utils::unzip(inFile$datapath, exdir = temp_exdir)
+
               withProgress(message = 'Conversion in progress', value = 0, {
+                # Usiamo i percorsi dei file estratti (contenuti in D)
                 M <- convert2df(
                   D,
                   dbsource = input$dbsource,
                   format = formatDB(D)
                 )
+
                 M <- authorNameFormat(M, input$authorName)
+
                 if (formatDB(D) == "csv" & input$authorName == "AF") {
                   M <- AuthorNameMerge(M)
                 }
               })
+
+              on.exit(unlink(temp_exdir, recursive = TRUE))
             },
             ### Scopus CSV/Bib Files
             csv = {
@@ -592,6 +1533,247 @@ To ensure the functionality of Biblioshiny,
               format = "csv"
             )
           })
+
+          # Resolve cited references if requested
+          if (isTRUE(input$importFetchRefs)) {
+            # Check if CR column has actual reference IDs (old format) or is empty/NA (new format)
+            has_cr_ids <- "CR" %in% names(M) && any(!is.na(M$CR) & M$CR != "")
+            only_multiple <- is.null(input$importRefsFilter) || input$importRefsFilter == "multiple"
+
+            showModal(modalDialog(
+              title = "Resolving Cited References",
+              div(
+                div(
+                  style = "text-align: center; margin: 20px 0;",
+                  icon("spinner", class = "fa-spin fa-3x")
+                ),
+                div(
+                  id = "import-ref-progress",
+                  style = "text-align: center; font-size: 14px;",
+                  if (has_cr_ids) {
+                    "Collecting reference IDs..."
+                  } else {
+                    "Fetching references from OpenAlex API..."
+                  }
+                ),
+                div(
+                  style = "margin-top: 10px; background-color: #e9ecef; border-radius: 4px; height: 20px; width: 100%;",
+                  div(
+                    id = "import-ref-bar",
+                    style = "background-color: #007bff; height: 100%; border-radius: 4px; width: 0%; transition: width 0.3s ease;"
+                  )
+                ),
+                div(
+                  id = "import-ref-pct",
+                  style = "text-align: center; margin-top: 5px; font-size: 12px; color: #666;",
+                  "0%"
+                )
+              ),
+              footer = NULL,
+              easyClose = FALSE
+            ))
+
+            tryCatch(
+              {
+                if (has_cr_ids) {
+                  # Old format: CR column contains OpenAlex reference IDs
+                  all_cr <- M$CR[!is.na(M$CR) & M$CR != ""]
+                  all_ref_ids <- unique(trimws(unlist(strsplit(all_cr, ";"))))
+                  all_ref_ids <- all_ref_ids[grepl(
+                    "^https://openalex\\.org/W",
+                    all_ref_ids
+                  )]
+
+                  if (length(all_ref_ids) > 0) {
+                    shinyjs::html(
+                      "import-ref-progress",
+                      sprintf(
+                        "Resolving %s unique references...",
+                        format(length(all_ref_ids), big.mark = ",")
+                      )
+                    )
+
+                    oa_data_fake <- lapply(seq_len(nrow(M)), function(i) {
+                      cr <- M$CR[i]
+                      if (is.na(cr) || cr == "") {
+                        list(referenced_works = character(0))
+                      } else {
+                        refs <- trimws(unlist(strsplit(cr, ";")))
+                        refs <- refs[grepl("^https://openalex\\.org/W", refs)]
+                        list(referenced_works = refs)
+                      }
+                    })
+
+                    ref_lookup <- resolve_openalex_references(
+                      oa_data_fake,
+                      progress_id = "import-ref-progress",
+                      progress_bar_id = "import-ref-bar",
+                      progress_pct_id = "import-ref-pct",
+                      only_multiple = only_multiple
+                    )
+
+                    if (length(ref_lookup) > 0) {
+                      shinyjs::html(
+                        "import-ref-progress",
+                        "Building citation strings..."
+                      )
+                      cr_col <- build_cr_column(oa_data_fake, ref_lookup)
+                      M$CRids <- M$CR
+                      M$CR <- cr_col
+                    }
+                  }
+                } else {
+                  # New format: no CR in CSV, fetch referenced_works via API using id_oa
+                  work_ids <- M$id_oa[!is.na(M$id_oa) & M$id_oa != ""]
+                  if (length(work_ids) > 0) {
+                    shinyjs::html(
+                      "import-ref-progress",
+                      sprintf(
+                        "Fetching referenced works for %s publications...",
+                        format(length(work_ids), big.mark = ",")
+                      )
+                    )
+
+                    # Fetch referenced_works for each publication in batches of 50
+                    batch_size <- 50
+                    n_batches <- ceiling(length(work_ids) / batch_size)
+                    ref_map <- setNames(
+                      vector("list", length(work_ids)),
+                      work_ids
+                    )
+
+                    for (b in seq_len(n_batches)) {
+                      start_idx <- (b - 1) * batch_size + 1
+                      end_idx <- min(b * batch_size, length(work_ids))
+                      batch_ids <- work_ids[start_idx:end_idx]
+
+                      pct <- round(b / n_batches * 50) # first half: 0-50%
+                      shinyjs::runjs(sprintf(
+                        "$('#import-ref-bar').css('width', '%d%%');",
+                        pct
+                      ))
+                      shinyjs::html(
+                        "import-ref-pct",
+                        sprintf(
+                          "Fetching references... batch %d/%d (%d%%)",
+                          b,
+                          n_batches,
+                          pct
+                        )
+                      )
+
+                      tryCatch(
+                        {
+                          result <- openalexR::oa_fetch(
+                            entity = "works",
+                            openalex_id = paste(batch_ids, collapse = "|"),
+                            output = "list",
+                            verbose = FALSE
+                          )
+                          if (is.list(result)) {
+                            for (work in result) {
+                              wid <- gsub("https://openalex.org/", "", work$id)
+                              if (
+                                !is.null(wid) && !is.null(work$referenced_works)
+                              ) {
+                                ref_map[[wid]] <- work$referenced_works
+                              }
+                            }
+                          }
+                        },
+                        error = function(e) {
+                          # Skip failed batches silently
+                        }
+                      )
+                    }
+
+                    # Build oa_data_fake structure from fetched referenced_works
+                    oa_data_fake <- lapply(seq_len(nrow(M)), function(i) {
+                      refs <- ref_map[[M$id_oa[i]]]
+                      if (is.null(refs) || length(refs) == 0) {
+                        list(referenced_works = character(0))
+                      } else {
+                        list(referenced_works = refs)
+                      }
+                    })
+
+                    # Collect all unique ref IDs and resolve them
+                    all_ref_ids <- unique(unlist(lapply(
+                      oa_data_fake,
+                      function(w) w$referenced_works
+                    )))
+                    all_ref_ids <- all_ref_ids[
+                      !is.na(all_ref_ids) & all_ref_ids != ""
+                    ]
+
+                    if (length(all_ref_ids) > 0) {
+                      shinyjs::html(
+                        "import-ref-progress",
+                        sprintf(
+                          "Resolving %s unique references...",
+                          format(length(all_ref_ids), big.mark = ",")
+                        )
+                      )
+
+                      ref_lookup <- resolve_openalex_references(
+                        oa_data_fake,
+                        progress_id = "import-ref-progress",
+                        progress_bar_id = "import-ref-bar",
+                        progress_pct_id = "import-ref-pct",
+                        only_multiple = only_multiple
+                      )
+
+                      if (length(ref_lookup) > 0) {
+                        shinyjs::html(
+                          "import-ref-progress",
+                          "Building citation strings..."
+                        )
+                        cr_col <- build_cr_column(oa_data_fake, ref_lookup)
+                        # Save OpenAlex IDs for direct citation analysis (histNetwork)
+                        M$CRids <- vapply(
+                          oa_data_fake,
+                          function(w) {
+                            ids <- gsub(
+                              "https://openalex.org/",
+                              "",
+                              w$referenced_works
+                            )
+                            if (length(ids) == 0) {
+                              NA_character_
+                            } else {
+                              paste(ids, collapse = ";")
+                            }
+                          },
+                          character(1)
+                        )
+                        M$CR <- cr_col
+                        M$NR <- vapply(
+                          oa_data_fake,
+                          function(w) length(w$referenced_works),
+                          integer(1)
+                        )
+                      }
+                    }
+                  }
+                }
+
+                removeModal()
+              },
+              error = function(e) {
+                removeModal()
+                showModal(modalDialog(
+                  title = "Warning",
+                  paste(
+                    "Reference resolution failed:",
+                    e$message,
+                    "\nThe collection was imported without resolved references."
+                  ),
+                  easyClose = TRUE,
+                  footer = modalButton("OK")
+                ))
+              }
+            )
+          }
         },
         openalex_api = {
           M <- convert2df(
@@ -599,13 +1781,242 @@ To ensure the functionality of Biblioshiny,
             dbsource = input$dbsource,
             format = "api"
           )
+
+          # Resolve cited references if requested
+          if (isTRUE(input$importFetchRefs)) {
+            has_cr_ids <- "CR" %in% names(M) && any(!is.na(M$CR) & M$CR != "")
+            only_multiple <- is.null(input$importRefsFilter) || input$importRefsFilter == "multiple"
+
+            showModal(modalDialog(
+              title = "Resolving Cited References",
+              div(
+                div(
+                  style = "text-align: center; margin: 20px 0;",
+                  icon("spinner", class = "fa-spin fa-3x")
+                ),
+                div(
+                  id = "import-ref-progress",
+                  style = "text-align: center; font-size: 14px;",
+                  "Collecting reference IDs..."
+                ),
+                div(
+                  style = "margin-top: 10px; background-color: #e9ecef; border-radius: 4px; height: 20px; width: 100%;",
+                  div(
+                    id = "import-ref-bar",
+                    style = "background-color: #007bff; height: 100%; border-radius: 4px; width: 0%; transition: width 0.3s ease;"
+                  )
+                ),
+                div(
+                  id = "import-ref-pct",
+                  style = "text-align: center; margin-top: 5px; font-size: 12px; color: #666;",
+                  "0%"
+                )
+              ),
+              footer = NULL,
+              easyClose = FALSE
+            ))
+
+            tryCatch(
+              {
+                if (has_cr_ids) {
+                  # CR column contains OpenAlex reference IDs (e.g. W1234567890)
+                  all_cr <- M$CR[!is.na(M$CR) & M$CR != ""]
+                  all_ref_ids <- unique(trimws(unlist(strsplit(all_cr, ";\\s*"))))
+                  # Add OpenAlex URL prefix if missing
+                  all_ref_ids <- ifelse(
+                    grepl("^https://openalex\\.org/", all_ref_ids),
+                    all_ref_ids,
+                    paste0("https://openalex.org/", all_ref_ids)
+                  )
+                  all_ref_ids <- unique(all_ref_ids[grepl("^https://openalex\\.org/W", all_ref_ids)])
+
+                  if (length(all_ref_ids) > 0) {
+                    shinyjs::html(
+                      "import-ref-progress",
+                      sprintf(
+                        "Resolving %s unique references...",
+                        format(length(all_ref_ids), big.mark = ",")
+                      )
+                    )
+
+                    oa_data_fake <- lapply(seq_len(nrow(M)), function(i) {
+                      cr <- M$CR[i]
+                      if (is.na(cr) || cr == "") {
+                        list(referenced_works = character(0))
+                      } else {
+                        refs <- trimws(unlist(strsplit(cr, ";\\s*")))
+                        refs <- ifelse(
+                          grepl("^https://openalex\\.org/", refs),
+                          refs,
+                          paste0("https://openalex.org/", refs)
+                        )
+                        refs <- refs[grepl("^https://openalex\\.org/W", refs)]
+                        list(referenced_works = refs)
+                      }
+                    })
+
+                    ref_lookup <- resolve_openalex_references(
+                      oa_data_fake,
+                      progress_id = "import-ref-progress",
+                      progress_bar_id = "import-ref-bar",
+                      progress_pct_id = "import-ref-pct",
+                      only_multiple = only_multiple
+                    )
+
+                    if (length(ref_lookup) > 0) {
+                      shinyjs::html(
+                        "import-ref-progress",
+                        "Building citation strings..."
+                      )
+                      cr_col <- build_cr_column(oa_data_fake, ref_lookup)
+                      M$CRids <- M$CR
+                      M$CR <- cr_col
+                    }
+                  }
+                } else {
+                  # No CR column: fetch referenced_works via API using id_oa
+                  work_ids <- M$id_oa[!is.na(M$id_oa) & M$id_oa != ""]
+                  if (length(work_ids) > 0) {
+                    shinyjs::html(
+                      "import-ref-progress",
+                      sprintf(
+                        "Fetching referenced works for %s publications...",
+                        format(length(work_ids), big.mark = ",")
+                      )
+                    )
+
+                    batch_size <- 50
+                    n_batches <- ceiling(length(work_ids) / batch_size)
+                    ref_map <- setNames(
+                      vector("list", length(work_ids)),
+                      work_ids
+                    )
+
+                    for (b in seq_len(n_batches)) {
+                      start_idx <- (b - 1) * batch_size + 1
+                      end_idx <- min(b * batch_size, length(work_ids))
+                      batch_ids <- work_ids[start_idx:end_idx]
+
+                      pct <- round(b / n_batches * 50)
+                      shinyjs::runjs(sprintf(
+                        "$('#import-ref-bar').css('width', '%d%%');",
+                        pct
+                      ))
+                      shinyjs::html(
+                        "import-ref-pct",
+                        sprintf(
+                          "Fetching references... batch %d/%d (%d%%)",
+                          b, n_batches, pct
+                        )
+                      )
+
+                      tryCatch(
+                        {
+                          result <- openalexR::oa_fetch(
+                            entity = "works",
+                            openalex_id = paste(batch_ids, collapse = "|"),
+                            output = "list",
+                            verbose = FALSE
+                          )
+                          if (is.list(result)) {
+                            for (work in result) {
+                              wid <- gsub("https://openalex.org/", "", work$id)
+                              if (!is.null(wid) && !is.null(work$referenced_works)) {
+                                ref_map[[wid]] <- work$referenced_works
+                              }
+                            }
+                          }
+                        },
+                        error = function(e) {}
+                      )
+                    }
+
+                    oa_data_fake <- lapply(seq_len(nrow(M)), function(i) {
+                      refs <- ref_map[[M$id_oa[i]]]
+                      if (is.null(refs) || length(refs) == 0) {
+                        list(referenced_works = character(0))
+                      } else {
+                        list(referenced_works = refs)
+                      }
+                    })
+
+                    all_ref_ids <- unique(unlist(lapply(
+                      oa_data_fake,
+                      function(w) w$referenced_works
+                    )))
+                    all_ref_ids <- all_ref_ids[!is.na(all_ref_ids) & all_ref_ids != ""]
+
+                    if (length(all_ref_ids) > 0) {
+                      shinyjs::html(
+                        "import-ref-progress",
+                        sprintf(
+                          "Resolving %s unique references...",
+                          format(length(all_ref_ids), big.mark = ",")
+                        )
+                      )
+
+                      ref_lookup <- resolve_openalex_references(
+                        oa_data_fake,
+                        progress_id = "import-ref-progress",
+                        progress_bar_id = "import-ref-bar",
+                        progress_pct_id = "import-ref-pct",
+                        only_multiple = only_multiple
+                      )
+
+                      if (length(ref_lookup) > 0) {
+                        shinyjs::html(
+                          "import-ref-progress",
+                          "Building citation strings..."
+                        )
+                        cr_col <- build_cr_column(oa_data_fake, ref_lookup)
+                        M$CRids <- vapply(
+                          oa_data_fake,
+                          function(w) {
+                            ids <- gsub("https://openalex.org/", "", w$referenced_works)
+                            if (length(ids) == 0) NA_character_ else paste(ids, collapse = ";")
+                          },
+                          character(1)
+                        )
+                        M$CR <- cr_col
+                        M$NR <- vapply(
+                          oa_data_fake,
+                          function(w) length(w$referenced_works),
+                          integer(1)
+                        )
+                      }
+                    }
+                  }
+                }
+
+                removeModal()
+              },
+              error = function(e) {
+                removeModal()
+                showModal(modalDialog(
+                  title = "Warning",
+                  paste(
+                    "Reference resolution failed:",
+                    e$message,
+                    "\nThe collection was imported without resolved references."
+                  ),
+                  easyClose = TRUE,
+                  footer = modalButton("OK")
+                ))
+              }
+            )
+          }
         },
         lens = {
           switch(
             ext,
             ###  Lens.org ZIP Files
             zip = {
-              D <- utils::unzip(inFile$datapath)
+              # Crea un percorso per una cartella temporanea specifica per questa sessione
+              temp_exdir <- file.path(getWD, "unzipped_files")
+              # Estrae i file nella cartella temporanea
+              # (exdir viene creata automaticamente se non esiste)
+              D <- utils::unzip(inFile$datapath, exdir = temp_exdir)
+              # D <- utils::unzip(inFile$datapath)
               withProgress(message = 'Conversion in progress', value = 0, {
                 M <- convert2df(
                   D,
@@ -613,6 +2024,7 @@ To ensure the functionality of Biblioshiny,
                   format = formatDB(D)
                 )
               })
+              on.exit(unlink(temp_exdir, recursive = TRUE))
             },
             ### Lens.org CSV Files
             {
@@ -631,7 +2043,13 @@ To ensure the functionality of Biblioshiny,
             ext,
             ###  Cochrane ZIP Files
             zip = {
-              D <- utils::unzip(inFile$datapath)
+              # D <- utils::unzip(inFile$datapath)
+              # Crea un percorso per una cartella temporanea specifica per questa sessione
+              temp_exdir <- file.path(getWD, "unzipped_files")
+
+              # Estrae i file nella cartella temporanea
+              # (exdir viene creata automaticamente se non esiste)
+              D <- utils::unzip(inFile$datapath, exdir = temp_exdir)
               withProgress(message = 'Conversion in progress', value = 0, {
                 M <- convert2df(
                   D,
@@ -639,6 +2057,7 @@ To ensure the functionality of Biblioshiny,
                   format = formatDB(D)
                 )
               })
+              on.exit(unlink(temp_exdir, recursive = TRUE))
             },
             ### Cochrane txt files
             {
@@ -657,10 +2076,17 @@ To ensure the functionality of Biblioshiny,
             ext,
             ###  Pubmed ZIP Files
             zip = {
-              D <- utils::unzip(inFile$datapath)
+              # D <- utils::unzip(inFile$datapath)
+              # Crea un percorso per una cartella temporanea specifica per questa sessione
+              temp_exdir <- file.path(getWD(), "unzipped_files")
+
+              # Estrae i file nella cartella temporanea
+              # (exdir viene creata automaticamente se non esiste)
+              D <- utils::unzip(inFile$datapath, exdir = temp_exdir)
               withProgress(message = 'Conversion in progress', value = 0, {
                 M <- convert2df(D, dbsource = input$dbsource, format = "pubmed")
               })
+              on.exit(unlink(temp_exdir, recursive = TRUE))
             },
             ### Pubmed txt Files
             txt = {
@@ -679,11 +2105,18 @@ To ensure the functionality of Biblioshiny,
             ext,
             ###  Dimensions ZIP Files
             zip = {
-              D = utils::unzip(inFile$datapath)
+              # D = utils::unzip(inFile$datapath)
+              # Crea un percorso per una cartella temporanea specifica per questa sessione
+              temp_exdir <- file.path(getWD(), "unzipped_files")
+
+              # Estrae i file nella cartella temporanea
+              # (exdir viene creata automaticamente se non esiste)
+              D <- utils::unzip(inFile$datapath, exdir = temp_exdir)
               withProgress(message = 'Conversion in progress', value = 0, {
                 M <-
                   convert2df(D, dbsource = input$dbsource, format = formatDB(D))
               })
+              on.exit(unlink(temp_exdir, recursive = TRUE))
             },
             ### Dimensions Xlsx/csv Files
             xlsx = {
@@ -710,7 +2143,47 @@ To ensure the functionality of Biblioshiny,
         }
       )
     } else if (!is.null(inFile) & input$load == "load") {
-      ext <- tolower(getFileNameExtension(inFile$datapath))
+      ext <- tolower(tools::file_ext(inFile$datapath))
+
+      ## ---- max.rows check for load ----
+      if (is.finite(max_rows)) {
+        orig_ext_load <- tolower(tools::file_ext(inFile$name[1]))
+        fmt <- switch(
+          orig_ext_load,
+          xlsx = "excel",
+          rdata = "rdata",
+          rda = "rdata",
+          rds = "rds",
+          NULL
+        )
+        n_records <- tryCatch(
+          countRecords(inFile$datapath[1], format = fmt),
+          error = function(e) NA_integer_
+        )
+        if (!is.na(n_records) && n_records > max_rows) {
+          showModal(modalDialog(
+            title = tags$strong(
+              icon("exclamation-triangle"),
+              " File too large"
+            ),
+            tags$p(
+              sprintf(
+                "The selected file contains %s records, which exceeds the maximum allowed limit of %s.",
+                format(n_records, big.mark = ","),
+                format(as.integer(max_rows), big.mark = ",")
+              )
+            ),
+            tags$p(
+              "Please reduce the number of records in your file and try again."
+            ),
+            footer = modalButton("OK"),
+            easyClose = TRUE
+          ))
+          return(NULL)
+        }
+      }
+      ## ---- end max.rows check ----
+
       switch(
         ext,
         ### excel format
@@ -781,7 +2254,7 @@ To ensure the functionality of Biblioshiny,
     }
   })
 
-  output$contents <- DT::renderDT({
+  output$contents <- renderUI({
     DATAloading()
     MData = as.data.frame(apply(values$M, 2, function(x) {
       substring(x, 1, 150)
@@ -796,7 +2269,7 @@ To ensure the functionality of Biblioshiny,
       )
     nome = c("DOI", names(MData)[-length(names(MData))])
     MData = MData[nome]
-    DTformat(
+    renderBibliobox(
       MData,
       nrow = 3,
       filename = "Table",
@@ -814,8 +2287,41 @@ To ensure the functionality of Biblioshiny,
       button = FALSE,
       escape = FALSE,
       selection = FALSE,
-      scrollX = TRUE
+      scrollX = TRUE,
+      scrollY = TRUE
     )
+    # out <- tryCatch(
+    #   {
+    #     HTML(htmlBoxFormat(
+    #       MData,
+    #       nrow = 3,
+    #       filename = "Table",
+    #       pagelength = TRUE,
+    #       left = NULL,
+    #       right = NULL,
+    #       numeric = NULL,
+    #       dom = TRUE,
+    #       size = '70%',
+    #       filter = "top",
+    #       columnShort = NULL,
+    #       columnSmall = NULL,
+    #       round = 2,
+    #       title = "",
+    #       button = FALSE,
+    #       escape = FALSE,
+    #       selection = FALSE,
+    #       scrollX = TRUE,
+    #       scrollY = TRUE
+    #     ))
+    #   },
+    #   error = function(e) {
+    #     # In caso di errore nella tua funzione, mostra l'errore nel box invece di bloccare tutto
+    #     tags$div(
+    #       style = "color:red; padding:20px;",
+    #       paste("Errore htmlBoxFormat:", e$message)
+    #     )
+    #   }
+    # )
   })
 
   ## Openalex API Query Sample Size ----
@@ -859,7 +2365,7 @@ To ensure the functionality of Biblioshiny,
     }
   })
 
-  output$contentsMerge <- DT::renderDT({
+  output$contentsMerge <- renderUI({
     DATAmerging()
     MData = as.data.frame(apply(values$M, 2, function(x) {
       substring(x, 1, 150)
@@ -874,7 +2380,7 @@ To ensure the functionality of Biblioshiny,
       )
     nome = c("DOI", names(MData)[-length(names(MData))])
     MData = MData[nome]
-    DTformat(
+    renderBibliobox(
       MData,
       nrow = 3,
       filename = "Table",
@@ -910,11 +2416,80 @@ To ensure the functionality of Biblioshiny,
   })
 
   ### Missing Data in Metadata ----
-  output$missingDataTable <- DT::renderDT({
+
+  # Helper: create inline SVG sparkline showing missing % over time for a metadata tag
+  missingSparkline <- function(M, tag, width = 180, height = 28) {
+    na_svg <- sprintf(
+      '<svg width="%d" height="%d" style="vertical-align: middle;"><rect x="0" y="0" width="%d" height="%d" fill="#f5f5f5" rx="2"/><text x="%d" y="%d" text-anchor="middle" font-size="9" fill="#999">N/A</text></svg>',
+      width, height, width, height, width %/% 2, height %/% 2 + 3
+    )
+    if (!"PY" %in% names(M)) return(na_svg)
+    if (!tag %in% names(M)) {
+      # Tag completely missing: all bars at 100%
+      years <- sort(unique(M$PY[!is.na(M$PY)]))
+      if (length(years) < 1) return(na_svg)
+      yearly_miss <- rep(100, length(years))
+    } else {
+      years <- sort(unique(M$PY[!is.na(M$PY)]))
+      if (length(years) < 1) return(na_svg)
+
+      yearly_miss <- vapply(years, function(y) {
+        idx <- which(M$PY == y)
+        if (length(idx) == 0) return(0)
+        vals <- M[[tag]][idx]
+        miss <- sum(is.na(vals) | vals %in% c("NA,0000,NA", "NA", "", "none"))
+        round(miss / length(idx) * 100, 1)
+      }, numeric(1))
+
+      # TC special case
+      if (tag == "TC" && sum(as.numeric(M$TC), na.rm = TRUE) == 0) {
+        yearly_miss[] <- 100
+      }
+    }
+
+    n <- length(years)
+    bar_w <- max(1, width / n)
+    svg_w <- bar_w * n
+
+    bar_color <- function(pct) {
+      if (pct == 0) return("#32cd32")
+      if (pct <= 10) return("#90ee90")
+      if (pct <= 20) return("#f0e68c")
+      if (pct <= 50) return("#f08080")
+      return("#b22222")
+    }
+
+    bars <- vapply(seq_along(years), function(i) {
+      pct <- yearly_miss[i]
+      bar_h <- max(1, pct / 100 * height)
+      y_pos <- height - bar_h
+      gap <- if (bar_w > 2) 0.5 else 0
+      sprintf(
+        '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" opacity="0.85"><title>%d: %.1f%%</title></rect>',
+        (i - 1) * bar_w, y_pos, bar_w - gap, bar_h, bar_color(pct), years[i], pct
+      )
+    }, character(1))
+
+    # Year labels below bars
+    lbl_h <- 10
+    total_h <- height + lbl_h + 2
+    lbl_start <- sprintf('<text x="1" y="%d" font-size="8" fill="#888">%d</text>', total_h - 1, min(years))
+    lbl_end <- sprintf('<text x="%.1f" y="%d" font-size="8" fill="#888" text-anchor="end">%d</text>', svg_w - 1, total_h - 1, max(years))
+
+    sprintf(
+      '<svg width="%.0f" height="%d" style="vertical-align: middle;"><rect x="0" y="0" width="%.0f" height="%d" fill="#f5f5f5" rx="2"/>%s%s%s</svg>',
+      svg_w, total_h, svg_w, height, paste(bars, collapse = ""), lbl_start, lbl_end
+    )
+  }
+
+  output$missingDataTable <- renderUI({
     values$missingdf <- df <- missingData(values$M)$mandatoryTags
     values$missTags <- df$tag[df$missing_pct > 50]
     # values$menu <- menuList(values)
     updateMenuVisibility(session, values)
+
+    # Compute sparkline trends per tag
+    sparklines <- vapply(df$tag, function(t) missingSparkline(values$M, t), character(1))
 
     names(df) <- c(
       "Metadata",
@@ -923,48 +2498,80 @@ To ensure the functionality of Biblioshiny,
       "Missing %",
       "Status"
     )
-    values$missingDataTable <- DT::datatable(
-      df,
-      escape = FALSE,
-      rownames = FALSE, #extensions = c("Buttons"),
-      class = 'cell-border stripe',
-      selection = 'none',
-      options = list(
-        pageLength = nrow(df),
-        info = FALSE,
-        autoWidth = FALSE,
-        scrollX = TRUE,
-        dom = 'rti',
-        ordering = F,
-        columnDefs = list(
-          list(
-            targets = ncol(df) - 1,
-            createdCell = JS(
-              "function(td, cellData, rowData, row, col) {",
-              "  if (cellData === 'Completely missing') {",
-              "    $(td).css('background-color', '#b22222');",
-              "  } else if (cellData === 'Critical') {",
-              "    $(td).css('background-color', '#f08080');",
-              "  } else if (cellData === 'Poor') {",
-              "    $(td).css('background-color', 'lightgrey');",
-              "  } else if (cellData === 'Acceptable') {",
-              "    $(td).css('background-color', '#f0e68c');",
-              "  } else if (cellData === 'Good') {",
-              "    $(td).css('background-color', '#90ee90');",
-              "  } else if (cellData === 'Excellent') {",
-              "    $(td).css('background-color', '#32cd32');",
-              "  }",
-              "}"
-            )
-          )
+
+    # Add trend column and reorder
+    df$Trend <- sparklines
+    df <- df[, c("Metadata", "Description", "Missing Counts", "Missing %", "Trend", "Status")]
+
+    # Pre-processing del dataframe per aggiungere colori e formattazione
+    df_formatted <- df %>%
+      mutate(
+        # Bold formatting for Metadata and Description
+        Metadata = paste0('<strong style="font-size: 14px;">', Metadata, '</strong>'),
+        Description = paste0('<strong style="font-size: 14px;">', Description, '</strong>'),
+        `Missing Counts` = as.character(`Missing Counts`),
+        `Missing Counts` = paste0('<span style="font-size: 14px; font-weight: 600;">', `Missing Counts`, '</span>'),
+
+        # Arrotonda la colonna "Missing %" a 2 decimali
+        `Missing %` = round(`Missing %`, 2),
+        `Missing %` = paste0('<span style="font-size: 14px; font-weight: 600;">', `Missing %`, '</span>'),
+
+        # Aggiungi colori di background alla colonna Status basandosi sul valore
+        Status = case_when(
+          Status == "Completely missing" ~
+            paste0(
+              '<span style="display: block; background-color: #b22222; color: white; padding: 5px; text-align: center; border-radius: 3px; font-size: 14px; font-weight: 700;">',
+              Status,
+              '</span>'
+            ),
+          Status == "Critical" ~
+            paste0(
+              '<span style="display: block; background-color: #f08080; color: white; padding: 5px; text-align: center; border-radius: 3px; font-size: 14px; font-weight: 700;">',
+              Status,
+              '</span>'
+            ),
+          Status == "Poor" ~
+            paste0(
+              '<span style="display: block; background-color: lightgrey; color: black; padding: 5px; text-align: center; border-radius: 3px; font-size: 14px; font-weight: 700;">',
+              Status,
+              '</span>'
+            ),
+          Status == "Acceptable" ~
+            paste0(
+              '<span style="display: block; background-color: #f0e68c; color: black; padding: 5px; text-align: center; border-radius: 3px; font-size: 14px; font-weight: 700;">',
+              Status,
+              '</span>'
+            ),
+          Status == "Good" ~
+            paste0(
+              '<span style="display: block; background-color: #90ee90; color: black; padding: 5px; text-align: center; border-radius: 3px; font-size: 14px; font-weight: 700;">',
+              Status,
+              '</span>'
+            ),
+          Status == "Excellent" ~
+            paste0(
+              '<span style="display: block; background-color: #32cd32; color: white; padding: 5px; text-align: center; border-radius: 3px; font-size: 14px; font-weight: 700;">',
+              Status,
+              '</span>'
+            ),
+          TRUE ~ Status
         )
       )
-    ) %>%
-      formatRound("Missing %", digits = 2) %>%
-      formatStyle(
-        "Status",
-        textAlign = 'center'
-      )
+
+    values$missingdf_formatted <- df_formatted
+
+    # Crea la tabella con htmlBoxFormat
+    values$missingDataTable <- renderBibliobox(
+      df = df_formatted,
+      nrow = nrow(df_formatted), # Mostra tutte le righe
+      escape = FALSE, # Permette HTML nelle celle
+      scrollX = TRUE, # Scroll orizzontale
+      dom = FALSE, # Nasconde controlli DOM extra
+      filter = "none", # Nessun filtro
+      pagelength = FALSE, # Nasconde menu lunghezza pagina
+      button = FALSE, # Nessun bottone export
+      round = 2 # Arrotondamento generale a 2 decimali
+    )
     values$missingDataTable
   })
 
@@ -1027,7 +2634,7 @@ To ensure the functionality of Biblioshiny,
         " duplicated docs"
       )
     } else {
-      DB <- firstup(values$M$DB[1])
+      DB <- bibliometrix:::firstup(values$M$DB[1])
       txt1 <- paste0(
         "Completeness of metadata -- ",
         strong(ndocs),
@@ -1051,7 +2658,7 @@ To ensure the functionality of Biblioshiny,
     ns <- session$ns
     modalDialog(
       uiOutput("missingTitle"),
-      DT::DTOutput(ns("missingDataTable")),
+      uiOutput(ns("missingDataTable")),
       size = "l",
       easyClose = TRUE,
       footer = tagList(
@@ -1067,7 +2674,7 @@ To ensure the functionality of Biblioshiny,
         ),
         actionButton(
           label = "Save",
-          inputId = "missingDataTable",
+          inputId = "missingDataSave",
           icon = icon("camera", lib = "glyphicon")
         ),
         modalButton(label = "Close")
@@ -1075,34 +2682,81 @@ To ensure the functionality of Biblioshiny,
     )
   }
 
-  observeEvent(input$missingDataTable, {
-    filename = paste(
-      "missingDataTable-",
-      "_",
-      gsub(" |:", "", Sys.time()),
-      ".png",
-      sep = ""
-    )
-    screenShot(values$missingDataTable, filename = filename, type = "plotly")
+  observeEvent(input$showMissingData, {
+    if (ncol(values$M) > 1) {
+      showModal(missingModal(session))
+    }
   })
 
   observeEvent(input$missingReport, {
-    if (!is.null(values$missingDataTable)) {
+    if (!is.null(values$missingdf_formatted)) {
       sheetname <- "MissingData"
-      ind <- which(regexpr(sheetname, values$wb$sheet_names) > -1)
-      if (length(ind) > 0) {
-        sheetname <- paste(sheetname, length(ind) + 1, sep = "")
+      df_excel <- values$missingdf_formatted[, !names(values$missingdf_formatted) %in% c("Trend", "Status")]
+
+      # Compute year-by-year missing % matrix for temporal data
+      M <- values$M
+      md <- values$missingdf
+      years <- sort(unique(M$PY[!is.na(M$PY)]))
+      if (length(years) > 0) {
+        # Compute year-by-year missing counts and percentages
+        yearly_counts <- do.call(rbind, lapply(seq_len(nrow(md)), function(i) {
+          tag <- md$tag[i]
+          vapply(years, function(y) {
+            idx <- which(M$PY == y)
+            if (length(idx) == 0) return(NA_real_)
+            if (!tag %in% names(M)) return(as.numeric(length(idx)))
+            vals <- M[[tag]][idx]
+            sum(is.na(vals) | vals %in% c("NA,0000,NA", "NA", "", "none"))
+          }, numeric(1))
+        }))
+        yearly_pct <- do.call(rbind, lapply(seq_len(nrow(md)), function(i) {
+          tag <- md$tag[i]
+          vapply(years, function(y) {
+            idx <- which(M$PY == y)
+            if (length(idx) == 0) return(NA_real_)
+            if (!tag %in% names(M)) return(100)
+            vals <- M[[tag]][idx]
+            miss <- sum(is.na(vals) | vals %in% c("NA,0000,NA", "NA", "", "none"))
+            round(miss / length(idx) * 100, 2)
+          }, numeric(1))
+        }))
+        # TC special case
+        tc_row <- which(md$tag == "TC")
+        if (length(tc_row) > 0 && sum(as.numeric(M$TC), na.rm = TRUE) == 0) {
+          yearly_pct[tc_row, ] <- 100
+          yearly_counts[tc_row, ] <- vapply(years, function(y) sum(M$PY == y, na.rm = TRUE), numeric(1))
+        }
+        # Absolute counts table
+        df_yearly_counts <- data.frame(
+          Metadata = md$tag,
+          Description = md$description,
+          yearly_counts,
+          check.names = FALSE
+        )
+        names(df_yearly_counts)[-(1:2)] <- as.character(years)
+        # Percentage table
+        df_yearly_pct <- data.frame(
+          Metadata = md$tag,
+          Description = md$description,
+          yearly_pct,
+          check.names = FALSE
+        )
+        names(df_yearly_pct)[-(1:2)] <- as.character(years)
+        list_df <- list(df_excel, df_yearly_counts, df_yearly_pct)
+      } else {
+        list_df <- list(df_excel)
       }
-      addWorksheet(wb = values$wb, sheetName = sheetname, gridLines = FALSE)
-      #values$fileTFP <- screenSh(selector = "#ThreeFieldsPlot") ## screenshot
-      values$fileMissingData <- screenSh(
-        values$missingDataTable,
-        zoom = 2,
-        type = "plotly"
+
+      res <- addDataScreenWb(list_df, wb = values$wb, sheetname = sheetname)
+      values$fileMDT <- screenSh(
+        values$missingdf_formatted,
+        type = "df2html",
+        dpi = values$report_dpi,
+        height = values$h
       )
       values$list_file <- rbind(
         values$list_file,
-        c(sheetname, values$fileMissingData, 1)
+        c(sheetname, values$fileMDT, res$col)
       )
       popUp(title = "Missing Data Table", type = "success")
       values$myChoices <- sheets(values$wb)
@@ -1123,6 +2777,7 @@ To ensure the functionality of Biblioshiny,
       )
     },
     content <- function(file) {
+      req(values$M)
       tr <- FALSE
       if ("CR" %in% names(values$M)) {
         tr <- (sum(nchar(values$M$CR) > 32767, na.rm = TRUE)) > 0
@@ -1183,6 +2838,7 @@ To ensure the functionality of Biblioshiny,
       )
     },
     content <- function(file) {
+      req(values$M)
       tr <- FALSE
       if ("CR" %in% names(values$M)) {
         tr <- (sum(nchar(values$M$CR) > 32767, na.rm = TRUE)) > 0
@@ -1244,6 +2900,7 @@ To ensure the functionality of Biblioshiny,
       )
     },
     content <- function(file) {
+      req(values$M)
       switch(
         input$save_file_api,
         xlsx = {
@@ -1614,7 +3271,7 @@ To ensure the functionality of Biblioshiny,
   #   )
   # })
   #
-  # output$apiContents <- DT::renderDT({
+  # output$apiContents <- renderUI({
   #   APIDOWNLOAD()
   #   contentTable(values)
   # })
@@ -1634,7 +3291,7 @@ To ensure the functionality of Biblioshiny,
   #     )
   #   nome = c("DOI", names(MData)[-length(names(MData))])
   #   MData = MData[nome]
-  #   DTformat(
+  #   renderBibliobox(
   #     MData,
   #     nrow = 3,
   #     filename = "Table",
@@ -1702,7 +3359,7 @@ To ensure the functionality of Biblioshiny,
 
     tryCatch(
       {
-        results <- applyCitationMatching(
+        results <- applyReferenceMatching(
           M = values$M,
           threshold = input$refMatch_threshold,
           method = input$refMatch_method
@@ -1731,70 +3388,65 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
+  # Highlight clicked row in the table
+  observeEvent(input$refMatch_row_clicked, {
+    shinyjs::runjs(sprintf(
+      "if (window.refMatchTable) window.refMatchTable.highlightClickedRow(%d);",
+      input$refMatch_row_clicked
+    ))
+    # Expand the variants box when a row is clicked
+    shinyjs::runjs(
+      "$('.box:has(#refMatch_variantsTable)').removeClass('collapsed-box'); $('.box:has(#refMatch_variantsTable) .box-body').slideDown();"
+    )
+  })
+
   # Toggle selection for manual merge
   observeEvent(input$refMatch_toggleSelection, {
     req(refMatch_results())
-    req(input$refMatch_topCitations_rows_selected)
+    req(input$refMatch_row_clicked)
 
-    selected_row <- input$refMatch_topCitations_rows_selected
-    selected_citation <- refMatch_results()$summary$CR_canonical[selected_row]
+    selected_row <- input$refMatch_row_clicked
+
+    # Reconstruct top_table to get the citation at the clicked row
+    top_table <- refMatch_results()$summary %>%
+      select(
+        Citation = CR_canonical,
+        `Times Cited` = n,
+        `Variants Found` = n_variants
+      ) %>%
+      arrange(desc(`Times Cited`)) %>%
+      filter(`Times Cited` > 1)
+
+    req(selected_row <= nrow(top_table))
+    selected_citation <- top_table$Citation[selected_row]
 
     current_selection <- refMatch_selected_for_merge()
 
     if (selected_citation %in% current_selection) {
       # Remove from selection
       refMatch_selected_for_merge(setdiff(current_selection, selected_citation))
+      shinyjs::runjs(sprintf(
+        "if (window.refMatchTable) window.refMatchTable.updateRowSelection(%d, false);",
+        selected_row
+      ))
     } else {
       # Add to selection
       refMatch_selected_for_merge(c(current_selection, selected_citation))
+      shinyjs::runjs(sprintf(
+        "if (window.refMatchTable) window.refMatchTable.updateRowSelection(%d, true);",
+        selected_row
+      ))
     }
-
-    # Update table data without re-rendering the entire table
-    proxy <- dataTableProxy('refMatch_topCitations')
-
-    # Get updated data
-    selected <- refMatch_selected_for_merge()
-
-    top_table <- refMatch_results()$summary %>%
-      select(
-        Citation = CR_canonical,
-        `Times Cited` = n,
-        `Variants Found` = n_variants
-      ) %>%
-      arrange(desc(`Times Cited`)) %>%
-      filter(`Times Cited` > 1) %>%
-      mutate(
-        Selected = ifelse(Citation %in% selected, "TRUE", "FALSE"),
-        .before = 1
-      )
-
-    # Replace data without losing search/filter state
-    replaceData(proxy, top_table, resetPaging = FALSE, rownames = FALSE)
   })
 
   # Clear manual selection
   observeEvent(input$refMatch_clearSelection, {
     refMatch_selected_for_merge(character(0))
 
-    # Update table data without re-rendering
-    proxy <- dataTableProxy('refMatch_topCitations')
-
-    req(refMatch_results())
-
-    top_table <- refMatch_results()$summary %>%
-      select(
-        Citation = CR_canonical,
-        `Times Cited` = n,
-        `Variants Found` = n_variants
-      ) %>%
-      arrange(desc(`Times Cited`)) %>%
-      filter(`Times Cited` > 1) %>%
-      mutate(
-        Selected = "FALSE",
-        .before = 1
-      )
-
-    replaceData(proxy, top_table, resetPaging = FALSE, rownames = FALSE)
+    # Update table visuals without re-rendering
+    shinyjs::runjs(
+      "if (window.refMatchTable) window.refMatchTable.clearAllSelections();"
+    )
 
     showNotification("Selection cleared", type = "message", duration = 3)
   })
@@ -1896,7 +3548,7 @@ To ensure the functionality of Biblioshiny,
 
           incProgress(0.9, detail = "Finalizing...")
 
-          # Store updated results
+          # Store updated results (triggers table re-render)
           refMatch_results(results)
 
           # Clear selection
@@ -1904,24 +3556,6 @@ To ensure the functionality of Biblioshiny,
           refMatch_selected_for_merge(character(0))
 
           removeModal()
-
-          # Update table preserving search state
-          proxy <- dataTableProxy('refMatch_topCitations')
-
-          top_table <- results$summary %>%
-            select(
-              Citation = CR_canonical,
-              `Times Cited` = n,
-              `Variants Found` = n_variants
-            ) %>%
-            arrange(desc(`Times Cited`)) %>%
-            head(50) %>%
-            mutate(
-              Selected = "FALSE",
-              .before = 1
-            )
-
-          replaceData(proxy, top_table, resetPaging = FALSE, rownames = FALSE)
 
           incProgress(1.0, detail = "Complete!")
 
@@ -2206,10 +3840,9 @@ To ensure the functionality of Biblioshiny,
   })
 
   # Top citations table
-  output$refMatch_topCitations <- renderDT({
+  output$refMatch_topCitations <- renderUI({
     req(refMatch_results())
 
-    # Don't depend on refMatch_selected_for_merge() to avoid re-rendering
     top_table <- refMatch_results()$summary %>%
       select(
         Citation = CR_canonical,
@@ -2219,51 +3852,281 @@ To ensure the functionality of Biblioshiny,
       arrange(desc(`Times Cited`)) %>%
       filter(`Times Cited` > 1)
 
-    # Add selection column - initially all FALSE
+    # Add selection column based on current merge selections
+    selected <- isolate(refMatch_selected_for_merge())
     top_table <- top_table %>%
       mutate(
-        Selected = "FALSE",
+        Selected = ifelse(Citation %in% selected, "TRUE", "FALSE"),
         .before = 1
       )
 
-    datatable(
-      top_table,
-      options = list(
-        pageLength = 10,
-        dom = 'frtip',
-        scrollX = TRUE,
-        searchHighlight = TRUE
+    table_id <- "refMatch_htmlTable"
+    pageSize <- 10
+    n_cols <- ncol(top_table)
+    col_names <- colnames(top_table)
+
+    # Header
+    header_cols <- paste0(
+      sprintf(
+        '<th class="sortable-header" data-col="%d" style="text-align: left; background-color: #f8f9fa; border-bottom: 2px solid #dee2e6; padding: 12px 25px 12px 10px; position: relative; white-space: nowrap;">%s <span class="sort-icon" style="color: #ccc; font-size: 0.9em; position: absolute; right: 8px; top: 50%%; transform: translateY(-50%%);">&#8693;</span></th>',
+        0:(n_cols - 1),
+        col_names
       ),
-      selection = list(mode = 'single', target = 'row'),
-      rownames = FALSE,
-      class = 'cell-border stripe'
-    ) %>%
-      formatStyle(
-        0, # Apply to entire row
-        target = 'row',
-        backgroundColor = styleEqual(c("TRUE", "FALSE"), c('#d4edda', 'white')),
-        valueColumns = 'Selected'
-      ) %>%
-      formatStyle(
-        'Selected',
-        target = 'cell',
-        backgroundColor = styleEqual(
-          c('TRUE', 'FALSE'),
-          c('#28a745', '#ffffff')
+      collapse = ""
+    )
+    header_html <- paste0(
+      "<thead><tr style='cursor: pointer;'>",
+      header_cols,
+      "</tr>"
+    )
+
+    # Filter row
+    filter_cells <- paste0(
+      sprintf(
+        '<td><input type="text" class="form-control table-filter-%s" data-col="%d" placeholder="Filter..." style="width:100%%; font-size:11px; height:24px; padding:2px 5px;"></td>',
+        table_id,
+        0:(n_cols - 1)
+      ),
+      collapse = ""
+    )
+    filter_html <- paste0('<tr class="filter-row">', filter_cells, "</tr>")
+    header_html <- paste0(header_html, filter_html, "</thead>")
+
+    # Body rows
+    cell_cols <- vector("list", n_cols)
+    for (j in 1:n_cols) {
+      vals <- as.character(top_table[[j]])
+      sort_vals <- gsub("<.*?>", "", vals)
+
+      if (j == 1) {
+        # Selected column - special styling
+        is_sel <- vals == "TRUE"
+        cell_bg <- ifelse(
+          is_sel,
+          "background-color: #28a745; color: #ffffff;",
+          "background-color: #ffffff; color: #000000;"
+        )
+        cell_cols[[j]] <- sprintf(
+          '<td class="sel-cell" data-sort="%s" style="%s padding: 8px; border-bottom: 1px solid #eee; font-weight: bold; text-align: center;">%s</td>',
+          sort_vals,
+          cell_bg,
+          vals
+        )
+      } else if (j %in% c(3, 4)) {
+        # Numeric columns (Times Cited, Variants Found)
+        cell_cols[[j]] <- sprintf(
+          '<td data-sort="%s" style="text-align: right; padding: 8px; border-bottom: 1px solid #eee;">%s</td>',
+          sort_vals,
+          vals
+        )
+      } else {
+        cell_cols[[j]] <- sprintf(
+          '<td data-sort="%s" style="text-align: left; padding: 8px; border-bottom: 1px solid #eee;">%s</td>',
+          sort_vals,
+          vals
+        )
+      }
+    }
+    row_contents <- do.call(paste0, cell_cols)
+
+    # Row background based on selection
+    row_bg <- ifelse(
+      top_table$Selected == "TRUE",
+      "background-color: #d4edda;",
+      ""
+    )
+
+    body_rows <- sprintf(
+      '<tr data-orig-row="%d" style="cursor: pointer; %s" onclick="Shiny.setInputValue(\'refMatch_row_clicked\', %d, {priority: \'event\'})">%s</tr>',
+      1:nrow(top_table),
+      row_bg,
+      1:nrow(top_table),
+      row_contents
+    )
+    tbody_html <- paste0("<tbody>", paste(body_rows, collapse = ""), "</tbody>")
+
+    # Full HTML
+    tagList(
+      tags$div(
+        id = paste0("container_", table_id),
+        style = "font-size: 85%; background: white; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 20px; font-family: sans-serif;",
+
+        tags$div(
+          style = "overflow-x: auto;",
+          tags$table(
+            id = table_id,
+            class = "table table-hover",
+            style = "width: 100%; margin-bottom: 0; table-layout: auto;",
+            HTML(header_html),
+            HTML(tbody_html)
+          )
         ),
-        color = styleEqual(c('TRUE', 'FALSE'), c('#ffffff', '#000000')),
-        fontWeight = 'bold',
-        textAlign = 'center'
-      )
+
+        tags$div(
+          style = "padding: 10px; border-top: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;",
+          tags$div(
+            id = paste0("info_", table_id),
+            style = "color: #777; font-size: 12px;"
+          ),
+          tags$div(class = "btn-group", id = paste0("pager_", table_id))
+        )
+      ),
+
+      tags$script(HTML(sprintf(
+        '
+        (function() {
+          var tid = "%s";
+          var pageSize = %d;
+          var currentPage = 0;
+          var visibleRows = [];
+          var sortCol = -1;
+          var sortAsc = true;
+
+          function init() {
+            var table = document.getElementById(tid);
+            if (!table) { setTimeout(init, 100); return; }
+            var tbody = table.querySelector("tbody");
+            var allRows = Array.from(tbody.querySelectorAll("tr"));
+            visibleRows = allRows;
+
+            function updateTable() {
+              var start = currentPage * pageSize;
+              var end = start + pageSize;
+              allRows.forEach(function(r) { r.style.display = "none"; });
+              visibleRows.slice(start, end).forEach(function(r) {
+                r.style.display = "";
+                tbody.appendChild(r);
+              });
+              document.getElementById("info_" + tid).innerText =
+                "Showing " + (visibleRows.length > 0 ? start + 1 : 0) +
+                "-" + Math.min(end, visibleRows.length) + " of " + visibleRows.length;
+              renderPager();
+            }
+
+            function renderPager() {
+              var pager = document.getElementById("pager_" + tid);
+              var pageCount = Math.ceil(visibleRows.length / pageSize);
+              pager.innerHTML = "";
+              if (pageCount <= 1 && visibleRows.length <= pageSize) return;
+              function createBtn(label, target, active, disabled) {
+                var b = document.createElement("button");
+                b.className = "btn btn-default btn-xs" + (active ? " active" : "");
+                b.innerText = label; b.disabled = disabled;
+                b.onclick = function() { currentPage = target; updateTable(); };
+                pager.appendChild(b);
+              }
+              createBtn("\u00AB", Math.max(0, currentPage - 1), false, currentPage === 0);
+              for (var i = 0; i < pageCount; i++) {
+                if (i === 0 || i === pageCount - 1 || (i >= currentPage - 1 && i <= currentPage + 1)) {
+                  createBtn(i + 1, i, i === currentPage);
+                } else if (i === currentPage - 2 || i === currentPage + 2) {
+                  var s = document.createElement("span"); s.innerText = "..."; s.style.padding = "0 5px";
+                  pager.appendChild(s);
+                }
+              }
+              createBtn("\u00BB", Math.min(pageCount - 1, currentPage + 1), false, currentPage === pageCount - 1);
+            }
+
+            table.querySelectorAll(".sortable-header").forEach(function(th) {
+              th.onclick = function() {
+                var col = parseInt(this.getAttribute("data-col"));
+                sortAsc = (sortCol === col) ? !sortAsc : true;
+                sortCol = col;
+                table.querySelectorAll(".sort-icon").forEach(function(si) { si.innerText = "\u21C5"; si.style.color = "#ccc"; });
+                this.querySelector(".sort-icon").innerText = sortAsc ? "\u25B2" : "\u25BC";
+                this.querySelector(".sort-icon").style.color = "#333";
+                visibleRows.sort(function(a, b) {
+                  var valA = a.cells[col].getAttribute("data-sort").trim();
+                  var valB = b.cells[col].getAttribute("data-sort").trim();
+                  if (!isNaN(valA) && !isNaN(valB) && valA !== "" && valB !== "") {
+                    return sortAsc ? parseFloat(valA) - parseFloat(valB) : parseFloat(valB) - parseFloat(valA);
+                  }
+                  return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                });
+                currentPage = 0;
+                updateTable();
+              };
+            });
+
+            var filters = document.querySelectorAll(".table-filter-" + tid);
+            filters.forEach(function(filterInput) {
+              filterInput.addEventListener("input", function() {
+                var fVals = Array.from(filters).map(function(f) { return f.value.toUpperCase(); });
+                allRows.forEach(function(row) {
+                  var isMatch = fVals.every(function(val, idx) {
+                    if (!val) return true;
+                    return row.cells[idx].getAttribute("data-sort").toUpperCase().indexOf(val) >= 0;
+                  });
+                  row.setAttribute("data-is-filtered", isMatch ? "true" : "false");
+                });
+                visibleRows = allRows.filter(function(r) { return r.getAttribute("data-is-filtered") === "true"; });
+                currentPage = 0;
+                updateTable();
+              });
+            });
+
+            allRows.forEach(function(r) { r.setAttribute("data-is-filtered", "true"); });
+            updateTable();
+
+            // Expose API for external JS updates (toggle selection, clear, highlight)
+            window.refMatchTable = {
+              updateRowSelection: function(origRow, isSelected) {
+                var row = table.querySelector("tbody tr[data-orig-row=\\"" + origRow + "\\"]");
+                if (!row) return;
+                row.style.backgroundColor = isSelected ? "#d4edda" : "";
+                var selCell = row.cells[0];
+                selCell.innerText = isSelected ? "TRUE" : "FALSE";
+                selCell.setAttribute("data-sort", isSelected ? "TRUE" : "FALSE");
+                selCell.style.backgroundColor = isSelected ? "#28a745" : "#ffffff";
+                selCell.style.color = isSelected ? "#ffffff" : "#000000";
+              },
+              clearAllSelections: function() {
+                allRows.forEach(function(row) {
+                  row.style.backgroundColor = "";
+                  var selCell = row.cells[0];
+                  selCell.innerText = "FALSE";
+                  selCell.setAttribute("data-sort", "FALSE");
+                  selCell.style.backgroundColor = "#ffffff";
+                  selCell.style.color = "#000000";
+                });
+              },
+              highlightClickedRow: function(origRow) {
+                allRows.forEach(function(row) {
+                  var isClicked = row.getAttribute("data-orig-row") === String(origRow);
+                  row.style.outline = isClicked ? "2px solid #3c8dbc" : "";
+                  row.style.outlineOffset = isClicked ? "-2px" : "";
+                });
+              }
+            };
+          }
+          init();
+        })();
+        ',
+        table_id,
+        pageSize
+      )))
+    )
   })
 
   # Variants table
-  output$refMatch_variantsTable <- renderDT({
+  output$refMatch_variantsTable <- renderUI({
     req(refMatch_results())
-    req(input$refMatch_topCitations_rows_selected)
+    req(input$refMatch_row_clicked)
 
-    selected_row <- input$refMatch_topCitations_rows_selected
-    selected_citation <- refMatch_results()$summary$CR_canonical[selected_row]
+    selected_row <- input$refMatch_row_clicked
+
+    # Reconstruct top_table to get the citation at the clicked row
+    top_table <- refMatch_results()$summary %>%
+      select(
+        Citation = CR_canonical,
+        `Times Cited` = n,
+        `Variants Found` = n_variants
+      ) %>%
+      arrange(desc(`Times Cited`)) %>%
+      filter(`Times Cited` > 1)
+
+    req(selected_row <= nrow(top_table))
+    selected_citation <- top_table$Citation[selected_row]
 
     variants <- refMatch_results()$full_data %>%
       filter(CR_canonical == selected_citation) %>%
@@ -2272,16 +4135,14 @@ To ensure the functionality of Biblioshiny,
       summarise(Count = n(), .groups = "drop") %>%
       arrange(desc(Count))
 
-    datatable(
+    HTML(htmlBoxFormat(
       variants,
-      options = list(
-        pageLength = 10,
-        dom = 'frtip',
-        scrollX = TRUE
-      ),
-      rownames = FALSE,
-      class = 'cell-border stripe'
-    )
+      nrow = 10,
+      title = paste0("Variants of: ", substr(selected_citation, 1, 80), "..."),
+      right = "Count",
+      numeric = "Count",
+      scrollX = TRUE
+    ))
   })
 
   # Download handlers
@@ -2339,7 +4200,7 @@ To ensure the functionality of Biblioshiny,
           M <- M_normalized
           save(M, file = file)
         } else {
-          temp_dir <- tempdir()
+          temp_dir <- getWD()
           xlsx_file <- file.path(
             temp_dir,
             paste0(input$refMatch_filename, ".xlsx")
@@ -2930,7 +4791,7 @@ To ensure the functionality of Biblioshiny,
     showModal(modalDialog(
       title = "Filtered Data",
       size = "l",
-      DT::DTOutput("dataFiltered"),
+      uiOutput("dataFiltered"),
       footer = tagList(
         #downloadButton("collection.save", "Save Filtered Data"),
         modalButton("Close")
@@ -2938,14 +4799,14 @@ To ensure the functionality of Biblioshiny,
     ))
   })
 
-  output$dataFiltered <- DT::renderDT({
+  output$dataFiltered <- renderUI({
     DTfiltered()
     Mdisp <- values$M %>%
       select(SR, AU, TI, SO, PY, LA, DT, TC, TCpY, DI) %>%
       as.data.frame()
 
     if (dim(Mdisp)[1] > 0) {
-      DTformat(
+      renderBibliobox(
         Mdisp,
         nrow = 3,
         filename = "Filtered_DataTable",
@@ -2970,10 +4831,194 @@ To ensure the functionality of Biblioshiny,
     }
   })
 
+  # PRISMA DIAGRAM ----
+
+  # Reactive counter for PRISMA steps
+  values$prisma_step_count <- 0
+  values$prismaParams <- NULL
+
+  # Add a screening/eligibility step
+
+  # Phase auto-assignment based on criterion type (bibliometric PRISMA convention)
+  # Screening: duplicate removal, time span, document type
+  # Eligibility: subject category, language, journal, country, other
+  prisma_phase_map <- c(
+    "duplicate removal" = "Screening",
+    "time span" = "Screening",
+    "document type" = "Screening",
+    "subject category" = "Eligibility",
+    "language" = "Eligibility",
+    "journal" = "Eligibility",
+    "country" = "Eligibility",
+    "other" = "Eligibility"
+  )
+
+  observeEvent(input$prisma_add_step, {
+    n <- values$prisma_step_count + 1
+    values$prisma_step_count <- n
+
+    insertUI(
+      selector = "#prisma_steps_container",
+      where = "beforeEnd",
+      ui = tags$div(
+        id = paste0("prisma_step_div_", n),
+        class = "prisma-step",
+        style = "border: 1px solid #ddd; border-radius: 6px; padding: 10px; margin-bottom: 10px; background: #f9f9f9;",
+        h5(strong(paste("Step", n)), style = "margin-top: 0;"),
+        selectInput(
+          paste0("prisma_criterion_", n),
+          "Filter Criterion",
+          choices = c(
+            "Duplicate removal" = "duplicate removal",
+            "Time span" = "time span",
+            "Document type" = "document type",
+            "Subject category" = "subject category",
+            "Language" = "language",
+            "Journal" = "journal",
+            "Country" = "country",
+            "Other" = "other"
+          )
+        ),
+        textInput(
+          paste0("prisma_values_", n),
+          "Filter Values (optional)",
+          placeholder = "e.g. Article, Review; or 1985-2025"
+        ),
+        numericInput(
+          paste0("prisma_n_remaining_", n),
+          "Records Remaining After This Filter",
+          value = 0,
+          min = 0
+        )
+      )
+    )
+  })
+
+  # Remove last step
+  observeEvent(input$prisma_remove_step, {
+    n <- values$prisma_step_count
+    if (n > 0) {
+      removeUI(selector = paste0("#prisma_step_div_", n))
+      values$prisma_step_count <- n - 1
+    }
+  })
+
+  # Generate PRISMA diagram
+  observeEvent(input$prisma_generate, {
+    req(!is.null(input$prisma_n_total))
+
+    n_steps <- values$prisma_step_count
+    n_other <- ifelse(is.null(input$prisma_n_other), 0, input$prisma_n_other)
+    total_n <- input$prisma_n_total + n_other
+
+    steps_df <- data.frame(
+      phase = character(0),
+      criterion = character(0),
+      values = character(0),
+      n_excluded = integer(0),
+      n_remaining = integer(0),
+      stringsAsFactors = FALSE
+    )
+
+    if (n_steps > 0) {
+      prev_remaining <- total_n
+      for (i in seq_len(n_steps)) {
+        criterion <- input[[paste0("prisma_criterion_", i)]]
+        n_rem <- input[[paste0("prisma_n_remaining_", i)]]
+        if (is.null(n_rem) || is.na(n_rem)) n_rem <- prev_remaining
+        n_excl <- prev_remaining - n_rem
+
+        steps_df <- rbind(steps_df, data.frame(
+          phase = prisma_phase_map[criterion],
+          criterion = criterion,
+          values = ifelse(is.null(input[[paste0("prisma_values_", i)]]), "", input[[paste0("prisma_values_", i)]]),
+          n_excluded = n_excl,
+          n_remaining = n_rem,
+          stringsAsFactors = FALSE
+        ))
+        prev_remaining <- n_rem
+      }
+    }
+
+    # Sort steps by phase: all Screening before Eligibility (PRISMA convention)
+    # Recalculate n_remaining sequentially using each step's original n_excluded
+    if (nrow(steps_df) > 0) {
+      phase_order <- factor(steps_df$phase, levels = c("Screening", "Eligibility"))
+      steps_df <- steps_df[order(phase_order), ]
+      rownames(steps_df) <- NULL
+
+      prev_remaining <- total_n
+      for (i in seq_len(nrow(steps_df))) {
+        steps_df$n_remaining[i] <- prev_remaining - steps_df$n_excluded[i]
+        prev_remaining <- steps_df$n_remaining[i]
+      }
+    }
+
+    # n_included is automatically the last remaining count (or total if no steps)
+    n_included <- if (nrow(steps_df) > 0) steps_df$n_remaining[nrow(steps_df)] else total_n
+
+    values$prismaParams <- list(
+      db_name = input$prisma_db_name,
+      query = input$prisma_query,
+      n_total = input$prisma_n_total,
+      other_source = input$prisma_other_source,
+      n_other = n_other,
+      steps = steps_df,
+      n_included = n_included
+    )
+  })
+
+  output$prismaPlotOutput <- renderPlot({
+    req(values$prismaParams)
+    do.call(drawPrismaFlowDiagram, values$prismaParams)
+  })
+
+  # Download PRISMA diagram as PNG
+  output$prismaPlot.save <- downloadHandler(
+    filename = function() {
+      paste0("PRISMA-Diagram-", Sys.Date(), ".png")
+    },
+    content = function(file) {
+      req(values$prismaParams)
+      grDevices::png(file, width = 3600, height = 3600, res = 300)
+      do.call(drawPrismaFlowDiagram, values$prismaParams)
+      grDevices::dev.off()
+    },
+    contentType = "image/png"
+  )
+
+  # Add PRISMA to report
+  observeEvent(input$reportPrisma, {
+    req(values$prismaParams)
+
+    sheetname <- "PRISMA_Diagram"
+    if (sheetname %in% openxlsx::sheets(values$wb)) {
+      showNotification("PRISMA Diagram sheet already exists in the report.",
+                       type = "warning", duration = 3)
+      return(NULL)
+    }
+
+    # Save plot to persistent file and embed in workbook
+    imgfile <- file.path(getWD(), paste0("PRISMA_Diagram_", format(Sys.time(), "%Y%m%d%H%M%S"), ".png"))
+    grDevices::png(imgfile, width = 3600, height = 3600, res = 300)
+    do.call(drawPrismaFlowDiagram, values$prismaParams)
+    grDevices::dev.off()
+
+    openxlsx::addWorksheet(values$wb, sheetname)
+    openxlsx::insertImage(values$wb, sheetname, imgfile,
+                          width = 12, height = 12,
+                          startRow = 1, startCol = 1, units = "in",
+                          dpi = 300)
+
+    values$myChoices <- openxlsx::sheets(values$wb)
+    showNotification("PRISMA Diagram added to the report.",
+                     type = "message", duration = 3)
+  })
+
   # OVERVIEW ----
   ### Main Info ----
-  output$MainInfo <- DT::renderDT({
-    DTformat(
+  output$MainInfo <- renderUI({
+    renderBibliobox(
       values$TABvb,
       nrow = 50,
       filename = "Main_Information",
@@ -3326,21 +5371,22 @@ To ensure the functionality of Biblioshiny,
     },
 
     content <- function(file) {
-      ggsave(
+      req(values$ASPplot)
+      safe_ggsave(
         filename = file,
         plot = values$ASPplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
     contentType = "png"
   )
 
-  output$AnnualProdTable <- DT::renderDT({
+  output$AnnualProdTable <- renderUI({
     TAB <- values$TAB
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Annual_Production",
@@ -3451,21 +5497,22 @@ To ensure the functionality of Biblioshiny,
       paste("AverageArticleCitationPerYear-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$ACpYplot)
+      safe_ggsave(
         filename = file,
         plot = values$ACpYplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
     contentType = "png"
   )
 
-  output$AnnualTotCitperYearTable <- DT::renderDT({
+  output$AnnualTotCitperYearTable <- renderUI({
     TAB <- values$AnnualTotCitperYear
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Annual_Total_Citation_per_Year",
@@ -3565,7 +5612,8 @@ To ensure the functionality of Biblioshiny,
       paste("LifeCycle-", Sys.Date(), ".zip", sep = "")
     },
     content = function(file) {
-      tmpdir <- tempdir()
+      req(values$DLC)
+      tmpdir <- getWD()
       owd <- setwd(tmpdir)
       on.exit(setwd(owd))
 
@@ -3574,12 +5622,12 @@ To ensure the functionality of Biblioshiny,
         filename <- basename(sub(".zip", paste0("_", i, ".png"), file))
         myfile <- c(myfile, filename)
 
-        ggsave(
+        safe_ggsave(
           filename = filename,
           plot = ggplotLifeCycle(values$DLC, plot_type = c(i)),
           dpi = values$dpi,
           height = values$h,
-          width = values$h * 2,
+          width = values$h * values$aspect,
           bg = "white"
         )
       }
@@ -3624,7 +5672,12 @@ To ensure the functionality of Biblioshiny,
         sheetname <- paste(sheetname, "(", length(ind) + 1, ")", sep = "")
       }
       addWorksheet(wb = values$wb, sheetName = sheetname, gridLines = FALSE)
-      values$fileTFP <- screenSh(values$TFP, zoom = 2, type = "plotly")
+      values$fileTFP <- screenSh(
+        values$TFP,
+        type = "plotly",
+        dpi = values$report_dpi,
+        height = values$h
+      )
       values$list_file <- rbind(
         values$list_file,
         c(sheetname, values$fileTFP, 1)
@@ -3638,21 +5691,32 @@ To ensure the functionality of Biblioshiny,
 
   # SOURCES MENU ----
   ### Most Relevant Sources ----
-  MRSources <- eventReactive(input$applyMRSources, {
-    res <- descriptive(values, type = "tab7")
-    values <- res$values
-    values$TABSo <- values$TAB
-    xx <- values$TAB %>%
-      drop_na()
-    if (input$MostRelSourcesK > dim(xx)[1]) {
-      k = dim(xx)[1]
-    } else {
-      k = input$MostRelSourcesK
-    }
-    xx <- xx %>%
-      slice_head(n = k)
-    xx$Sources = substr(xx$Sources, 1, 50)
+  MRSourcesResult <- eventReactive(input$applyMRSources, {
+    withProgress(message = 'Calculation in progress', value = 0, {
+      M_data <- values$M
+      k <- input$MostRelSourcesK
 
+      TAB <- tryCatch({
+        M_data %>%
+          dplyr::group_by(SO) %>%
+          dplyr::count() %>%
+          dplyr::arrange(dplyr::desc(n)) %>%
+          dplyr::rename(Sources = SO, Articles = n) %>%
+          as.data.frame()
+      }, error = function(e) {
+        showNotification(paste("Sources error:", e$message), type = "error", duration = 8)
+        return(NULL)
+      })
+    })
+    req(TAB)
+    values$TAB <- TAB
+    values$TABSo <- TAB
+    xx <- TAB %>% tidyr::drop_na()
+    if (k > nrow(xx)) {
+      k <- nrow(xx)
+    }
+    xx <- xx %>% dplyr::slice_head(n = k)
+    xx$Sources <- substr(xx$Sources, 1, 50)
     g <- freqPlot(
       xx,
       x = 2,
@@ -3662,7 +5726,6 @@ To ensure the functionality of Biblioshiny,
       title = "Most Relevant Sources",
       values
     )
-
     values$MRSplot <- g
     return(g)
   })
@@ -3672,12 +5735,13 @@ To ensure the functionality of Biblioshiny,
       paste("MostRelevantSources-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$MRSplot)
+      safe_ggsave(
         filename = file,
         plot = values$MRSplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -3685,15 +5749,21 @@ To ensure the functionality of Biblioshiny,
   )
 
   output$MostRelSourcesPlot <- renderPlotly({
-    g <- MRSources()
-    plot.ly(g, flip = FALSE, side = "r", aspectratio = 1.1, size = 0.10)
+    g <- MRSourcesResult()
+    plot.ly(
+      g,
+      flip = FALSE,
+      side = "r",
+      aspectratio = 1.1,
+      size = 0.10
+    )
   })
 
-  output$MostRelSourcesTable <- DT::renderDT({
-    g <- MRSources()
+  output$MostRelSourcesTable <- renderUI({
+    req(values$TABSo)
 
     TAB <- values$TABSo %>% drop_na()
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Most_Relevant_Sources",
@@ -3703,7 +5773,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -3767,12 +5837,13 @@ To ensure the functionality of Biblioshiny,
       paste("MostLocalCitedSources-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$MLCSplot)
+      safe_ggsave(
         filename = file,
         plot = values$MLCSplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -3785,10 +5856,10 @@ To ensure the functionality of Biblioshiny,
     plot.ly(g, flip = FALSE, side = "r", aspectratio = 1.3, size = 0.10)
   })
 
-  output$MostRelCitSourcesTable <- DT::renderDT({
+  output$MostRelCitSourcesTable <- renderUI({
     g <- MLCSources()
     TAB <- values$TABSoCit
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Most_Cited_Sources",
@@ -3798,7 +5869,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -3829,9 +5900,9 @@ To ensure the functionality of Biblioshiny,
 
   ### Bradford's Law ----
   output$bradfordPlot <- renderPlotly({
-    values$bradford = bradford(values$M)
+    values$bradford <- bradford(values$M)
     plot.ly(
-      values$bradford$graph,
+      values$bradford$graph_shiny,
       flip = FALSE,
       side = "r",
       aspectratio = 1.6,
@@ -3844,20 +5915,21 @@ To ensure the functionality of Biblioshiny,
       paste("BradfordLaws-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$bradford)
+      safe_ggsave(
         filename = file,
         plot = values$bradford$graph,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
     contentType = "png"
   )
 
-  output$bradfordTable <- DT::renderDT({
-    DTformat(
+  output$bradfordTable <- renderUI({
+    renderBibliobox(
       values$bradford$table,
       nrow = 10,
       filename = "Bradford_Law",
@@ -3867,7 +5939,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -3878,9 +5950,142 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
+  output$bradfordSummary <- renderUI({
+    req(values$bradford)
+    s <- values$bradford$stat
+    zs <- values$bradford$zoneSummary
+
+    # Interpretation of KS test
+    ks_interpretation <- if (s$ks.pvalue >= 0.05) {
+      paste0(
+        "<span style='color:#2E7D32;font-weight:bold;'>The empirical distribution is consistent with Bradford's Law (p = ",
+        format.pval(s$ks.pvalue, digits = 3),
+        ")</span>"
+      )
+    } else {
+      paste0(
+        "<span style='color:#C62828;font-weight:bold;'>The empirical distribution deviates significantly from Bradford's Law (p = ",
+        format.pval(s$ks.pvalue, digits = 3),
+        ")</span>"
+      )
+    }
+
+    # Build summary HTML
+    summary_html <- paste0(
+      "<div style='max-width:800px; margin:30px auto; font-family:inherit;'>",
+
+      "<h4 style='color:#333; border-bottom:2px solid #2171B5; padding-bottom:8px;'>",
+      "Bradford Distribution Model</h4>",
+      "<p style='font-size:15px; color:#444;'>",
+      "The Bradford distribution models the cumulative number of articles <em>C(r)</em> ",
+      "contributed by the top <em>r</em> sources as:</p>",
+      "<p style='font-size:16px; text-align:center; font-weight:bold; color:#333; ",
+      "background:#f8f9fa; padding:12px; border-radius:6px;'>",
+      "C(r) = ",
+      round(s$a, 2),
+      " + ",
+      round(s$b, 2),
+      " &middot; log(r)",
+      "</p>",
+
+      "<table style='width:100%; border-collapse:collapse; margin:20px 0;'>",
+      "<tr style='background:#f0f4f8;'>",
+      "<td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>Intercept (a)</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      round(s$a, 4),
+      "</td></tr>",
+      "<tr><td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>Slope (b)</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      round(s$b, 4),
+      "</td></tr>",
+      "<tr style='background:#f0f4f8;'>",
+      "<td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>R&sup2;</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      round(s$R2, 4),
+      "</td></tr>",
+      "<tr><td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>Bradford Multiplier (k)</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      round(s$k, 2),
+      "</td></tr>",
+      "</table>",
+
+      "<h4 style='color:#333; border-bottom:2px solid #2171B5; padding-bottom:8px; margin-top:30px;'>",
+      "Kolmogorov-Smirnov Goodness-of-Fit Test</h4>",
+      "<table style='width:100%; border-collapse:collapse; margin:20px 0;'>",
+      "<tr style='background:#f0f4f8;'>",
+      "<td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>KS Statistic (D)</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      round(s$ks.stat, 4),
+      "</td></tr>",
+      "<tr><td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>p-value</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      format.pval(s$ks.pvalue, digits = 3),
+      "</td></tr>",
+      "</table>",
+      "<p style='font-size:14px; margin:10px 0 5px 0;'>",
+      ks_interpretation,
+      "</p>",
+      "<p style='font-size:12px; color:#888;'>H0: The empirical distribution follows the theoretical Bradford distribution. ",
+      "A p-value &ge; 0.05 indicates no significant deviation.</p>",
+
+      "<h4 style='color:#333; border-bottom:2px solid #2171B5; padding-bottom:8px; margin-top:30px;'>",
+      "Zone Summary</h4>",
+      "<table style='width:100%; border-collapse:collapse; margin:20px 0;'>",
+      "<thead><tr style='background:#2171B5; color:white;'>",
+      "<th style='padding:10px 15px; text-align:left;'>Zone</th>",
+      "<th style='padding:10px 15px; text-align:right;'>N. Sources</th>",
+      "<th style='padding:10px 15px; text-align:right;'>% Sources</th>",
+      "<th style='padding:10px 15px; text-align:right;'>N. Articles</th>",
+      "<th style='padding:10px 15px; text-align:right;'>% Articles</th>",
+      "</tr></thead><tbody>"
+    )
+
+    zone_colors <- c("#E3F0FA", "#FFFFFF", "#E3F0FA", "#F0F4F8")
+    for (i in seq_len(nrow(zs))) {
+      bg <- zone_colors[i]
+      fw <- if (i == nrow(zs)) "font-weight:bold;" else ""
+      summary_html <- paste0(
+        summary_html,
+        "<tr style='background:",
+        bg,
+        ";'>",
+        "<td style='padding:8px 15px; border-bottom:1px solid #ddd;",
+        fw,
+        "'>",
+        zs$Zone[i],
+        "</td>",
+        "<td style='padding:8px 15px; text-align:right; border-bottom:1px solid #ddd;",
+        fw,
+        "'>",
+        zs[["N. Sources"]][i],
+        "</td>",
+        "<td style='padding:8px 15px; text-align:right; border-bottom:1px solid #ddd;",
+        fw,
+        "'>",
+        zs[["% Sources"]][i],
+        "%</td>",
+        "<td style='padding:8px 15px; text-align:right; border-bottom:1px solid #ddd;",
+        fw,
+        "'>",
+        zs[["N. Articles"]][i],
+        "</td>",
+        "<td style='padding:8px 15px; text-align:right; border-bottom:1px solid #ddd;",
+        fw,
+        "'>",
+        zs[["% Articles"]][i],
+        "%</td>",
+        "</tr>"
+      )
+    }
+
+    summary_html <- paste0(summary_html, "</tbody></table></div>")
+
+    HTML(summary_html)
+  })
+
   observeEvent(input$reportBradford, {
     if (!is.null(values$bradford$table)) {
-      list_df <- list(values$bradford$table)
+      list_df <- list(values$bradford$table, values$bradford$zoneSummary)
       list_plot <- list(values$bradford$graph)
       wb <- addSheetToReport(
         list_df,
@@ -3889,20 +6094,47 @@ To ensure the functionality of Biblioshiny,
         wb = values$wb
       )
       values$wb <- wb
-      popUp(title = "Core Sources by Bradford's Law", type = "success")
+      popUp(title = "Bradford's Law", type = "success")
       values$myChoices <- sheets(values$wb)
     } else {
       popUp(type = "error")
     }
   })
 
+  output$BradfordGeminiUI <- renderUI({
+    values$gemini_model_parameters <- geminiParameterPrompt(
+      values,
+      input$sidebarmenu,
+      input
+    )
+    geminiOutput(title = "", content = values$BradfordGemini, values)
+  })
+
   ### Sources' Impact ----
   Hsource <- eventReactive(input$applyHsource, {
-    withProgress(message = 'Calculation in progress', value = 0, {
-      res <- Hindex_plot(values, type = "source", input)
-    })
-    values$SIplot <- res$g
-    plot.ly(res$g, flip = FALSE, side = "r", aspectratio = 1.3, size = 0.10)
+    ## Cache check: skip Hindex_plot() if params unchanged
+    cache_key <- make_cache_key(
+      fp = data_fingerprint(values$M),
+      type = "source",
+      k = input$Hksource,
+      measure = input$HmeasureSources
+    )
+
+    if (!identical(cache_key, values$cache_HSo_key)) {
+      withProgress(message = 'Calculation in progress', value = 0, {
+        res <- Hindex_plot(values, type = "source", input)
+      })
+      values$SIplot <- res$g
+      values$cache_HSo_key <- cache_key
+      values$cache_HSo_result <- plot.ly(
+        res$g,
+        flip = FALSE,
+        side = "r",
+        aspectratio = 1.3,
+        size = 0.10
+      )
+    }
+    values$cache_HSo_result
   })
 
   output$SIplot.save <- downloadHandler(
@@ -3910,12 +6142,13 @@ To ensure the functionality of Biblioshiny,
       paste("SourceImpact-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$SIplot)
+      safe_ggsave(
         filename = file,
         plot = values$SIplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -3926,8 +6159,8 @@ To ensure the functionality of Biblioshiny,
     Hsource()
   })
 
-  output$SourceHindexTable <- DT::renderDT({
-    DTformat(
+  output$SourceHindexTable <- renderUI({
+    renderBibliobox(
       values$H %>% rename(Source = Element),
       nrow = 10,
       filename = "Source_Impact",
@@ -3937,7 +6170,7 @@ To ensure the functionality of Biblioshiny,
       numeric = 4,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 3,
@@ -4004,13 +6237,29 @@ To ensure the functionality of Biblioshiny,
     width_scale <- 1.7 * 26 / length(unique(values$SODF$Source))
 
     x <- c(
-      max(values$SODF$Year) - 0.02 - diff(range(values$SODF$Year)) * 0.15,
-      max(values$SODF$Year) - 0.02
-    ) +
-      1
+      min(values$SODF$Year) + 0.02,
+      min(values$SODF$Year) + 0.02 + diff(range(values$SODF$Year)) * 0.15
+    )
     y <- c(
-      min(values$SODF$Freq),
-      min(values$SODF$Freq) + diff(range(values$SODF$Freq)) * 0.15
+      max(values$SODF$Freq) - diff(range(values$SODF$Freq)) * 0.15,
+      max(values$SODF$Freq)
+    )
+
+    # Reorder legend by descending max cumulative value
+    values$SODF$Source <- factor(
+      values$SODF$Source,
+      levels = names(sort(
+        tapply(values$SODF$Freq, values$SODF$Source, max),
+        decreasing = TRUE
+      ))
+    )
+
+    # Truncate long source names for legend readability
+    trunc_labels <- setNames(
+      ifelse(nchar(levels(values$SODF$Source)) > 35,
+             paste0(substr(levels(values$SODF$Source), 1, 32), "..."),
+             levels(values$SODF$Source)),
+      levels(values$SODF$Source)
     )
 
     g = ggplot(
@@ -4036,16 +6285,16 @@ To ensure the functionality of Biblioshiny,
       labs(color = "Source") +
       theme(
         text = element_text(color = "#444444"),
-        legend.text = ggplot2::element_text(size = width_scale),
-        legend.box.margin = margin(6, 6, 6, 6),
+        legend.text = ggplot2::element_text(size = 9, face = "bold"),
+        legend.box.margin = margin(2, 2, 2, 2),
         legend.title = ggplot2::element_text(
-          size = 1.5 * width_scale,
+          size = 10,
           face = "bold"
         ),
         legend.position = "bottom",
-        legend.direction = "vertical",
-        legend.key.size = grid::unit(width_scale / 50, "inch"),
-        legend.key.width = grid::unit(width_scale / 50, "inch"),
+        legend.direction = "horizontal",
+        legend.key.size = grid::unit(0.4, "cm"),
+        legend.key.width = grid::unit(0.6, "cm"),
         plot.caption = element_text(
           size = 9,
           hjust = 0.5,
@@ -4063,6 +6312,8 @@ To ensure the functionality of Biblioshiny,
         axis.line.x = element_line(color = "black", linewidth = 0.5),
         axis.line.y = element_line(color = "black", linewidth = 0.5)
       ) +
+      scale_color_discrete(labels = trunc_labels) +
+      guides(color = guide_legend(ncol = 2)) +
       annotation_custom(
         values$logoGrid,
         xmin = x[1],
@@ -4080,12 +6331,13 @@ To ensure the functionality of Biblioshiny,
       paste("SourceDynamics-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$SDplot)
+      safe_ggsave(
         filename = file,
         plot = values$SDplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -4096,20 +6348,23 @@ To ensure the functionality of Biblioshiny,
     g <- SOGrowth()
 
     leg <- list(
-      orientation = 'h',
-      y = -0.15,
+      orientation = 'v',
+      x = 1.02,
+      y = 1,
+      xanchor = 'left',
+      yanchor = 'top',
       font = list(
         family = "sans-serif",
-        size = 10,
+        size = 12,
         color = "#000"
       ),
-      bgcolor = "#FFFFFF",
-      bordercolor = "#FFFFFF",
-      borderwidth = 2
+      bgcolor = "rgba(255,255,255,0.9)",
+      bordercolor = "#EEEEEE",
+      borderwidth = 1
     )
 
     plot.ly(g, flip = FALSE, side = "r", aspectratio = 1.8, size = 0.10) %>%
-      layout(legend = leg) %>%
+      layout(legend = leg, margin = list(r = 200)) %>%
       config(
         displaylogo = FALSE,
         modeBarButtonsToRemove = c(
@@ -4126,10 +6381,10 @@ To ensure the functionality of Biblioshiny,
       layout(hovermode = 'compare')
   })
 
-  output$soGrowthtable <- DT::renderDT({
+  output$soGrowthtable <- renderUI({
     g <- SOGrowth()
     soData = values$PYSO
-    DTformat(
+    renderBibliobox(
       soData,
       nrow = 10,
       filename = "Source_Prod_over_Time",
@@ -4139,7 +6394,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -4288,41 +6543,56 @@ To ensure the functionality of Biblioshiny,
   )
 
   ### Most Relevant Authors ----
-  MRAuthors <- eventReactive(input$applyMRAuthors, {
-    res <- descriptive(values, type = "tab3")
-    values <- res$values
-    values$TABAu <- values$TAB
+  MRAuthorsResult <- eventReactive(input$applyMRAuthors, {
+    withProgress(message = 'Calculation in progress', value = 0, {
+      M_data <- values$M
+      k <- input$MostRelAuthorsK
+      freq_measure <- input$AuFreqMeasure
+      n_docs <- nrow(M_data)
 
-    xx = values$TABAu
+      TAB <- tryCatch({
+        listAU <- strsplit(M_data$AU, ";")
+        nAU <- lengths(listAU)
+        fracAU <- rep(1 / nAU, nAU)
+        TAB <- tibble::tibble(Author = unlist(listAU), fracAU = fracAU) %>%
+          dplyr::group_by(Author) %>%
+          dplyr::summarize(Articles = dplyr::n(), AuthorFrac = sum(fracAU)) %>%
+          dplyr::arrange(dplyr::desc(Articles)) %>%
+          as.data.frame()
+        names(TAB) <- c("Authors", "Articles", "Articles Fractionalized")
+        TAB
+      }, error = function(e) {
+        showNotification(paste("Authors error:", e$message), type = "error", duration = 8)
+        return(NULL)
+      })
+    })
+    req(TAB)
+    values$TAB <- TAB
+    values$TABAu <- TAB
+    xx <- TAB
     switch(
-      input$AuFreqMeasure,
+      freq_measure,
       t = {
-        lab = "N. of Documents"
-        xx = xx[, 1:2]
+        lab <- "N. of Documents"
+        xx <- xx[, 1:2]
       },
       p = {
-        xx = xx[, 1:2]
-        xx[, 2] = as.numeric(xx[, 2]) / dim(values$M)[1] * 100
-        lab = "N. of Documents (in %)"
+        xx <- xx[, 1:2]
+        xx[, 2] <- as.numeric(xx[, 2]) / n_docs * 100
+        lab <- "N. of Documents (in %)"
       },
       f = {
-        xx = xx[, c(1, 3)]
-        lab = "N. of Documents (Fractionalized)"
+        xx <- xx[, c(1, 3)]
+        lab <- "N. of Documents (Fractionalized)"
       }
     )
-
-    xx[, 2] = as.numeric(xx[, 2])
-
-    if (input$MostRelAuthorsK > dim(xx)[1]) {
-      k = dim(xx)[1]
-    } else {
-      k = input$MostRelAuthorsK
+    xx[, 2] <- as.numeric(xx[, 2])
+    if (k > nrow(xx)) {
+      k <- nrow(xx)
     }
-
-    xx = xx[1:k, ]
-    xx[, 2] = round(xx[, 2], 1)
+    xx <- xx[1:k, ]
+    xx[, 2] <- round(xx[, 2], 1)
     xx <- xx[order(-xx[, 2]), ]
-
     g <- freqPlot(
       xx,
       x = 2,
@@ -4332,7 +6602,6 @@ To ensure the functionality of Biblioshiny,
       title = "Most Relevant Authors",
       values
     )
-
     values$MRAplot <- g
     return(g)
   })
@@ -4342,12 +6611,13 @@ To ensure the functionality of Biblioshiny,
       paste("MostRelevantAuthors-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$MRAplot)
+      safe_ggsave(
         filename = file,
         plot = values$MRAplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -4355,14 +6625,20 @@ To ensure the functionality of Biblioshiny,
   )
 
   output$MostRelAuthorsPlot <- renderPlotly({
-    g <- MRAuthors()
-    plot.ly(g, flip = FALSE, side = "r", aspectratio = 1.3, size = 0.10)
+    g <- MRAuthorsResult()
+    plot.ly(
+      g,
+      flip = FALSE,
+      side = "r",
+      aspectratio = 1.3,
+      size = 0.10
+    )
   })
 
-  output$MostRelAuthorsTable <- DT::renderDT({
+  output$MostRelAuthorsTable <- renderUI({
     TAB <- values$TABAu %>%
       rename("Author" = Authors)
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Most_Relevant_Authors",
@@ -4372,7 +6648,7 @@ To ensure the functionality of Biblioshiny,
       numeric = 3,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -4485,35 +6761,43 @@ To ensure the functionality of Biblioshiny,
   )
 
   ### Most Cited Authors ----
-  MLCAuthors <- eventReactive(input$applyMLCAuthors, {
-    res <- descriptive(values, type = "tab13")
-    values <- res$values
-    values$TABAuCit <- values$TAB
+  MLCAuthorsResult <- eventReactive(input$applyMLCAuthors, {
+    withProgress(message = 'Calculation in progress', value = 0, {
+      M_data <- values$M
+      k <- input$MostCitAuthorsK
 
-    xx <- values$TABAuCit
-    lab <- "Local Citations"
-    xx[, 2] = as.numeric(xx[, 2])
-
-    if (input$MostCitAuthorsK > dim(xx)[1]) {
-      k = dim(xx)[1]
-    } else {
-      k = input$MostCitAuthorsK
+      TAB <- tryCatch({
+        CR <- bibliometrix::localCitations(
+          M_data,
+          fast.search = FALSE,
+          verbose = FALSE
+        )
+        CR$Authors
+      }, error = function(e) {
+        showNotification(paste("Local Citations error:", e$message), type = "error", duration = 8)
+        return(NULL)
+      })
+    })
+    req(TAB)
+    values$TAB <- TAB
+    values$TABAuCit <- TAB
+    xx <- TAB
+    xx[, 2] <- as.numeric(xx[, 2])
+    if (k > nrow(xx)) {
+      k <- nrow(xx)
     }
-
-    xx = xx[1:k, ]
-    xx[, 2] = round(xx[, 2], 1)
+    xx <- xx[1:k, ]
+    xx[, 2] <- round(xx[, 2], 1)
     xx <- xx[order(-xx[, 2]), ]
-
     g <- freqPlot(
       xx,
       x = 2,
       y = 1,
       textLaby = "Authors",
-      textLabx = lab,
+      textLabx = "Local Citations",
       title = "Most Local Cited Authors",
       values
     )
-
     values$MLCAplot <- g
     return(g)
   })
@@ -4523,12 +6807,13 @@ To ensure the functionality of Biblioshiny,
       paste("MostLocalCitedAuthors-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$MLCAplot)
+      safe_ggsave(
         filename = file,
         plot = values$MLCAplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -4536,13 +6821,19 @@ To ensure the functionality of Biblioshiny,
   )
 
   output$MostCitAuthorsPlot <- renderPlotly({
-    g <- MLCAuthors()
-    plot.ly(g, flip = FALSE, side = "r", aspectratio = 1.3, size = 0.10)
+    g <- MLCAuthorsResult()
+    plot.ly(
+      g,
+      flip = FALSE,
+      side = "r",
+      aspectratio = 1.3,
+      size = 0.10
+    )
   })
 
-  output$MostCitAuthorsTable <- DT::renderDT({
+  output$MostCitAuthorsTable <- renderUI({
     TAB <- values$TABAuCit
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Most_Local_Cited_Authors",
@@ -4552,7 +6843,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -4583,11 +6874,23 @@ To ensure the functionality of Biblioshiny,
 
   ### Authors' Impact ----
   HAuthors <- eventReactive(input$applyHAuthors, {
-    withProgress(message = 'Calculation in progress', value = 0, {
-      res <- Hindex_plot(values, type = "author", input)
-    })
-    values$AIplot <- res$g
-    return(res)
+    ## Cache check: skip Hindex_plot() if params unchanged
+    cache_key <- make_cache_key(
+      fp = data_fingerprint(values$M),
+      type = "author",
+      k = input$Hkauthor,
+      measure = input$HmeasureAuthors
+    )
+
+    if (!identical(cache_key, values$cache_HAu_key)) {
+      withProgress(message = 'Calculation in progress', value = 0, {
+        res <- Hindex_plot(values, type = "author", input)
+      })
+      values$AIplot <- res$g
+      values$cache_HAu_key <- cache_key
+      values$cache_HAu_result <- res
+    }
+    return(values$cache_HAu_result)
   })
 
   output$AIplot.save <- downloadHandler(
@@ -4595,12 +6898,13 @@ To ensure the functionality of Biblioshiny,
       paste("AuthorImpact-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$AIplot)
+      safe_ggsave(
         filename = file,
         plot = values$AIplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -4612,8 +6916,8 @@ To ensure the functionality of Biblioshiny,
     plot.ly(res$g, flip = FALSE, side = "r", aspectratio = 1.3, size = 0.10)
   })
 
-  output$AuthorHindexTable <- DT::renderDT({
-    DTformat(
+  output$AuthorHindexTable <- renderUI({
+    renderBibliobox(
       values$H %>% rename(Author = Element),
       nrow = 10,
       filename = "Author_Impact",
@@ -4623,7 +6927,7 @@ To ensure the functionality of Biblioshiny,
       numeric = 4,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 3,
@@ -4676,12 +6980,13 @@ To ensure the functionality of Biblioshiny,
       paste("AuthorsProductionOverTime-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$AUProdOverTime)
+      safe_ggsave(
         filename = file,
         plot = values$AUProdOverTime$graph,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2.5,
+        width = values$h * values$aspect * 1.25,
         bg = "white"
       )
     },
@@ -4698,11 +7003,11 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TopAuthorsProdTable <- DT::renderDT({
+  output$TopAuthorsProdTable <- renderUI({
     AUoverTime()
 
     TAB <- values$AUProdOverTime$dfAU
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Author_Prod_over_Time",
@@ -4712,7 +7017,7 @@ To ensure the functionality of Biblioshiny,
       numeric = 5,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 3,
@@ -4723,7 +7028,7 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TopAuthorsProdTablePapers <- DT::renderDT({
+  output$TopAuthorsProdTablePapers <- renderUI({
     AUoverTime()
     TAB <- values$AUProdOverTime$dfPapersAU
     TAB$DOI = paste0(
@@ -4733,7 +7038,7 @@ To ensure the functionality of Biblioshiny,
       TAB$DOI,
       '</a>'
     )
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Author_Prod_over_Time_Docs",
@@ -4790,20 +7095,21 @@ To ensure the functionality of Biblioshiny,
       paste("LotkaLaw-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$LLplot)
+      safe_ggsave(
         filename = file,
         plot = values$LLplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
     contentType = "png"
   )
 
-  output$lotkaTable <- DT::renderDT({
-    DTformat(
+  output$lotkaTable <- renderUI({
+    renderBibliobox(
       values$lotka$AuthorProd,
       nrow = 10,
       filename = "Lotka_Law",
@@ -4824,6 +7130,136 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
+  output$lotkaSummary <- renderUI({
+    req(values$lotka)
+    s <- values$lotka$stat
+
+    # Interpretation of KS tests
+    ks_theo_interp <- if (s$ks.theo.pvalue >= 0.05) {
+      paste0(
+        "<span style='color:#2E7D32;font-weight:bold;'>The empirical distribution is consistent with the theoretical Lotka's Law (\u03B2=2) (p = ",
+        format.pval(s$ks.theo.pvalue, digits = 3),
+        ")</span>"
+      )
+    } else {
+      paste0(
+        "<span style='color:#C62828;font-weight:bold;'>The empirical distribution deviates significantly from the theoretical Lotka's Law (\u03B2=2) (p = ",
+        format.pval(s$ks.theo.pvalue, digits = 3),
+        ")</span>"
+      )
+    }
+
+    ks_fit_interp <- if (s$ks.fit.pvalue >= 0.05) {
+      paste0(
+        "<span style='color:#2E7D32;font-weight:bold;'>The empirical distribution is consistent with the fitted model (\u03B2=",
+        round(s$Beta, 2),
+        ") (p = ",
+        format.pval(s$ks.fit.pvalue, digits = 3),
+        ")</span>"
+      )
+    } else {
+      paste0(
+        "<span style='color:#C62828;font-weight:bold;'>The empirical distribution deviates significantly from the fitted model (\u03B2=",
+        round(s$Beta, 2),
+        ") (p = ",
+        format.pval(s$ks.fit.pvalue, digits = 3),
+        ")</span>"
+      )
+    }
+
+    summary_html <- paste0(
+      "<div style='max-width:800px; margin:30px auto; font-family:inherit;'>",
+
+      "<h4 style='color:#333; border-bottom:2px solid #2171B5; padding-bottom:8px;'>",
+      "Lotka's Inverse Power Law Model</h4>",
+      "<p style='font-size:15px; color:#444;'>",
+      "Lotka's Law models the proportion of authors <em>f(n)</em> who publish exactly <em>n</em> articles as:</p>",
+      "<p style='font-size:16px; text-align:center; font-weight:bold; color:#333; ",
+      "background:#f8f9fa; padding:12px; border-radius:6px;'>",
+      "f(n) = C / n<sup>\u03B2</sup>",
+      "</p>",
+
+      "<table style='width:100%; border-collapse:collapse; margin:20px 0;'>",
+      "<tr style='background:#f0f4f8;'>",
+      "<td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>Estimated \u03B2 (slope)</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      round(s$Beta, 4),
+      "</td></tr>",
+      "<tr><td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>Theoretical \u03B2</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>2.0000</td></tr>",
+      "<tr style='background:#f0f4f8;'>",
+      "<td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>Constant (C)</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      round(s$C, 4),
+      "</td></tr>",
+      "<tr><td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>R&sup2;</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      round(s$R2, 4),
+      "</td></tr>",
+      "</table>",
+
+      "<h4 style='color:#333; border-bottom:2px solid #2171B5; padding-bottom:8px; margin-top:30px;'>",
+      "Kolmogorov-Smirnov Goodness-of-Fit Tests</h4>",
+
+      "<h5 style='color:#555; margin-top:15px;'>Test 1: Empirical vs Theoretical (\u03B2 = 2)</h5>",
+      "<table style='width:100%; border-collapse:collapse; margin:10px 0;'>",
+      "<tr style='background:#f0f4f8;'>",
+      "<td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>KS Statistic (D)</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      round(s$ks.theo.stat, 4),
+      "</td></tr>",
+      "<tr><td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>p-value</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      format.pval(s$ks.theo.pvalue, digits = 3),
+      "</td></tr>",
+      "</table>",
+      "<p style='font-size:14px; margin:5px 0;'>",
+      ks_theo_interp,
+      "</p>",
+
+      "<h5 style='color:#555; margin-top:20px;'>Test 2: Empirical vs Fitted (\u03B2 = ",
+      round(s$Beta, 2),
+      ")</h5>",
+      "<table style='width:100%; border-collapse:collapse; margin:10px 0;'>",
+      "<tr style='background:#f0f4f8;'>",
+      "<td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>KS Statistic (D)</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      round(s$ks.fit.stat, 4),
+      "</td></tr>",
+      "<tr><td style='padding:10px 15px; font-weight:bold; border-bottom:1px solid #ddd;'>p-value</td>",
+      "<td style='padding:10px 15px; border-bottom:1px solid #ddd;'>",
+      format.pval(s$ks.fit.pvalue, digits = 3),
+      "</td></tr>",
+      "</table>",
+      "<p style='font-size:14px; margin:5px 0;'>",
+      ks_fit_interp,
+      "</p>",
+
+      "<p style='font-size:12px; color:#888; margin-top:15px;'>H0: The empirical distribution follows the theoretical distribution. ",
+      "A p-value &ge; 0.05 indicates no significant deviation.</p>",
+
+      "<h4 style='color:#333; border-bottom:2px solid #2171B5; padding-bottom:8px; margin-top:30px;'>",
+      "Plot Legend</h4>",
+      "<table style='width:100%; border-collapse:collapse; margin:10px 0;'>",
+      "<tr style='background:#f0f4f8;'>",
+      "<td style='padding:8px 15px; border-bottom:1px solid #ddd;'><span style='color:#1a1a1a;font-weight:bold;'>&mdash;&mdash;</span> Solid black</td>",
+      "<td style='padding:8px 15px; border-bottom:1px solid #ddd;'>Empirical distribution</td></tr>",
+      "<tr>",
+      "<td style='padding:8px 15px; border-bottom:1px solid #ddd;'><span style='color:#D6604D;font-weight:bold;'>- - -</span> Dashed red</td>",
+      "<td style='padding:8px 15px; border-bottom:1px solid #ddd;'>Theoretical Lotka's Law (\u03B2 = 2)</td></tr>",
+      "<tr style='background:#f0f4f8;'>",
+      "<td style='padding:8px 15px; border-bottom:1px solid #ddd;'><span style='color:#2171B5;font-weight:bold;'>-&middot;-&middot;-</span> Dot-dash blue</td>",
+      "<td style='padding:8px 15px; border-bottom:1px solid #ddd;'>Fitted model (\u03B2 = ",
+      round(s$Beta, 2),
+      ")</td></tr>",
+      "</table>",
+
+      "</div>"
+    )
+
+    HTML(summary_html)
+  })
+
   observeEvent(input$reportLotka, {
     if (!is.null(values$lotka$AuthorProd)) {
       list_df <- list(values$lotka$AuthorProd)
@@ -4835,34 +7271,70 @@ To ensure the functionality of Biblioshiny,
         wb = values$wb
       )
       values$wb <- wb
-      popUp(title = "Author Productivity through Lotka's Law", type = "success")
+      popUp(title = "Lotka's Law", type = "success")
       values$myChoices <- sheets(values$wb)
     } else {
       popUp(type = "error")
     }
   })
 
+  output$LotkaGeminiUI <- renderUI({
+    values$gemini_model_parameters <- geminiParameterPrompt(
+      values,
+      input$sidebarmenu,
+      input
+    )
+    geminiOutput(title = "", content = values$LotkaGemini, values)
+  })
+
   # Affiliations ----
   ### Most Relevant Affiliations ----
-  MRAffiliations <- eventReactive(input$applyMRAffiliations, {
-    if (input$disAff == "Y") {
-      res <- descriptive(values, type = "tab11")
-    } else {
-      res <- descriptive(values, type = "tab12")
+  MRAffResult <- eventReactive(input$applyMRAffiliations, {
+    withProgress(message = 'Calculation in progress', value = 0, {
+      M_data <- values$M
+      k <- input$MostRelAffiliationsK
+      disAff <- input$disAff
+
+      # metaTagExtraction if needed
+      if (disAff == "Y" && !("AU_UN" %in% names(M_data))) {
+        M_data <- metaTagExtraction(M_data, Field = "AU_UN")
+        values$M <- M_data
+      }
+
+      TAB <- tryCatch({
+        if (disAff == "Y") {
+          data.frame(
+            Affiliation = unlist(strsplit(M_data$AU_UN, ";"))
+          ) %>%
+            dplyr::group_by(Affiliation) %>%
+            dplyr::count() %>%
+            tidyr::drop_na(Affiliation) %>%
+            dplyr::arrange(dplyr::desc(n)) %>%
+            dplyr::rename(Articles = n) %>%
+            dplyr::filter(Affiliation != "NA") %>%
+            as.data.frame()
+        } else {
+          TAB <- bibliometrix::tableTag(M_data, "C1")
+          TAB <- data.frame(
+            Affiliations = names(TAB),
+            Articles = as.numeric(TAB)
+          )
+          TAB[nchar(TAB[, 1]) > 4, ]
+        }
+      }, error = function(e) {
+        showNotification(paste("Affiliations error:", e$message), type = "error", duration = 8)
+        return(NULL)
+      })
+    })
+    req(TAB)
+    values$TAB <- TAB
+    values$TABAff <- TAB
+    xx <- TAB
+    names(xx) <- c("AFF", "Freq")
+    if (k > nrow(xx)) {
+      k <- nrow(xx)
     }
-    xx = values$TAB
-    names(xx) = c("AFF", "Freq")
-    values <- res$values
-    values$TABAff <- values$TAB
-
-    if (input$MostRelAffiliationsK > dim(xx)[1]) {
-      k = dim(xx)[1]
-    } else {
-      k = input$MostRelAffiliationsK
-    }
-
-    xx = xx[1:k, ]
-
+    xx <- xx[1:k, ]
     g <- freqPlot(
       xx,
       x = 2,
@@ -4872,7 +7344,6 @@ To ensure the functionality of Biblioshiny,
       title = "Most Relevant Affiliations",
       values
     )
-
     values$AFFplot <- g
     return(g)
   })
@@ -4882,12 +7353,13 @@ To ensure the functionality of Biblioshiny,
       paste("MostRelevantAffiliations-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$AFFplot)
+      safe_ggsave(
         filename = file,
         plot = values$AFFplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -4895,16 +7367,21 @@ To ensure the functionality of Biblioshiny,
   )
 
   output$MostRelAffiliationsPlot <- renderPlotly({
-    g <- MRAffiliations()
-
-    plot.ly(g, flip = FALSE, side = "r", aspectratio = 1, size = 0.15)
+    g <- MRAffResult()
+    plot.ly(
+      g,
+      flip = FALSE,
+      side = "r",
+      aspectratio = 1,
+      size = 0.15
+    )
   })
 
-  output$MostRelAffiliationsTable <- DT::renderDT({
-    g <- MRAffiliations()
+  output$MostRelAffiliationsTable <- renderUI({
+    req(values$TABAff)
 
     TAB <- values$TABAff
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Most_Relevant_Affiliations",
@@ -4914,7 +7391,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 3,
@@ -4953,12 +7430,13 @@ To ensure the functionality of Biblioshiny,
       paste("AffiliationOverTime-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$AffOverTimePlot)
+      safe_ggsave(
         filename = file,
         plot = values$AffOverTimePlot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -4969,20 +7447,23 @@ To ensure the functionality of Biblioshiny,
     AFFGrowth()
     g <- values$AffOverTimePlot
     leg <- list(
-      orientation = 'h',
-      y = -0.15,
+      orientation = 'v',
+      x = 1.02,
+      y = 1,
+      xanchor = 'left',
+      yanchor = 'top',
       font = list(
         family = "sans-serif",
-        size = 10,
+        size = 12,
         color = "#000"
       ),
-      bgcolor = "#FFFFFF",
-      bordercolor = "#FFFFFF",
-      borderwidth = 2
+      bgcolor = "rgba(255,255,255,0.9)",
+      bordercolor = "#EEEEEE",
+      borderwidth = 1
     )
 
     plot.ly(g, flip = FALSE, side = "r", aspectratio = 1.8, size = 0.10) %>%
-      layout(legend = leg) %>%
+      layout(legend = leg, margin = list(r = 200)) %>%
       config(
         displaylogo = FALSE,
         modeBarButtonsToRemove = c(
@@ -4996,10 +7477,10 @@ To ensure the functionality of Biblioshiny,
       layout(hovermode = 'compare')
   })
 
-  output$AffOverTimeTable <- DT::renderDT({
+  output$AffOverTimeTable <- renderUI({
     AFFGrowth()
     afftimeData <- values$AffOverTime
-    DTformat(
+    renderBibliobox(
       afftimeData,
       nrow = 10,
       filename = "Affiliation_over_Time",
@@ -5009,7 +7490,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 3,
@@ -5040,81 +7521,102 @@ To ensure the functionality of Biblioshiny,
 
   # Countries ----
   ### Country by Corresponding Authors ----
-  CAUCountries <- eventReactive(input$applyCAUCountries, {
-    res <- descriptive(values, type = "tab5")
-    values <- res$values
-    values$TABCo <- values$TAB
+  CAUCountriesResult <- eventReactive(input$applyCAUCountries, {
+    withProgress(message = 'Calculation in progress', value = 0, {
+      M_data <- values$M
+      k <- input$MostRelCountriesK
+      logoGrid <- values$logoGrid
 
-    k = input$MostRelCountriesK
-    xx <- values$TABCo %>% slice_head(n = k) %>% select(Country, SCP, MCP)
-    xx = xx[order(-(xx$SCP + xx$MCP)), ]
-    xx1 = cbind(xx[, 1:2], rep("SCP", k))
-    names(xx1) = c("Country", "Freq", "Collaboration")
-    xx2 = cbind(xx[, c(1, 3)], rep("MCP", k))
-    names(xx2) = c("Country", "Freq", "Collaboration")
-    xx = rbind(xx2, xx1)
-    xx$Country = factor(xx$Country, levels = xx$Country[1:dim(xx2)[1]])
+      TABCo <- tryCatch({
+        countryCollab(M_data)
+      }, error = function(e) {
+        showNotification(paste("Countries error:", e$message), type = "error", duration = 8)
+        return(NULL)
+      })
+    })
+    req(TABCo)
+    {
+        TABCo <- TABCo %>%
+          dplyr::mutate(Freq = Articles / sum(Articles)) %>%
+          dplyr::mutate(MCP_Ratio = MCP / Articles) %>%
+          tidyr::drop_na(Country)
+        values$TAB <- TABCo
 
-    xx2 <- xx %>%
-      dplyr::group_by(Country) %>%
-      dplyr::summarize(Freq = sum(Freq))
+        xx <- TABCo %>%
+          dplyr::slice_head(n = k) %>%
+          dplyr::select(Country, SCP, MCP)
+        xx <- xx[order(-(xx$SCP + xx$MCP)), ]
+        xx1 <- cbind(xx[, 1:2], rep("SCP", k))
+        names(xx1) <- c("Country", "Freq", "Collaboration")
+        xx2 <- cbind(xx[, c(1, 3)], rep("MCP", k))
+        names(xx2) <- c("Country", "Freq", "Collaboration")
+        xx <- rbind(xx2, xx1)
+        xx$Country <- factor(xx$Country, levels = xx$Country[1:nrow(xx2)])
 
-    x <- c(0.5, 0.5 + length(levels(xx2$Country)) * 0.125) + 1
-    y <- c(
-      max(xx2$Freq) - 0.02 - diff(range(xx2$Freq)) * 0.125,
-      max(xx2$Freq) - 0.02
-    )
-
-    g = suppressWarnings(
-      ggplot2::ggplot(
-        data = xx,
-        aes(
-          x = Country,
-          y = Freq,
-          fill = Collaboration,
-          text = paste("Country: ", Country, "\nN.of Documents: ", Freq)
+        xx2 <- xx %>%
+          dplyr::group_by(Country) %>%
+          dplyr::summarize(Freq = sum(Freq))
+        x <- c(0.5, 0.5 + length(levels(xx2$Country)) * 0.125) + 1
+        y <- c(
+          max(xx2$Freq) - 0.02 - diff(range(xx2$Freq)) * 0.125,
+          max(xx2$Freq) - 0.02
         )
-      ) +
-        geom_bar(aes(group = "NA"), stat = "identity") +
-        scale_x_discrete(limits = rev(levels(xx$Country))) +
-        scale_fill_discrete(name = "Collaboration", breaks = c("SCP", "MCP")) +
-        labs(
-          title = "Corresponding Author's Countries",
-          x = "Countries",
-          y = "N. of Documents",
-          caption = "SCP: Single Country Publications, MCP: Multiple Country Publications"
-        ) +
-        theme(
-          plot.caption = element_text(
-            size = 9,
-            hjust = 0.5,
-            color = "blue",
-            face = "italic"
-          ),
-          panel.background = element_rect(fill = '#FFFFFF'),
-          panel.grid.major.y = element_line(color = '#EFEFEF'),
-          plot.title = element_text(size = 24),
-          axis.title = element_text(size = 14, color = '#555555'),
-          axis.title.y = element_text(vjust = 1, angle = 0),
-          axis.title.x = element_text(hjust = 0),
-          axis.line.x = element_line(color = "black", linewidth = 0.5)
-        ) +
-        coord_flip()
-    ) +
-      annotation_custom(
-        values$logoGrid,
-        xmin = x[1],
-        xmax = x[2],
-        ymin = y[1],
-        ymax = y[2]
-      )
-    values$TABCo <- values$TABCo %>%
-      mutate(Freq = Freq * 100, MCP_Ratio = MCP_Ratio * 100) %>%
-      rename("Articles %" = Freq, "MCP %" = MCP_Ratio) %>%
-      select(Country, "Articles", "Articles %", SCP, MCP, "MCP %")
 
-    values$MRCOplot <- g
-    return(g)
+        g <- suppressWarnings(
+          ggplot2::ggplot(
+            data = xx,
+            aes(
+              x = Country,
+              y = Freq,
+              fill = Collaboration,
+              text = paste("Country: ", Country, "\nN.of Documents: ", Freq)
+            )
+          ) +
+            geom_bar(aes(group = "NA"), stat = "identity") +
+            scale_x_discrete(limits = rev(levels(xx$Country))) +
+            scale_fill_discrete(
+              name = "Collaboration",
+              breaks = c("SCP", "MCP")
+            ) +
+            labs(
+              title = "Corresponding Author's Countries",
+              x = "Countries",
+              y = "N. of Documents",
+              caption = "SCP: Single Country Publications, MCP: Multiple Country Publications"
+            ) +
+            theme(
+              plot.caption = element_text(
+                size = 9,
+                hjust = 0.5,
+                color = "blue",
+                face = "italic"
+              ),
+              panel.background = element_rect(fill = '#FFFFFF'),
+              panel.grid.major.y = element_line(color = '#EFEFEF'),
+              plot.title = element_text(size = 24),
+              axis.title = element_text(size = 14, color = '#555555'),
+              axis.title.y = element_text(vjust = 1, angle = 0),
+              axis.title.x = element_text(hjust = 0),
+              axis.text.y = element_text(face = "bold", size = 11),
+              axis.line.x = element_line(color = "black", linewidth = 0.5)
+            ) +
+            coord_flip()
+        ) +
+          annotation_custom(
+            logoGrid,
+            xmin = x[1],
+            xmax = x[2],
+            ymin = y[1],
+            ymax = y[2]
+          )
+
+        values$TABCo <- TABCo %>%
+          dplyr::mutate(Freq = Freq * 100, MCP_Ratio = MCP_Ratio * 100) %>%
+          dplyr::rename("Articles %" = Freq, "MCP %" = MCP_Ratio) %>%
+          dplyr::select(Country, "Articles", "Articles %", SCP, MCP, "MCP %")
+        values$MRCOplot <- g
+        return(g)
+    }
   })
 
   # gemini button for word network
@@ -5132,12 +7634,13 @@ To ensure the functionality of Biblioshiny,
       paste("MostRelevantCountries-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$MRCOplot)
+      safe_ggsave(
         filename = file,
         plot = values$MRCOplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -5145,7 +7648,7 @@ To ensure the functionality of Biblioshiny,
   )
 
   output$MostRelCountriesPlot <- renderPlotly({
-    g <- CAUCountries()
+    g <- CAUCountriesResult()
     plot.ly(
       g,
       flip = T,
@@ -5156,11 +7659,11 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$MostRelCountriesTable <- DT::renderDT({
-    g <- CAUCountries()
+  output$MostRelCountriesTable <- renderUI({
+    req(values$TABCo)
 
     TAB <- values$TABCo
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Most_Relevant_Countries_By_Corresponding_Author",
@@ -5170,7 +7673,7 @@ To ensure the functionality of Biblioshiny,
       numeric = c(3, 6),
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 1,
@@ -5218,21 +7721,22 @@ To ensure the functionality of Biblioshiny,
       paste("CountryScientificProduction-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$mapworld)
+      safe_ggsave(
         filename = file,
         plot = values$mapworld$g,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
     contentType = "png"
   )
 
-  output$countryProdTable <- DT::renderDT({
+  output$countryProdTable <- renderUI({
     TAB <- values$mapworld$tab %>% rename(Country = region)
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Country_Production",
@@ -5242,7 +7746,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 3,
@@ -5281,12 +7785,13 @@ To ensure the functionality of Biblioshiny,
       paste("CountryOverTime-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$CountryOverTimePlot)
+      safe_ggsave(
         filename = file,
         plot = values$CountryOverTimePlot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -5297,20 +7802,23 @@ To ensure the functionality of Biblioshiny,
     COGrowth()
     g <- values$CountryOverTimePlot
     leg <- list(
-      orientation = 'h',
-      y = -0.15,
+      orientation = 'v',
+      x = 1.02,
+      y = 1,
+      xanchor = 'left',
+      yanchor = 'top',
       font = list(
         family = "sans-serif",
-        size = 10,
+        size = 12,
         color = "#000"
       ),
-      bgcolor = "#FFFFFF",
-      bordercolor = "#FFFFFF",
-      borderwidth = 2
+      bgcolor = "rgba(255,255,255,0.9)",
+      bordercolor = "#EEEEEE",
+      borderwidth = 1
     )
 
     plot.ly(g, flip = FALSE, side = "r", aspectratio = 1.8, size = 0.10) %>%
-      layout(legend = leg) %>%
+      layout(legend = leg, margin = list(r = 200)) %>%
       config(
         displaylogo = FALSE,
         modeBarButtonsToRemove = c(
@@ -5327,10 +7835,10 @@ To ensure the functionality of Biblioshiny,
       layout(hovermode = 'compare')
   })
 
-  output$CountryOverTimeTable <- DT::renderDT({
+  output$CountryOverTimeTable <- renderUI({
     COGrowth()
     cotimeData = values$CountryOverTime
-    DTformat(
+    renderBibliobox(
       cotimeData,
       nrow = 10,
       filename = "Countries_Production_Over_Time",
@@ -5340,7 +7848,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 3,
@@ -5370,28 +7878,55 @@ To ensure the functionality of Biblioshiny,
   })
 
   ### Most Cited Country ----
-  MCCountries <- eventReactive(input$applyMCCountries, {
-    res <- descriptive(values, type = "tab6")
-    values <- res$values
-    values$TABCitCo <- values$TAB
+  MCCountriesResult <- eventReactive(input$applyMCCountries, {
+    withProgress(message = 'Calculation in progress', value = 0, {
+      M_data <- values$M
+      k <- input$MostCitCountriesK
+      measure <- input$CitCountriesMeasure
 
-    xx = values$TAB
-    xx[, 2] = as.numeric(xx[, 2])
-    xx[, 3] = as.numeric(xx[, 3])
-    if (input$MostCitCountriesK > dim(xx)[1]) {
-      k = dim(xx)[1]
-    } else {
-      k = input$MostCitCountriesK
-    }
-    if (input$CitCountriesMeasure == "TC") {
-      xx = xx[1:k, c(1, 2)]
-      laby = "N. of Citations"
-    } else {
-      xx = xx[order(-xx[, 3]), ]
-      xx = xx[1:k, c(1, 3)]
-      laby = "Average Article Citations"
-    }
+      # metaTagExtraction if needed
+      if (!"AU1_CO" %in% names(M_data)) {
+        M_data <- metaTagExtraction(M_data, "AU1_CO")
+        values$M <- M_data
+      }
 
+      TAB <- tryCatch({
+        M_data %>%
+          dplyr::select(AU1_CO, TC) %>%
+          tidyr::drop_na(AU1_CO) %>%
+          dplyr::rename(Country = AU1_CO, TotalCitation = TC) %>%
+          dplyr::group_by(Country) %>%
+          dplyr::summarise(
+            "TC" = sum(TotalCitation),
+            "Average Article Citations" = round(
+              sum(TotalCitation) / length(TotalCitation),
+              1
+            )
+          ) %>%
+          dplyr::arrange(-TC) %>%
+          as.data.frame()
+      }, error = function(e) {
+        showNotification(paste("Most Cited Countries error:", e$message), type = "error", duration = 8)
+        return(NULL)
+      })
+    })
+    req(TAB)
+    values$TAB <- TAB
+    values$TABCitCo <- TAB
+    xx <- TAB
+    xx[, 2] <- as.numeric(xx[, 2])
+    xx[, 3] <- as.numeric(xx[, 3])
+    if (k > nrow(xx)) {
+      k <- nrow(xx)
+    }
+    if (measure == "TC") {
+      xx <- xx[1:k, c(1, 2)]
+      laby <- "N. of Citations"
+    } else {
+      xx <- xx[order(-xx[, 3]), ]
+      xx <- xx[1:k, c(1, 3)]
+      laby <- "Average Article Citations"
+    }
     g <- freqPlot(
       xx,
       x = 2,
@@ -5401,7 +7936,6 @@ To ensure the functionality of Biblioshiny,
       title = "Most Cited Countries",
       values
     )
-
     values$MCCplot <- g
     return(g)
   })
@@ -5411,12 +7945,13 @@ To ensure the functionality of Biblioshiny,
       paste("MostCitedCountries-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$MCCplot)
+      safe_ggsave(
         filename = file,
         plot = values$MCCplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -5424,14 +7959,20 @@ To ensure the functionality of Biblioshiny,
   )
 
   output$MostCitCountriesPlot <- renderPlotly({
-    g <- MCCountries()
-    plot.ly(g, flip = FALSE, side = "r", aspectratio = 1.3, size = 0.10)
+    g <- MCCountriesResult()
+    plot.ly(
+      g,
+      flip = FALSE,
+      side = "r",
+      aspectratio = 1.3,
+      size = 0.10
+    )
   })
 
-  output$MostCitCountriesTable <- DT::renderDT({
-    g <- MCCountries()
+  output$MostCitCountriesTable <- renderUI({
+    req(values$TABCitCo)
     TAB <- values$TABCitCo
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Most_Cited_Countries",
@@ -5441,7 +7982,7 @@ To ensure the functionality of Biblioshiny,
       numeric = 3,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -5515,6 +8056,60 @@ To ensure the functionality of Biblioshiny,
     resetModalButtons(session = getDefaultReactiveDomain())
   })
 
+  # Reactive value to store async DocSummary result
+  docSummaryAI <- reactiveVal(NULL)
+
+  # Trigger async summary when button_id changes
+  observeEvent(
+    input$button_id,
+    {
+      if (is.null(input$button_id) || input$button_id == "null") {
+        return()
+      }
+      id <- input$button_id
+      i <- which(values$M$SR == id)
+      if (length(i) == 0) {
+        return()
+      }
+
+      docSummaryAI(NULL) # Reset to trigger spinner
+
+      # Snapshot values for the future
+      M_TI <- values$M$TI[i]
+      M_AU <- values$M$AU[i]
+      M_SO <- values$M$SO[i]
+      M_PY <- values$M$PY[i]
+      M_AB <- values$M$AB[i]
+      M_DI <- values$M$DI[i]
+      model <- values$gemini_api_model
+      idx <- i
+
+      promises::future_promise(
+        {
+          summaryAI_data <- list(
+            M = list(
+              TI = M_TI,
+              AU = M_AU,
+              SO = M_SO,
+              PY = M_PY,
+              AB = M_AB,
+              DI = M_DI
+            )
+          )
+          summaryAI(summaryAI_data, i = 1, model = model)
+        },
+        seed = TRUE
+      ) %...>%
+        (function(result) {
+          docSummaryAI(result)
+        }) %...!%
+        (function(err) {
+          docSummaryAI(paste("Error:", conditionMessage(err)))
+        })
+    },
+    ignoreNULL = TRUE
+  )
+
   output$DocSummary <- renderUI({
     if (!is.null(input$button_id)) {
       id <- input$button_id
@@ -5526,7 +8121,8 @@ To ensure the functionality of Biblioshiny,
       return(NULL)
     }
 
-    res <- summaryAI(values, i = i, model = values$gemini_api_model)
+    res <- docSummaryAI()
+    req(res) # Wait for async result
 
     # Create HTML card
     div(
@@ -5695,28 +8291,51 @@ To ensure the functionality of Biblioshiny,
 
   ### Most Global Cited Documents ----
 
-  MGCDocuments <- eventReactive(input$applyMGCDocuments, {
-    res <- descriptive(values, type = "tab4")
-    values <- res$values
-    values$TABGlobDoc <- values$TAB
+  MGCDocsResult <- eventReactive(input$applyMGCDocuments, {
+    withProgress(message = 'Calculation in progress', value = 0, {
+      M_data <- values$M
+      k <- input$MostCitDocsK
+      measure <- input$CitDocsMeasure
 
-    if (input$CitDocsMeasure == "TC") {
-      xx <- values$TABGlobDoc %>% select(1, 3)
-      lab = "Global Citations"
+      TAB <- tryCatch({
+        y <- as.numeric(substr(Sys.Date(), 1, 4))
+        TAB <- M_data %>%
+          dplyr::mutate(TCperYear = round(TC / (y + 1 - PY), 1)) %>%
+          dplyr::select(SR, DI, TC, TCperYear, PY) %>%
+          dplyr::group_by(PY) %>%
+          dplyr::mutate(NTC = TC / mean(TC)) %>%
+          dplyr::ungroup() %>%
+          dplyr::select(-PY) %>%
+          dplyr::arrange(dplyr::desc(TC)) %>%
+          as.data.frame()
+        names(TAB) <- c(
+          "Paper",
+          "DOI",
+          "Total Citations",
+          "TC per Year",
+          "Normalized TC"
+        )
+        TAB
+      }, error = function(e) {
+        showNotification(paste("Most Cited Documents error:", e$message), type = "error", duration = 8)
+        return(NULL)
+      })
+    })
+    req(TAB)
+    values$TAB <- TAB
+    values$TABGlobDoc <- TAB
+    if (measure == "TC") {
+      xx <- TAB %>% dplyr::select(1, 3)
+      lab <- "Global Citations"
     } else {
-      xx <- values$TABGlobDoc %>% select(1, 4)
+      xx <- TAB %>% dplyr::select(1, 4)
       xx[, 2] <- round(xx[, 2], 1)
-      lab = "Global Citations per Year"
+      lab <- "Global Citations per Year"
     }
-
-    if (input$MostCitDocsK > dim(xx)[1]) {
-      k = dim(xx)[1]
-    } else {
-      k = input$MostCitDocsK
+    if (k > nrow(xx)) {
+      k <- nrow(xx)
     }
-
-    xx = xx[1:k, ]
-
+    xx <- xx[1:k, ]
     g <- freqPlot(
       xx,
       x = 2,
@@ -5726,7 +8345,6 @@ To ensure the functionality of Biblioshiny,
       title = "Most Global Cited Documents",
       values
     )
-
     values$MGCDplot <- g
     return(g)
   })
@@ -5736,12 +8354,13 @@ To ensure the functionality of Biblioshiny,
       paste("MostGlobalCitedDocuments-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$MGCDplot)
+      safe_ggsave(
         filename = file,
         plot = values$MGCDplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -5749,12 +8368,18 @@ To ensure the functionality of Biblioshiny,
   )
 
   output$MostCitDocsPlot <- renderPlotly({
-    g <- MGCDocuments()
-    plot.ly(g, flip = FALSE, side = "r", aspectratio = 1, size = 0.10)
+    g <- MGCDocsResult()
+    plot.ly(
+      g,
+      flip = FALSE,
+      side = "r",
+      aspectratio = 1,
+      size = 0.10
+    )
   })
 
-  output$MostCitDocsTable <- DT::renderDT({
-    g <- MGCDocuments()
+  output$MostCitDocsTable <- renderUI({
+    req(values$TABGlobDoc)
     TAB <- values$TABGlobDoc
     TAB$DOI <- paste0(
       '<a href=\"https://doi.org/',
@@ -5763,7 +8388,7 @@ To ensure the functionality of Biblioshiny,
       TAB$DOI,
       '</a>'
     )
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Most_Global_Cited_Documents",
@@ -5773,7 +8398,7 @@ To ensure the functionality of Biblioshiny,
       numeric = 5:6,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -5871,12 +8496,13 @@ To ensure the functionality of Biblioshiny,
       paste("MostLocalCitedDocuments-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$MLCDplot)
+      safe_ggsave(
         filename = file,
         plot = values$MLCDplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -5888,7 +8514,7 @@ To ensure the functionality of Biblioshiny,
     plot.ly(g, flip = FALSE, side = "r", aspectratio = 1, size = 0.10)
   })
 
-  output$MostLocCitDocsTable <- DT::renderDT({
+  output$MostLocCitDocsTable <- renderUI({
     TAB <- values$TABLocDoc
     TAB$DOI <- paste0(
       '<a href=\"https://doi.org/',
@@ -5906,7 +8532,7 @@ To ensure the functionality of Biblioshiny,
       "Normalized Local Citations",
       "Normalized Global Citations"
     )
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Most_Local_Cited_Documents",
@@ -5916,7 +8542,7 @@ To ensure the functionality of Biblioshiny,
       numeric = 7:9,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -5984,12 +8610,13 @@ To ensure the functionality of Biblioshiny,
       paste("MostLocalCitedReferences-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$MLCRplot)
+      safe_ggsave(
         filename = file,
         plot = values$MLCRplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -6001,7 +8628,7 @@ To ensure the functionality of Biblioshiny,
     plot.ly(g, flip = FALSE, side = "r", aspectratio = 0.6, size = 0.20)
   })
 
-  output$MostCitRefsTable <- DT::renderDT({
+  output$MostCitRefsTable <- renderUI({
     g <- MLCReferences()
     TAB <- values$TABCitRef
 
@@ -6016,7 +8643,7 @@ To ensure the functionality of Biblioshiny,
 
     TAB = TAB[, c(3, 1, 2)]
     names(TAB)[1] = "Google Scholar"
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Most_Local_Cited_References",
@@ -6026,7 +8653,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -6056,7 +8683,7 @@ To ensure the functionality of Biblioshiny,
   })
 
   ### Reference Spectroscopy ----
-  RPYS <- eventReactive(input$applyRPYS, {
+  observeEvent(input$applyRPYS, {
     timespan <- c(
       max(values$M$PY, na.rm = TRUE) - 100,
       max(values$M$PY, na.rm = TRUE) - 3
@@ -6068,14 +8695,53 @@ To ensure the functionality of Biblioshiny,
       timespan[2] <- input$rpysMaxYear
     }
     timespan <- sort(timespan)
-    values$res <- rpys(
-      values$M,
-      sep = input$rpysSep,
-      timespan = timespan,
-      median.window = input$rpysMedianWindow,
-      graph = FALSE
+
+    values$RPYS_computing <- TRUE
+    values$RPYS_error <- NULL
+    showNotification(
+      "Reference Spectroscopy: computing...",
+      id = "RPYS_progress",
+      type = "message",
+      duration = NULL
     )
-    values$res$peaks <- rpysPeaks(values$res, n = 10)
+
+    # Snapshot variables for the future
+    M_data <- values$M
+    sep <- input$rpysSep
+    median.window <- input$rpysMedianWindow
+
+    p <- promises::future_promise(
+      {
+        bibliometrix::rpys(
+          M_data,
+          sep = sep,
+          timespan = timespan,
+          median.window = median.window,
+          graph = FALSE
+        )
+      },
+      seed = TRUE,
+      packages = c("bibliometrix", "dplyr", "tidyr", "Matrix", "ggplot2")
+    ) %...>%
+      (function(res) {
+        removeNotification("RPYS_progress")
+        res$peaks <- rpysPeaks(res, n = 10)
+        values$res <- res
+        values$RPYS_computing <- FALSE
+        values$RPYS_ready <- values$RPYS_ready + 1
+      }) %...!%
+      (function(err) {
+        removeNotification("RPYS_progress")
+        values$RPYS_computing <- FALSE
+        values$RPYS_error <- conditionMessage(err)
+        showNotification(
+          paste("RPYS error:", values$RPYS_error),
+          type = "error",
+          duration = 8
+        )
+      })
+
+    return(p)
   })
 
   output$RSplot.save <- downloadHandler(
@@ -6083,12 +8749,13 @@ To ensure the functionality of Biblioshiny,
       paste("ReferenceSpectroscopy-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$res)
+      safe_ggsave(
         filename = file,
         plot = values$res$spectroscopy,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -6106,14 +8773,22 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$rpysPlot <- renderPlotly({
-    RPYS()
-    plot.ly(values$res$spectroscopy, side = "l", aspectratio = 1.3, size = 0.10)
+    req(values$RPYS_ready > 0)
+    p <- plot.ly(values$res$spectroscopy, side = "l", aspectratio = 1.3, size = 0.10)
+    # Disable hover on peak points and labels (traces 3+) so they don't block line tooltips
+    n_traces <- length(p$x$data)
+    if (n_traces > 2) {
+      for (i in 3:n_traces) {
+        p$x$data[[i]]$hoverinfo <- "skip"
+      }
+    }
+    p
   })
 
-  output$rpysTable <- DT::renderDT({
-    RPYS()
+  output$rpysTable <- renderUI({
+    req(values$RPYS_ready > 0)
     rpysData = values$res$rpysTable
-    DTformat(
+    renderBibliobox(
       rpysData,
       nrow = 10,
       filename = "RPYS",
@@ -6123,7 +8798,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -6134,8 +8809,8 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$crTable <- DT::renderDT({
-    RPYS()
+  output$crTable <- renderUI({
+    req(values$RPYS_ready > 0)
     crData = values$res$CR
     crData$link <- paste0(
       '<a href=\"https://scholar.google.it/scholar?hl=en&as_sdt=0%2C5&q=',
@@ -6148,7 +8823,7 @@ To ensure the functionality of Biblioshiny,
     crData = crData[order(-as.numeric(crData$Year), -crData$Freq), ]
     names(crData) = c("Year", "Reference", "Local Citations", "Google link")
     crData <- crData[, c(1, 4, 2, 3)]
-    DTformat(
+    renderBibliobox(
       crData,
       nrow = 10,
       filename = "RPYS_Documents",
@@ -6169,8 +8844,8 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$rpysSequence <- DT::renderDT({
-    RPYS()
+  output$rpysSequence <- renderUI({
+    req(values$RPYS_ready > 0)
     paperClass <- ifelse(
       input$rpysInfluential == "Not Influent",
       "",
@@ -6194,7 +8869,7 @@ To ensure the functionality of Biblioshiny,
       "Citation Sequence",
       "Sequence Type"
     )
-    DTformat(
+    renderBibliobox(
       crData,
       nrow = 10,
       filename = "RPYS_InfluentialReferences",
@@ -6215,11 +8890,11 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$rpysPeaks <- DT::renderDT({
-    RPYS()
+  output$rpysPeaks <- renderUI({
+    req(values$RPYS_ready > 0)
     crData <- values$res$peaks
     names(crData) = c("Year", "Reference", "Local Citations")
-    DTformat(
+    renderBibliobox(
       crData,
       nrow = 10,
       filename = "RPYS_Top10Peaks",
@@ -6278,7 +8953,7 @@ To ensure the functionality of Biblioshiny,
       title = "Stopword list",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("stopwordList"),
+      subtitle = uiOutput("stopwordList"),
       btn_labels = "OK"
     )
   })
@@ -6300,13 +8975,13 @@ To ensure the functionality of Biblioshiny,
       title = "Synonym List",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("synonymList"),
+      subtitle = uiOutput("synonymList"),
       btn_labels = "OK"
     )
   })
 
-  output$stopwordList <- renderDT({
-    DTformat(
+  output$stopwordList <- renderUI({
+    renderBibliobox(
       values$GenericSL,
       nrow = Inf,
       filename = "Stopword_List",
@@ -6328,8 +9003,8 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$synonymList <- renderDT({
-    DTformat(
+  output$synonymList <- renderUI({
+    renderBibliobox(
       values$GenericSYN,
       nrow = Inf,
       filename = "Stopword_List",
@@ -6443,12 +9118,13 @@ To ensure the functionality of Biblioshiny,
       paste("MostRelevantWords-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$MRWplot)
+      safe_ggsave(
         filename = file,
         plot = values$MRWplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -6460,11 +9136,11 @@ To ensure the functionality of Biblioshiny,
     plot.ly(g, side = "r", aspectratio = 1.3, size = 0.10)
   })
 
-  output$MostRelWordsTable <- DT::renderDT({
+  output$MostRelWordsTable <- renderUI({
     g <- MFWords()
 
     TAB <- values$TABWord
-    DTformat(
+    renderBibliobox(
       TAB,
       nrow = 10,
       filename = "Most_Frequent_Words",
@@ -6474,7 +9150,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -6516,7 +9192,7 @@ To ensure the functionality of Biblioshiny,
       title = "Stopword list",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("stopwordList"),
+      subtitle = uiOutput("stopwordList"),
       btn_labels = "OK"
     )
   })
@@ -6538,7 +9214,7 @@ To ensure the functionality of Biblioshiny,
       title = "Synonym List",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("synonymList"),
+      subtitle = uiOutput("synonymList"),
       btn_labels = "OK"
     )
   })
@@ -6619,7 +9295,12 @@ To ensure the functionality of Biblioshiny,
       res <- addDataScreenWb(list_df, wb = values$wb, sheetname = sheetname)
       values$wb <- res$wb
       #values$fileTFP <- screenSh(selector = "#wordcloud") ## screenshot
-      values$fileWC <- screenSh(values$WordCloud, zoom = 2, type = "plotly")
+      values$fileWC <- screenSh(
+        values$WordCloud,
+        type = "plotly",
+        dpi = values$report_dpi,
+        height = values$h
+      )
       values$list_file <- rbind(
         values$list_file,
         c(sheetname = res$sheetname, values$fileWC, res$col)
@@ -6644,7 +9325,7 @@ To ensure the functionality of Biblioshiny,
       title = "Stopword list",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("stopwordList"),
+      subtitle = uiOutput("stopwordList"),
       btn_labels = "OK"
     )
   })
@@ -6666,7 +9347,7 @@ To ensure the functionality of Biblioshiny,
       title = "Synonym List",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("synonymList"),
+      subtitle = uiOutput("synonymList"),
       btn_labels = "OK"
     )
   })
@@ -6740,9 +9421,9 @@ To ensure the functionality of Biblioshiny,
     values$TreeMap
   })
 
-  output$wordTable <- DT::renderDT({
+  output$wordTable <- renderUI({
     WordCloud()
-    DTformat(
+    renderBibliobox(
       values$Words,
       nrow = 10,
       filename = "Most_Frequent_Words",
@@ -6752,7 +9433,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -6763,10 +9444,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$treeTable <- DT::renderDT(
+  output$treeTable <- renderUI(
     {
       WordsT <- TreeMap()
-      DTformat(
+      renderBibliobox(
         values$WordsT,
         nrow = 10,
         filename = "Most_Frequent_Words",
@@ -6776,7 +9457,7 @@ To ensure the functionality of Biblioshiny,
         numeric = NULL,
         dom = FALSE,
         size = '100%',
-        filter = "none",
+        filter = "top",
         columnShort = NULL,
         columnSmall = NULL,
         round = 2,
@@ -6785,9 +9466,9 @@ To ensure the functionality of Biblioshiny,
         escape = FALSE,
         selection = FALSE
       )
-    },
-    height = 600,
-    width = 900
+    } #,
+    #height = 600,
+    #width = 900
   )
 
   observeEvent(input$reportTREEMAP, {
@@ -6797,7 +9478,12 @@ To ensure the functionality of Biblioshiny,
       res <- addDataScreenWb(list_df, wb = values$wb, sheetname = sheetname)
       values$wb <- res$wb
       #values$fileTFP <- screenSh(selector = "#treemap") ## screenshot
-      values$fileTreeMap <- screenSh(values$TreeMap, zoom = 2, type = "plotly")
+      values$fileTreeMap <- screenSh(
+        values$TreeMap,
+        type = "plotly",
+        dpi = values$report_dpi,
+        height = values$h
+      )
       values$list_file <- rbind(
         values$list_file,
         c(sheetname = res$sheetname, values$fileTreeMap, res$col)
@@ -6822,7 +9508,7 @@ To ensure the functionality of Biblioshiny,
       title = "Stopword list",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("stopwordList"),
+      subtitle = uiOutput("stopwordList"),
       btn_labels = "OK"
     )
   })
@@ -6844,7 +9530,7 @@ To ensure the functionality of Biblioshiny,
       title = "Synonym List",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("synonymList"),
+      subtitle = uiOutput("synonymList"),
       btn_labels = "OK"
     )
   })
@@ -6975,13 +9661,21 @@ To ensure the functionality of Biblioshiny,
     )
 
     x <- c(
-      max(values$DF$Year) - 0.02 - diff(range(values$DF$Year)) * 0.20,
-      max(values$DF$Year) - 0.02
-    ) -
-      1
+      min(values$DF$Year) + 0.02,
+      min(values$DF$Year) + 0.02 + diff(range(values$DF$Year)) * 0.20
+    )
     y <- c(
-      min(values$DF$Freq),
-      min(values$DF$Freq) + diff(range(values$DF$Freq)) * 0.20
+      max(values$DF$Freq) - diff(range(values$DF$Freq)) * 0.20,
+      max(values$DF$Freq)
+    )
+
+    # Reorder legend by descending max cumulative value
+    values$DF$Term <- factor(
+      values$DF$Term,
+      levels = names(sort(
+        tapply(values$DF$Freq, values$DF$Term, max),
+        decreasing = TRUE
+      ))
     )
 
     g <- ggplot(
@@ -7001,16 +9695,16 @@ To ensure the functionality of Biblioshiny,
       labs(color = "Term") +
       theme(
         text = element_text(color = "#444444"),
-        legend.text = ggplot2::element_text(size = width_scale),
+        legend.text = ggplot2::element_text(size = 10),
         legend.box.margin = margin(6, 6, 6, 6),
         legend.title = ggplot2::element_text(
-          size = 1.5 * width_scale,
+          size = 12,
           face = "bold"
         ),
-        legend.position = "bottom",
+        legend.position = "right",
         legend.direction = "vertical",
-        legend.key.size = grid::unit(width_scale / 50, "inch"),
-        legend.key.width = grid::unit(width_scale / 50, "inch"),
+        legend.key.size = grid::unit(0.4, "cm"),
+        legend.key.width = grid::unit(0.6, "cm"),
         plot.caption = element_text(
           size = 9,
           hjust = 0.5,
@@ -7045,12 +9739,13 @@ To ensure the functionality of Biblioshiny,
       paste("WordsFrequencyOverTime-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$WDplot)
+      safe_ggsave(
         filename = file,
         plot = values$WDplot,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -7061,20 +9756,23 @@ To ensure the functionality of Biblioshiny,
     g <- WDynamics()
 
     leg <- list(
-      orientation = 'h',
-      y = -0.15,
+      orientation = 'v',
+      x = 1.02,
+      y = 1,
+      xanchor = 'left',
+      yanchor = 'top',
       font = list(
         family = "sans-serif",
-        size = 10,
+        size = 12,
         color = "#000"
       ),
-      bgcolor = "#FFFFFF",
-      bordercolor = "#FFFFFF",
-      borderwidth = 2
+      bgcolor = "rgba(255,255,255,0.9)",
+      bordercolor = "#EEEEEE",
+      borderwidth = 1
     )
 
     plot.ly(g, flip = FALSE, side = "r", aspectratio = 1.6, size = 0.10) %>%
-      layout(legend = leg) %>%
+      layout(legend = leg, margin = list(r = 200)) %>%
       config(
         displaylogo = FALSE,
         modeBarButtonsToRemove = c(
@@ -7091,10 +9789,10 @@ To ensure the functionality of Biblioshiny,
       layout(hovermode = 'compare')
   })
 
-  output$kwGrowthtable <- DT::renderDT({
+  output$kwGrowthtable <- renderUI({
     g <- WDynamics()
     kwData <- values$KW
-    DTformat(
+    renderBibliobox(
       kwData,
       nrow = 10,
       filename = "Word_Dynamics",
@@ -7104,7 +9802,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -7147,7 +9845,7 @@ To ensure the functionality of Biblioshiny,
       title = "Stopword list",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("stopwordList"),
+      subtitle = uiOutput("stopwordList"),
       btn_labels = "OK"
     )
   })
@@ -7169,7 +9867,7 @@ To ensure the functionality of Biblioshiny,
       title = "Synonym List",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("synonymList"),
+      subtitle = uiOutput("synonymList"),
       btn_labels = "OK"
     )
   })
@@ -7253,12 +9951,13 @@ To ensure the functionality of Biblioshiny,
       paste("TrendTopics-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$trendTopics)
+      safe_ggsave(
         filename = file,
         plot = values$trendTopics$graph,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
@@ -7270,7 +9969,7 @@ To ensure the functionality of Biblioshiny,
     plot.ly(g, flip = TRUE, side = "r", size = 0.1, aspectratio = 1.3)
   })
 
-  output$trendTopicsTable <- DT::renderDT({
+  output$trendTopicsTable <- renderUI({
     TrendTopics()
     tpData = values$trendTopics$df_graph %>%
       rename(
@@ -7280,7 +9979,7 @@ To ensure the functionality of Biblioshiny,
         "Year (Median)" = year_med,
         "Year (Q3)" = year_q3
       )
-    DTformat(
+    renderBibliobox(
       tpData,
       nrow = 10,
       filename = "TrendTopic",
@@ -7290,7 +9989,7 @@ To ensure the functionality of Biblioshiny,
       numeric = NULL,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -7330,39 +10029,56 @@ To ensure the functionality of Biblioshiny,
 
   # CLUSTERING ----
   ### Clustering by Coupling ----
-  CMMAP <- eventReactive(input$applyCM, {
-    values$CM <- couplingMap(
-      values$M,
-      analysis = input$CManalysis,
-      field = input$CMfield,
-      n = input$CMn,
-      minfreq = input$CMfreq,
-      ngrams = as.numeric(input$CMngrams),
-      community.repulsion = input$CMrepulsion,
-      impact.measure = input$CMimpact,
-      stemming = input$CMstemming,
-      size = input$sizeCM,
-      label.term = input$CMlabeling,
-      n.labels = input$CMn.labels,
-      repel = FALSE
-    )
-    values$CM$data <- values$CM$data[, c(1, 5, 2)]
-    values$CM$clusters <- values$CM$clusters[, c(7, 1:4, 6)]
-    validate(
-      need(
-        values$CM$nclust > 0,
-        "\n\nNo clusters in one or more periods. Please select a different set of parameters."
-      )
-    )
+  CMMAPResult <- eventReactive(input$applyCM, {
+    withProgress(message = 'Calculation in progress', value = 0, {
+      M_data <- values$M
+      cm_analysis <- input$CManalysis
+      cm_field <- input$CMfield
+      cm_n <- input$CMn
+      cm_freq <- input$CMfreq
+      cm_ngrams <- as.numeric(input$CMngrams)
+      cm_repulsion <- input$CMrepulsion
+      cm_impact <- input$CMimpact
+      cm_stemming <- input$CMstemming
+      cm_size <- input$sizeCM
+      cm_labeling <- input$CMlabeling
+      cm_nlabels <- input$CMn.labels
+
+      CM <- tryCatch({
+        bibliometrix::couplingMap(
+          M_data,
+          analysis = cm_analysis,
+          field = cm_field,
+          n = cm_n,
+          minfreq = cm_freq,
+          ngrams = cm_ngrams,
+          community.repulsion = cm_repulsion,
+          impact.measure = cm_impact,
+          stemming = cm_stemming,
+          size = cm_size,
+          label.term = cm_labeling,
+          n.labels = cm_nlabels,
+          repel = FALSE
+        )
+      }, error = function(e) {
+        showNotification(paste("Coupling Map error:", e$message), type = "error", duration = 8)
+        return(NULL)
+      })
+    })
+    req(CM)
+    CM$data <- CM$data[, c(1, 5, 2)]
+    CM$clusters <- CM$clusters[, c(7, 1:4, 6)]
+    values$CM <- CM
+    return(CM)
   })
 
   output$CMPlot <- renderPlotly({
-    CMMAP()
-    plot.ly(values$CM$map, size = 0.15, aspectratio = 1.3)
+    CM <- CMMAPResult()
+    plot.ly(CM$map, size = 0.15, aspectratio = 1.3)
   })
 
   output$CMNetPlot <- renderVisNetwork({
-    CMMAP()
+    req(values$CM)
     values$networkCM <- igraph2vis(
       g = values$CM$net$graph,
       curved = (input$coc.curved == "Yes"),
@@ -7381,23 +10097,24 @@ To ensure the functionality of Biblioshiny,
       paste("CouplingMap-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$CM)
+      safe_ggsave(
         filename = file,
         plot = values$CM$map,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         bg = "white"
       )
     },
     contentType = "png"
   )
 
-  output$CMTable <- DT::renderDT({
-    CMMAP()
+  output$CMTable <- renderUI({
+    req(values$CM)
     #cmData=values$CM$data[,c(2,1,3,5)]
     cmData <- values$CM$data
-    DTformat(
+    renderBibliobox(
       cmData,
       nrow = 10,
       filename = "CouplingMap",
@@ -7407,7 +10124,7 @@ To ensure the functionality of Biblioshiny,
       numeric = 2,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -7418,11 +10135,11 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$CMTableCluster <- DT::renderDT({
-    CMMAP()
+  output$CMTableCluster <- renderUI({
+    req(values$CM)
     #cmData=values$CM$clusters[,c(7,1:4,6)]
     cmData <- values$CM$clusters
-    DTformat(
+    renderBibliobox(
       cmData,
       nrow = 10,
       filename = "CouplingMap_Clusters",
@@ -7432,7 +10149,7 @@ To ensure the functionality of Biblioshiny,
       numeric = 4:5,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 3,
@@ -7477,7 +10194,7 @@ To ensure the functionality of Biblioshiny,
       title = "Stopword list",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("stopwordList"),
+      subtitle = uiOutput("stopwordList"),
       btn_labels = "OK"
     )
   })
@@ -7499,35 +10216,238 @@ To ensure the functionality of Biblioshiny,
       title = "Synonym List",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("synonymList"),
+      subtitle = uiOutput("synonymList"),
       btn_labels = "OK"
     )
   })
 
-  COCnetwork <- eventReactive(input$applyCoc, {
-    values <- cocNetwork(input, values)
+  observeEvent(input$applyCoc, {
+    # Extract params synchronously
+    n <- input$Nodes
+    label.n <- input$Labels
+    coc_field <- input$field
+    coc_ngrams <- input$cocngrams
+    coc_layout <- input$layout
+    coc_curved <- (input$coc.curved == "Yes")
+    coc_labelsize <- input$labelsize
+    coc_alpha <- input$cocAlpha
+    coc_shape <- input$coc.shape
+    coc_shadow <- (input$coc.shadow == "Yes")
+    coc_edgesize <- input$edgesize
+    coc_noOverlap <- input$noOverlap
+    coc_normalize <- if (input$normalize == "none") NULL else input$normalize
+    coc_label_cex <- (input$label.cex == "Yes")
+    coc_edges_min <- input$edges.min
+    coc_isolates <- (input$coc.isolates == "yes")
+    coc_cluster <- input$cocCluster
+    coc_repulsion <- input$coc.repulsion / 2
+    coc_years <- (input$cocyears == "Yes")
+    random_seed <- values$random_seed
+
+    remove.terms <- if (input$COCStopFile == "Y") {
+      trimws(values$COCremove.terms$stopword)
+    } else {
+      NULL
+    }
+    synonyms <- if (input$COCSynFile == "Y") {
+      s <- values$COCsyn.terms %>%
+        dplyr::group_by(term) %>%
+        dplyr::mutate(term = paste0(term, ";", synonyms)) %>%
+        dplyr::select(term)
+      s$term
+    } else {
+      NULL
+    }
+
+    if (!(coc_field %in% names(values$M))) {
+      showNotification(
+        "Selected field is not included in your data collection",
+        type = "error",
+        duration = 5
+      )
+      return()
+    }
+
+    # Synchronous pre-processing: termExtraction modifies M
+    M_data <- values$M
+    if (coc_field == "TI") {
+      M_data <- termExtraction(
+        M_data,
+        Field = "TI",
+        verbose = FALSE,
+        ngrams = as.numeric(coc_ngrams),
+        remove.terms = remove.terms,
+        synonyms = synonyms
+      )
+      values$M <- M_data
+    } else if (coc_field == "AB") {
+      M_data <- termExtraction(
+        M_data,
+        Field = "AB",
+        verbose = FALSE,
+        ngrams = as.numeric(coc_ngrams),
+        remove.terms = remove.terms,
+        synonyms = synonyms
+      )
+      values$M <- M_data
+    }
+
+    # Check if network needs rebuild
+    need_rebuild <- (dim(values$NetWords)[1] == 1 |
+      !(coc_field == values$field) |
+      !(coc_ngrams == values$cocngrams) |
+      (dim(values$NetWords)[1] != n))
+
+    if (label.n > n) {
+      label.n <- n
+    }
+    values$field <- coc_field
+    values$ngrams <- coc_ngrams
+
+    showNotification(
+      "Co-occurrence Network: computing...",
+      id = "COC_progress",
+      type = "message",
+      duration = NULL
+    )
+
+    # Build NetWords synchronously if needed (fast for cached), then run networkPlot in future
+    if (need_rebuild) {
+      NetWords <- switch(
+        coc_field,
+        ID = bibliometrix::biblioNetwork(
+          M_data,
+          analysis = "co-occurrences",
+          network = "keywords",
+          n = n,
+          sep = ";",
+          remove.terms = remove.terms,
+          synonyms = synonyms
+        ),
+        DE = bibliometrix::biblioNetwork(
+          M_data,
+          analysis = "co-occurrences",
+          network = "author_keywords",
+          n = n,
+          sep = ";",
+          remove.terms = remove.terms,
+          synonyms = synonyms
+        ),
+        KW_Merged = bibliometrix::biblioNetwork(
+          M_data,
+          analysis = "co-occurrences",
+          network = "all_keywords",
+          n = n,
+          sep = ";",
+          remove.terms = remove.terms,
+          synonyms = synonyms
+        ),
+        TI = bibliometrix::biblioNetwork(
+          M_data,
+          analysis = "co-occurrences",
+          network = "titles",
+          n = n,
+          sep = ";"
+        ),
+        AB = bibliometrix::biblioNetwork(
+          M_data,
+          analysis = "co-occurrences",
+          network = "abstracts",
+          n = n,
+          sep = ";"
+        ),
+        WC = {
+          WSC <- bibliometrix::cocMatrix(M_data, Field = "WC", binary = FALSE)
+          crossprod(WSC, WSC)
+        }
+      )
+      values$NetWords <- NetWords
+      values$Title <- switch(
+        coc_field,
+        ID = "Keywords Plus Network",
+        DE = "Authors' Keywords network",
+        KW_Merged = "All Keywords network",
+        TI = "Title Words network",
+        AB = "Abstract Words network",
+        WC = "Subject Categories network"
+      )
+    } else {
+      NetWords <- values$NetWords
+    }
+    net_title <- values$Title
+
+    cocnet <- tryCatch({
+        bibliometrix::networkPlot(
+          NetWords,
+          normalize = coc_normalize,
+          Title = net_title,
+          type = coc_layout,
+          size.cex = TRUE,
+          size = 5,
+          remove.multiple = FALSE,
+          edgesize = coc_edgesize * 3,
+          labelsize = coc_labelsize,
+          label.cex = coc_label_cex,
+          label.n = label.n,
+          edges.min = coc_edges_min,
+          label.color = FALSE,
+          curved = coc_curved,
+          alpha = coc_alpha,
+          cluster = coc_cluster,
+          remove.isolates = coc_isolates,
+          community.repulsion = coc_repulsion,
+          seed = random_seed,
+          verbose = FALSE
+        )
+      }, error = function(e) {
+        showNotification(paste("Co-occurrence Network error:", e$message), type = "error", duration = 8)
+        return(NULL)
+      })
+    removeNotification("COC_progress")
+    req(cocnet)
+
+    # Add year info to graph
+    g <- cocnet$graph
+    Y <- keywords2Years(M_data, field = coc_field, n = Inf)
+    label_df <- data.frame(Keyword = igraph::V(g)$name)
+    df <- label_df %>%
+      dplyr::left_join(
+        Y %>% dplyr::mutate(Keyword = tolower(Keyword)),
+        by = "Keyword"
+      ) %>%
+      dplyr::rename(year_med = Year)
+    igraph::V(g)$year_med <- df$year_med
+    if (coc_years) {
+      col <- hcl.colors(
+        (diff(range(df$year_med)) + 1) * 10,
+        palette = "Blues 3"
+      )
+      igraph::V(g)$color <- col[(max(df$year_med) - df$year_med + 1) * 10]
+    }
+    cocnet$graph <- g
+    values$cocnet <- cocnet
+
     values$COCnetwork <- igraph2vis(
-      g = values$cocnet$graph,
-      curved = (input$coc.curved == "Yes"),
-      labelsize = input$labelsize,
-      opacity = input$cocAlpha,
-      type = input$layout,
-      shape = input$coc.shape,
-      net = values$cocnet,
-      shadow = (input$coc.shadow == "Yes"),
-      edgesize = input$edgesize,
-      noOverlap = input$noOverlap
+      g = cocnet$graph,
+      curved = coc_curved,
+      labelsize = coc_labelsize,
+      opacity = coc_alpha,
+      type = coc_layout,
+      shape = coc_shape,
+      net = cocnet,
+      shadow = coc_shadow,
+      edgesize = coc_edgesize,
+      noOverlap = coc_noOverlap
     )
     values$cocOverlay <- overlayPlotly(values$COCnetwork$VIS)
-    values$degreePlot <- degreePlot(values$cocnet)
-    ## values for network over time
-    # years <- sort(unique(c(values$COCnetwork$VIS$x$nodes$year_med)))
-    values$years_coc <- sort(unique(c(values$M %>% drop_na(PY) %>% pull(PY))))
-    values$index_coc = 0
-    values$playing_coc = FALSE
-    values$paused_coc = FALSE
-    values$current_year_coc = min(values$years_coc)
-
+    values$degreePlot <- degreePlot(cocnet)
+    values$years_coc <- sort(unique(c(
+      M_data %>% tidyr::drop_na(PY) %>% dplyr::pull(PY)
+    )))
+    values$index_coc <- 0
+    values$playing_coc <- FALSE
+    values$paused_coc <- FALSE
+    values$current_year_coc <- min(values$years_coc)
     output$year_slider_cocUI <- renderUI({
       sliderInput(
         "year_slider_coc",
@@ -7546,12 +10466,12 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$cocPlot <- renderVisNetwork({
-    COCnetwork()
+    req(values$COCnetwork)
     values$COCnetwork$VIS
   })
 
   output$cocOverlay <- renderPlotly({
-    COCnetwork()
+    req(values$cocOverlay)
     values$cocOverlay
   })
 
@@ -7710,7 +10630,8 @@ To ensure the functionality of Biblioshiny,
       paste("Co_occurrence_network-", Sys.Date(), ".zip", sep = "")
     },
     content <- function(file) {
-      tmpdir <- tempdir()
+      req(values$cocnet)
+      tmpdir <- getWD()
       owd <- setwd(tmpdir)
       on.exit(setwd(owd))
       myfile <- paste("mynetwork-", Sys.Date(), sep = "")
@@ -7725,13 +10646,14 @@ To ensure the functionality of Biblioshiny,
   output$networkCoc.fig <- downloadHandler(
     filename = "network.html",
     content <- function(con) {
+      req(values$COCnetwork)
       savenetwork(con, values$COCnetwork$VIS)
     },
     contentType = "html"
   )
 
-  output$cocTable <- DT::renderDT({
-    COCnetwork()
+  output$cocTable <- renderUI({
+    req(values$cocnet)
     cocData = values$cocnet$cluster_res
     names(cocData) = c(
       "Node",
@@ -7740,7 +10662,7 @@ To ensure the functionality of Biblioshiny,
       "Closeness",
       "PageRank"
     )
-    DTformat(
+    renderBibliobox(
       cocData,
       nrow = 10,
       filename = "CoWord_Network",
@@ -7750,7 +10672,7 @@ To ensure the functionality of Biblioshiny,
       numeric = 3:5,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 3,
@@ -7763,7 +10685,7 @@ To ensure the functionality of Biblioshiny,
 
   ### Degree Plot Co-word analysis ----
   output$cocDegree <- renderPlotly({
-    COCnetwork()
+    req(values$cocnet)
     #values$degreePlot <- degreePlot(values$cocnet)
     plot.ly(values$degreePlot)
   })
@@ -7781,7 +10703,6 @@ To ensure the functionality of Biblioshiny,
       list_df <- list(values$cocnet$cluster_res)
       list_plot <- list(values$degreePlot)
       res <- addDataScreenWb(list_df, wb = values$wb, sheetname = sheetname)
-      #values$wb <- res$wb
       values$wb <- addGgplotsWb(
         list_plot,
         wb = res$wb,
@@ -7791,14 +10712,21 @@ To ensure the functionality of Biblioshiny,
         height = 7,
         dpi = 75
       )
-      #values$fileTFP <- screenSh(selector = "#cocPlot") ## screenshot
-      values$fileCOC <- screenSh(values$COCnetwork$VIS, zoom = 2, type = "vis")
-      values$list_file <- rbind(
-        values$list_file,
-        c(sheetname = res$sheetname, values$fileCOC, res$col)
+      values$vis_report_config <- list(
+        callback = function(file_path) {
+          values$fileCOC <- file_path
+          values$list_file <- rbind(
+            values$list_file,
+            c(sheetname = res$sheetname, file_path, res$col)
+          )
+          popUp(title = "Co-occurrence Network", type = "success")
+          values$myChoices <- sheets(values$wb)
+        }
       )
-      popUp(title = "Co-occurrence Network", type = "success")
-      values$myChoices <- sheets(values$wb)
+      shinyjs::runjs(sprintf(
+        'captureVisReport("cocPlot", %d);',
+        values$report_dpi
+      ))
     } else {
       popUp(type = "error")
     }
@@ -7817,7 +10745,7 @@ To ensure the functionality of Biblioshiny,
       title = "Stopword list",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("stopwordList"),
+      subtitle = uiOutput("stopwordList"),
       btn_labels = "OK"
     )
   })
@@ -7839,27 +10767,138 @@ To ensure the functionality of Biblioshiny,
       title = "Synonym List",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("synonymList"),
+      subtitle = uiOutput("synonymList"),
       btn_labels = "OK"
     )
   })
 
-  CSfactorial <- eventReactive(input$applyCA, {
-    values <- CAmap(input, values)
+  observeEvent(input$applyCA, {
+    cs_field <- input$CSfield
+    cs_method <- input$method
+    cs_n <- input$CSn
+    cs_nclusters <- input$nClustersCS
+    cs_labelsize <- input$CSlabelsize
+    cs_doc <- input$CSdoc
+    cs_ngrams <- if (cs_field %in% c("TI", "AB")) {
+      as.numeric(input$CSngrams)
+    } else {
+      1
+    }
+
+    if (!(cs_field %in% names(values$M))) {
+      showNotification(
+        "Selected field is not included in your data collection",
+        type = "error",
+        duration = 5
+      )
+      return()
+    }
+
+    remove.terms <- if (input$CSStopFile == "Y") {
+      trimws(values$CSremove.terms$stopword)
+    } else {
+      NULL
+    }
+    synonyms <- if (input$FASynFile == "Y") {
+      s <- values$FAsyn.terms %>%
+        dplyr::group_by(term) %>%
+        dplyr::mutate(term = paste0(term, ";", synonyms)) %>%
+        dplyr::select(term)
+      s$term
+    } else {
+      NULL
+    }
+
+    M_data <- values$M
+    tab <- tableTag(M_data, cs_field, ngrams = cs_ngrams)
+    if (length(tab) < 2) {
+      showNotification(
+        "Not enough terms for analysis",
+        type = "error",
+        duration = 5
+      )
+      return()
+    }
+    minDegree <- as.numeric(tab[cs_n])
+
+    CS <- tryCatch({
+      withProgress(message = 'Conceptual Structure: computing...', value = 0, {
+        bibliometrix::conceptualStructure(
+          M_data,
+          method = cs_method,
+          field = cs_field,
+          minDegree = minDegree,
+          clust = cs_nclusters,
+          k.max = 8,
+          stemming = FALSE,
+          labelsize = cs_labelsize / 2,
+          documents = cs_doc,
+          graph = FALSE,
+          ngrams = cs_ngrams,
+          remove.terms = remove.terms,
+          synonyms = synonyms
+        )
+      })
+    }, error = function(e) {
+      showNotification(paste("Conceptual Structure error:", e$message), type = "error", duration = 8)
+      return(NULL)
+    })
+    req(CS)
+
+    if (cs_method != "MDS") {
+      CSData <- CS$docCoord
+      CSData <- data.frame(Documents = row.names(CSData), CSData)
+      CSData$dim1 <- round(CSData$dim1, 2)
+      CSData$dim2 <- round(CSData$dim2, 2)
+      CSData$contrib <- round(CSData$contrib, 2)
+      CS$CSData <- CSData
+    } else {
+      CS$CSData <- data.frame(Docuemnts = NA, dim1 = NA, dim2 = NA)
+    }
+    switch(
+      cs_method,
+      CA = {
+        WData <- data.frame(
+          word = row.names(CS$km.res$data.clust),
+          CS$km.res$data.clust,
+          stringsAsFactors = FALSE
+        )
+        names(WData)[4] <- "cluster"
+      },
+      MCA = {
+        WData <- data.frame(
+          word = row.names(CS$km.res$data.clust),
+          CS$km.res$data.clust,
+          stringsAsFactors = FALSE
+        )
+        names(WData)[4] <- "cluster"
+      },
+      MDS = {
+        WData <- data.frame(
+          word = row.names(CS$res),
+          CS$res,
+          cluster = CS$km.res$cluster
+        )
+      }
+    )
+    WData$Dim1 <- round(WData$Dim1, 2)
+    WData$Dim2 <- round(WData$Dim2, 2)
+    CS$WData <- WData
+    values$CS <- CS
     values$plotCS <- ca2plotly(
-      values$CS,
-      method = input$method,
+      CS,
+      method = cs_method,
       dimX = 1,
       dimY = 2,
       topWordPlot = Inf,
       threshold = 0.05,
-      labelsize = input$CSlabelsize * 2,
-      size = input$CSlabelsize * 1.5
+      labelsize = cs_labelsize * 2,
+      size = cs_labelsize * 1.5
     )
     values$dendCS <- dend2vis(
-      values$CS$km.res,
-      labelsize = input$CSlabelsize,
-      nclusters = as.numeric(input$nClustersCS),
+      CS$km.res,
+      labelsize = cs_labelsize,
+      nclusters = as.numeric(cs_nclusters),
       community = FALSE
     )
   })
@@ -7880,8 +10919,9 @@ To ensure the functionality of Biblioshiny,
       paste("FactorialAnalysis_", Sys.Date(), ".zip", sep = "")
     },
     content <- function(file) {
+      req(values$CS)
       #go to a temp dir to avoid permission issues
-      owd <- setwd(tempdir())
+      owd <- setwd(getWD())
       on.exit(setwd(owd))
       files <- c(
         paste("FactorialMap_", Sys.Date(), ".png", sep = ""),
@@ -7889,18 +10929,19 @@ To ensure the functionality of Biblioshiny,
         #paste("MostContribDocuments_", Sys.Date(), ".png", sep=""),
         #paste("MostCitedDocuments_", Sys.Date(), ".png", sep="")
       )
-      ggsave(
+      safe_safe_ggsave(
         filename = files[1],
         plot = values$CS$graph_terms,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 1.5,
+        width = values$h * values$aspect * 0.75,
         bg = "white"
       )
-      png(
+      png_dev <- safe_png_device()
+      png_dev(
         filename = files[2],
         height = values$h,
-        width = values$h * 2,
+        width = values$h * values$aspect,
         units = "in",
         res = values$dpi
       )
@@ -7912,23 +10953,23 @@ To ensure the functionality of Biblioshiny,
   )
 
   output$CSPlot1 <- renderPlotly({
-    CSfactorial()
+    req(values$CS)
     #CS=values$CS
     #save(CS,file="provaCS.rdata")
     values$plotCS #<- ca2plotly(values$CS, method=input$method ,dimX = 1, dimY = 2, topWordPlot = Inf, threshold=0.05, labelsize = input$CSlabelsize*2, size=input$CSlabelsize*1.5)
   })
 
   output$CSPlot4 <- renderVisNetwork({
-    CSfactorial()
+    req(values$CS)
     #dend2vis(values$CS$km.res, labelsize=input$CSlabelsize, nclusters=as.numeric(input$nClustersCS), community=FALSE)
     values$dendCS
     #values$CS$graph_dendogram)
   })
 
-  output$CSTableW <- DT::renderDT({
-    CSfactorial()
+  output$CSTableW <- renderUI({
+    req(values$CS)
     WData <- values$CS$WData
-    DTformat(
+    renderBibliobox(
       WData,
       nrow = 10,
       filename = "CoWord_Factorial_Analysis_Words_By_Cluster",
@@ -7938,7 +10979,7 @@ To ensure the functionality of Biblioshiny,
       numeric = 2:3,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -7949,10 +10990,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$CSTableD <- DT::renderDT({
-    CSfactorial()
+  output$CSTableD <- renderUI({
+    req(values$CS)
     CSData <- values$CS$CSData
-    DTformat(
+    renderBibliobox(
       CSData,
       nrow = 10,
       filename = "CoWord_Factorial_Analysis_Articles_By_Cluster",
@@ -7962,7 +11003,7 @@ To ensure the functionality of Biblioshiny,
       numeric = 2:4,
       dom = FALSE,
       size = '100%',
-      filter = "none",
+      filter = "top",
       columnShort = NULL,
       columnSmall = NULL,
       round = 2,
@@ -8005,7 +11046,7 @@ To ensure the functionality of Biblioshiny,
       title = "Stopword list",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("stopwordList"),
+      subtitle = uiOutput("stopwordList"),
       btn_labels = "OK"
     )
   })
@@ -8027,12 +11068,12 @@ To ensure the functionality of Biblioshiny,
       title = "Synonym List",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("synonymList"),
+      subtitle = uiOutput("synonymList"),
       btn_labels = "OK"
     )
   })
 
-  TMAP <- eventReactive(input$applyTM, {
+  observeEvent(input$applyTM, {
     if (input$TMfield %in% c("TI", "AB")) {
       ngrams <- as.numeric(input$TMngrams)
     } else {
@@ -8045,8 +11086,6 @@ To ensure the functionality of Biblioshiny,
     } else {
       remove.terms <- NULL
     }
-    #values$TMremove.terms <- remove.terms
-    ### end of block
 
     ### load file with synonyms
     if (input$TMapSynFile == "Y") {
@@ -8058,34 +11097,85 @@ To ensure the functionality of Biblioshiny,
     } else {
       synonyms <- NULL
     }
-    #values$TMapsyn.terms <- synonyms
-    ### end of block
 
-    values$TM <- thematicMap(
-      values$M,
+    ## Cache check: skip thematicMap() if params unchanged
+    cache_key <- make_cache_key(
+      fp = data_fingerprint(values$M),
       field = input$TMfield,
       n = input$TMn,
       minfreq = input$TMfreq,
       ngrams = ngrams,
-      community.repulsion = input$TMrepulsion,
+      repulsion = input$TMrepulsion,
       stemming = input$TMstemming,
       size = input$sizeTM,
       cluster = input$TMCluster,
       n.labels = input$TMn.labels,
-      repel = FALSE,
+      alpha = input$TMalpha,
       remove.terms = remove.terms,
       synonyms = synonyms,
-      subgraphs = TRUE,
       seed = values$random_seed
     )
-    values$TM$doc2clust <- values$TM$documentToClusters %>%
-      select(Assigned_cluster, SR, pagerank)
 
+    if (identical(cache_key, values$cache_TM_key)) {
+      return()
+    }
+
+    # Snapshot
+    M_data <- values$M
+    field <- input$TMfield
+    n <- input$TMn
+    minfreq <- input$TMfreq
+    repulsion <- input$TMrepulsion
+    stemming <- input$TMstemming
+    size <- input$sizeTM
+    cluster <- input$TMCluster
+    n.labels <- input$TMn.labels
+    alpha <- input$TMalpha
+    seed <- values$random_seed
+
+    TM <- tryCatch({
+      withProgress(message = 'Thematic Map: computing...', value = 0, {
+        bibliometrix::thematicMap(
+          M_data,
+          field = field,
+          n = n,
+          minfreq = minfreq,
+          ngrams = ngrams,
+          community.repulsion = repulsion,
+          stemming = stemming,
+          size = size,
+          cluster = cluster,
+          n.labels = n.labels,
+          repel = FALSE,
+          remove.terms = remove.terms,
+          synonyms = synonyms,
+          subgraphs = TRUE,
+          alpha = alpha,
+          seed = seed
+        )
+      })
+    }, error = function(e) {
+      showNotification(paste("Thematic Map error:", e$message), type = "error", duration = 8)
+      return(NULL)
+    })
+    req(TM)
+
+    if (TM$nclust == 0) {
+      showNotification(
+        "No topics found. Please select different parameters.",
+        type = "error",
+        duration = 8
+      )
+      return()
+    }
+    values$TM <- TM
+    values$TM$doc2clust <- TM$documentToClusters %>%
+      select(Assigned_cluster, SR, pagerank)
     values$TM$documentToClusters$DI <- paste0(
       '<a href=\"https://doi.org/',
-      values$TM$documentToClusters$DI,
+      TM$documentToClusters$DI,
       '\" target=\"_blank\">',
-      values$TM$documentToClusters$DI,
+      TM$documentToClusters$DI,
       '</a>'
     )
     names(values$TM$documentToClusters)[1:9] <- c(
@@ -8099,7 +11189,6 @@ To ensure the functionality of Biblioshiny,
       "NTC",
       "SR"
     )
-
     values$TM$words <- values$TM$words[, -c(4, 6)]
     values$TM$clusters_orig <- values$TM$clusters
     values$TM$clusters <- values$TM$clusters[, c(9, 5:8, 11)]
@@ -8117,15 +11206,10 @@ To ensure the functionality of Biblioshiny,
       aspectratio = 1.3,
       customdata = values$TM$clusters$color
     )
-    validate(
-      need(
-        values$TM$nclust > 0,
-        "\n\nNo topics in one or more periods. Please select a different set of parameters."
-      )
-    )
+    values$cache_TM_key <- cache_key
   })
   output$TMPlot <- renderPlotly({
-    TMAP()
+    req(values$TM)
     values$TMmap
   })
 
@@ -8200,7 +11284,7 @@ To ensure the functionality of Biblioshiny,
   ### end click cluster subgraphs
 
   output$NetPlot <- renderVisNetwork({
-    TMAP()
+    req(values$TM)
     values$networkTM <- igraph2vis(
       g = values$TM$net$graph,
       curved = (input$coc.curved == "Yes"),
@@ -8219,22 +11303,23 @@ To ensure the functionality of Biblioshiny,
       paste("ThematicMap-", Sys.Date(), ".png", sep = "")
     },
     content <- function(file) {
-      ggsave(
+      req(values$TM)
+      safe_ggsave(
         filename = file,
         plot = values$TM$map,
         dpi = values$dpi,
         height = values$h,
-        width = values$h * 1.5,
+        width = values$h * values$aspect * 0.75,
         bg = "white"
       )
     },
     contentType = "png"
   )
 
-  output$TMTable <- DT::renderDT({
-    TMAP()
+  output$TMTable <- renderUI({
+    req(values$TM)
     tmData = values$TM$words
-    DTformat(
+    renderBibliobox(
       tmData,
       nrow = 10,
       filename = "Thematic_Map_Terms",
@@ -8255,10 +11340,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTableCluster <- DT::renderDT({
-    TMAP()
+  output$TMTableCluster <- renderUI({
+    req(values$TM)
     tmData <- values$TM$clusters
-    DTformat(
+    renderBibliobox(
       tmData,
       nrow = 10,
       filename = "Thematic_Map_Clusters",
@@ -8279,10 +11364,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTableDocument <- DT::renderDT({
-    TMAP()
+  output$TMTableDocument <- renderUI({
+    req(values$TM)
     tmDataDoc <- values$TM$documentToClusters
-    DTformat(
+    renderBibliobox(
       tmDataDoc,
       nrow = 10,
       filename = "Thematic_Map_Documents",
@@ -8340,7 +11425,7 @@ To ensure the functionality of Biblioshiny,
       title = "Stopword list",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("stopwordList"),
+      subtitle = uiOutput("stopwordList"),
       btn_labels = "OK"
     )
   })
@@ -8362,7 +11447,7 @@ To ensure the functionality of Biblioshiny,
       title = "Synonym List",
       type = NULL,
       color = c("#1d8fe1"),
-      subtitle = DTOutput("synonymList"),
+      subtitle = uiOutput("synonymList"),
       btn_labels = "OK"
     )
   })
@@ -8387,7 +11472,7 @@ To ensure the functionality of Biblioshiny,
     })
   })
 
-  TEMAP <- eventReactive(input$applyTE, {
+  observeEvent(input$applyTE, {
     if (input$TEfield %in% c("TI", "AB")) {
       ngrams <- as.numeric(input$TEngrams)
     } else {
@@ -8428,28 +11513,79 @@ To ensure the functionality of Biblioshiny,
     }
 
     if (length(values$yearSlices) > 0) {
-      values$nexus <- thematicEvolution(
-        values$M,
+      ## Cache check: skip thematicEvolution() if params unchanged
+      cache_key <- make_cache_key(
+        fp = data_fingerprint(values$M),
         field = input$TEfield,
-        values$yearSlices,
+        yearSlices = values$yearSlices,
         n = input$nTE,
         minFreq = input$fTE,
         size = input$sizeTE,
         cluster = input$TECluster,
         n.labels = input$TEn.labels,
-        repel = FALSE,
         ngrams = ngrams,
         remove.terms = remove.terms,
         synonyms = synonyms,
-        seed = values$random_seed
+        seed = values$random_seed,
+        alpha = input$TEalpha,
+        minFlow = input$minFlowTE
       )
-      validate(
-        need(
-          values$nexus$check != FALSE,
-          "\n\nNo topics in one or more periods. Please select a different set of parameters."
-        )
-      )
-      for (i in 1:(length(values$yearSlices) + 1)) {
+
+      if (identical(cache_key, values$cache_TE_key)) {
+        return()
+      }
+
+      values$TE_computing <- TRUE
+      values$TE_error <- NULL
+
+      # Snapshot variables
+      M_data <- values$M
+      field <- input$TEfield
+      yearSlices <- values$yearSlices
+      n <- input$nTE
+      minFreq <- input$fTE
+      size <- input$sizeTE
+      cluster <- input$TECluster
+      n.labels <- input$TEn.labels
+      seed <- values$random_seed
+      alpha <- input$TEalpha
+      minFlow <- input$minFlowTE
+
+      nexus <- tryCatch({
+        withProgress(message = 'Thematic Evolution: computing...', value = 0, {
+          bibliometrix::thematicEvolution(
+            M_data,
+            field = field,
+            yearSlices,
+            n = n,
+            minFreq = minFreq,
+            size = size,
+            cluster = cluster,
+            n.labels = n.labels,
+            repel = FALSE,
+            ngrams = ngrams,
+            remove.terms = remove.terms,
+            synonyms = synonyms,
+            seed = seed,
+            assign.evolution.colors = list(assign = TRUE, alpha = alpha)
+          )
+        })
+      }, error = function(e) {
+        values$TE_computing <- FALSE
+        values$TE_error <- e$message
+        showNotification(paste("Thematic Evolution error:", e$message), type = "error", duration = 8)
+        return(NULL)
+      })
+      req(nexus)
+
+      if (isFALSE(nexus$check)) {
+        values$TE_computing <- FALSE
+        values$TE_error <- "No topics in one or more periods. Please select a different set of parameters."
+        showNotification(values$TE_error, type = "error", duration = 8)
+        return()
+      }
+      values$nexus <- nexus
+      for (i in 1:(length(yearSlices) + 1)) {
         values$nexus$TM[[i]]$words <- values$nexus$TM[[i]]$words[, -c(4, 6)]
         values$nexus$TM[[i]]$clusters <- values$nexus$TM[[i]]$clusters[, c(
           9,
@@ -8479,10 +11615,23 @@ To ensure the functionality of Biblioshiny,
           "Source",
           "Year",
           "TotalCitation",
+          "SR",
+          "TCperYear",
+          "NTC"
+        )
+        values$nexus$TM[[i]]$documentToClusters <- values$nexus$TM[[
+          i
+        ]]$documentToClusters[c(
+          "DOI",
+          "Authors",
+          "Title",
+          "Source",
+          "Year",
+          "TotalCitation",
           "TCperYear",
           "NTC",
           "SR"
-        )
+        )]
       }
       values$nexus$Data <- values$nexus$Data[
         values$nexus$Data$Inc_index > 0,
@@ -8491,14 +11640,15 @@ To ensure the functionality of Biblioshiny,
       values$TEplot <- plotThematicEvolution(
         Nodes = values$nexus$Nodes,
         Edges = values$nexus$Edges,
-        measure = input$TEmeasure,
-        min.flow = input$minFlowTE
+        min.flow = minFlow
       )
+      values$cache_TE_key <- cache_key
+      values$TE_computing <- FALSE
     }
   })
 
   output$TEPlot <- plotly::renderPlotly({
-    TEMAP()
+    req(values$nexus)
     values$TEplot
   })
 
@@ -8518,12 +11668,12 @@ To ensure the functionality of Biblioshiny,
 
   output$TEplot.save <- downloadHandler(
     filename = function() {
-      #
       paste("ThematicEvolution-", Sys.Date(), ".zip", sep = "")
     },
     content <- function(file) {
+      req(values$nexus)
       #go to a temp dir to avoid permission issues
-      tmpdir <- tempdir()
+      tmpdir <- getWD()
       owd <- setwd(tmpdir)
       on.exit(setwd(owd))
       files <- filenameTE <- paste(
@@ -8542,30 +11692,46 @@ To ensure the functionality of Biblioshiny,
           ".png",
           sep = ""
         )
-        ggsave(
+        safe_ggsave(
           filename = fileName,
           plot = values$nexus$TM[[i]]$map,
           dpi = values$dpi,
           height = values$h,
-          width = values$h * 1.5,
+          width = values$h * values$aspect * 0.75,
           bg = "white"
         )
         files <- c(fileName, files)
       }
-      plot2png(
-        values$TEplot,
-        filename = filenameTE,
-        zoom = 2,
-        type = "plotly",
-        tmpdir = tmpdir
+      # Export Sankey using Plotly.toImage() via shared utility
+      export_nodes <- values$nexus$Nodes
+      export_edges <- values$nexus$Edges
+      # Convert hex+alpha to rgba() with desired export opacity
+      hex_to_rgba <- function(hex_colors, alpha = 1) {
+        sapply(hex_colors, function(h) {
+          h <- sub("^#", "", h)
+          if (nchar(h) == 8) h <- substr(h, 1, 6)
+          r <- strtoi(substr(h, 1, 2), 16L)
+          g <- strtoi(substr(h, 3, 4), 16L)
+          b <- strtoi(substr(h, 5, 6), 16L)
+          sprintf("rgba(%d,%d,%d,%s)", r, g, b, alpha)
+        }, USE.NAMES = FALSE)
+      }
+      export_nodes$color <- hex_to_rgba(export_nodes$color, alpha = 1)
+      export_edges$color <- hex_to_rgba(export_edges$color, alpha = 0.6)
+      export_plot <- plotThematicEvolution(
+        Nodes = export_nodes,
+        Edges = export_edges,
+        min.flow = 0
       )
+      plotlySankey2png(export_plot, filename = filenameTE,
+        dpi = values$dpi, height = values$h)
       zip::zip(file, files)
     },
     contentType = "zip"
   )
 
-  output$TETable <- DT::renderDT({
-    TEMAP()
+  output$TETable <- renderUI({
+    req(values$nexus)
     TEData = values$nexus$Data
     names(TEData) = c(
       "From",
@@ -8576,7 +11742,7 @@ To ensure the functionality of Biblioshiny,
       "Occurrences",
       "Stability Index"
     )
-    DTformat(
+    renderBibliobox(
       TEData,
       nrow = 10,
       filename = "Thematic_Evolution",
@@ -8598,7 +11764,7 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$TMPlot1 <- renderPlotly({
-    TEMAP()
+    req(values$nexus)
     if (length(values$nexus$TM) >= 1) {
       plot.ly(values$nexus$TM[[1]]$map, size = 0.07, aspectratio = 1.3)
     } else {
@@ -8607,7 +11773,7 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$TMPlot2 <- renderPlotly({
-    TEMAP()
+    req(values$nexus)
     if (length(values$nexus$TM) >= 2) {
       plot.ly(values$nexus$TM[[2]]$map, size = 0.07, aspectratio = 1.3)
     } else {
@@ -8616,7 +11782,7 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$TMPlot3 <- renderPlotly({
-    TEMAP()
+    req(values$nexus)
     if (length(values$nexus$TM) >= 3) {
       plot.ly(values$nexus$TM[[3]]$map, size = 0.07, aspectratio = 1.3)
     } else {
@@ -8625,7 +11791,7 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$TMPlot4 <- renderPlotly({
-    TEMAP()
+    req(values$nexus)
     if (length(values$nexus$TM) >= 4) {
       plot.ly(values$nexus$TM[[4]]$map, size = 0.07, aspectratio = 1.3)
     } else {
@@ -8634,7 +11800,7 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$TMPlot5 <- renderPlotly({
-    TEMAP()
+    req(values$nexus)
     if (length(values$nexus$TM) >= 5) {
       plot.ly(values$nexus$TM[[5]]$map, size = 0.07, aspectratio = 1.3)
     } else {
@@ -8643,7 +11809,7 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$NetPlot1 <- renderVisNetwork({
-    TEMAP()
+    req(values$nexus)
     k = 1
     values$network1 <- igraph2vis(
       g = values$nexus$Net[[k]]$graph,
@@ -8659,7 +11825,7 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$NetPlot2 <- renderVisNetwork({
-    TEMAP()
+    req(values$nexus)
     k = 2
     values$network2 <- igraph2vis(
       g = values$nexus$Net[[k]]$graph,
@@ -8675,7 +11841,7 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$NetPlot3 <- renderVisNetwork({
-    TEMAP()
+    req(values$nexus)
     k = 3
     values$network3 <- igraph2vis(
       g = values$nexus$Net[[k]]$graph,
@@ -8691,7 +11857,7 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$NetPlot4 <- renderVisNetwork({
-    TEMAP()
+    req(values$nexus)
     k = 4
     values$network4 <- igraph2vis(
       g = values$nexus$Net[[k]]$graph,
@@ -8707,7 +11873,7 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$NetPlot5 <- renderVisNetwork({
-    TEMAP()
+    req(values$nexus)
     k = 5
     values$network5 <- igraph2vis(
       g = values$nexus$Net[[k]]$graph,
@@ -8722,10 +11888,10 @@ To ensure the functionality of Biblioshiny,
     values$network5$VIS
   })
 
-  output$TMTable1 <- DT::renderDT({
-    TEMAP()
+  output$TMTable1 <- renderUI({
+    req(values$nexus)
     tmData = values$nexus$TM[[1]]$words
-    DTformat(
+    renderBibliobox(
       tmData,
       nrow = 10,
       filename = "Thematic_Map_Period_1_Terms",
@@ -8746,10 +11912,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTable2 <- DT::renderDT({
-    TEMAP()
+  output$TMTable2 <- renderUI({
+    req(values$nexus)
     tmData = values$nexus$TM[[2]]$words
-    DTformat(
+    renderBibliobox(
       tmData,
       nrow = 10,
       filename = "Thematic_Map_Period_2_Terms",
@@ -8770,10 +11936,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTable3 <- DT::renderDT({
-    TEMAP()
+  output$TMTable3 <- renderUI({
+    req(values$nexus)
     tmData = values$nexus$TM[[3]]$words
-    DTformat(
+    renderBibliobox(
       tmData,
       nrow = 10,
       filename = "Thematic_Map_Period_3_Terms",
@@ -8794,10 +11960,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTable4 <- DT::renderDT({
-    TEMAP()
+  output$TMTable4 <- renderUI({
+    req(values$nexus)
     tmData = values$nexus$TM[[4]]$words
-    DTformat(
+    renderBibliobox(
       tmData,
       nrow = 10,
       filename = "Thematic_Map_Period_4_Terms",
@@ -8818,10 +11984,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTable5 <- DT::renderDT({
-    TEMAP()
+  output$TMTable5 <- renderUI({
+    req(values$nexus)
     tmData = values$nexus$TM[[5]]$words
-    DTformat(
+    renderBibliobox(
       tmData,
       nrow = 10,
       filename = "Thematic_Map_Period_5_Terms",
@@ -8842,10 +12008,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTableCluster1 <- DT::renderDT({
-    TEMAP()
+  output$TMTableCluster1 <- renderUI({
+    req(values$nexus)
     tmData <- values$nexus$TM[[1]]$clusters
-    DTformat(
+    renderBibliobox(
       tmData,
       nrow = 10,
       filename = "Thematic_Map_Period_1_Clusters",
@@ -8866,10 +12032,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTableCluster2 <- DT::renderDT({
-    TEMAP()
+  output$TMTableCluster2 <- renderUI({
+    req(values$nexus)
     tmData <- values$nexus$TM[[2]]$clusters
-    DTformat(
+    renderBibliobox(
       tmData,
       nrow = 10,
       filename = "Thematic_Map_Period_2_Clusters",
@@ -8890,10 +12056,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTableCluster3 <- DT::renderDT({
-    TEMAP()
+  output$TMTableCluster3 <- renderUI({
+    req(values$nexus)
     tmData <- values$nexus$TM[[3]]$clusters
-    DTformat(
+    renderBibliobox(
       tmData,
       nrow = 10,
       filename = "Thematic_Map_Period_3_Clusters",
@@ -8914,10 +12080,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTableCluster4 <- DT::renderDT({
-    TEMAP()
+  output$TMTableCluster4 <- renderUI({
+    req(values$nexus)
     tmData <- values$nexus$TM[[4]]$clusters
-    DTformat(
+    renderBibliobox(
       tmData,
       nrow = 10,
       filename = "Thematic_Map_Period_4_Clusters",
@@ -8938,10 +12104,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTableCluster5 <- DT::renderDT({
-    TEMAP()
+  output$TMTableCluster5 <- renderUI({
+    req(values$nexus)
     tmData <- values$nexus$TM[[5]]$clusters
-    DTformat(
+    renderBibliobox(
       tmData,
       nrow = 10,
       filename = "Thematic_Map_Period_5_Clusters",
@@ -8962,10 +12128,10 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTableDocument1 <- DT::renderDT(server = TRUE, {
-    TEMAP()
+  output$TMTableDocument1 <- renderUI({
+    req(values$nexus)
     tmDataDoc <- values$nexus$TM[[1]]$documentToClusters
-    DTformat(
+    renderBibliobox(
       tmDataDoc,
       nrow = 10,
       filename = "Thematic_Map_Period_1_Documents",
@@ -8986,8 +12152,8 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTableDocument2 <- DT::renderDT({
-    TEMAP()
+  output$TMTableDocument2 <- renderUI({
+    req(values$nexus)
     tmDataDoc <- values$nexus$TM[[2]]$documentToClusters
     tmDataDoc$DI <- paste0(
       '<a href=\"https://doi.org/',
@@ -9007,7 +12173,7 @@ To ensure the functionality of Biblioshiny,
       "NTC",
       "SR"
     )
-    DTformat(
+    renderBibliobox(
       tmDataDoc,
       nrow = 10,
       filename = "Thematic_Map_Period_2_Documents",
@@ -9028,8 +12194,8 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTableDocument3 <- DT::renderDT({
-    TEMAP()
+  output$TMTableDocument3 <- renderUI({
+    req(values$nexus)
     tmDataDoc <- values$nexus$TM[[3]]$documentToClusters
     tmDataDoc$DI <- paste0(
       '<a href=\"https://doi.org/',
@@ -9050,7 +12216,7 @@ To ensure the functionality of Biblioshiny,
       "SR"
     )
 
-    DTformat(
+    renderBibliobox(
       tmDataDoc,
       nrow = 10,
       filename = "Thematic_Map_Period_3_Documents",
@@ -9071,8 +12237,8 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTableDocument4 <- DT::renderDT({
-    TEMAP()
+  output$TMTableDocument4 <- renderUI({
+    req(values$nexus)
     tmDataDoc <- values$nexus$TM[[4]]$documentToClusters
     tmDataDoc$DI <- paste0(
       '<a href=\"https://doi.org/',
@@ -9093,7 +12259,7 @@ To ensure the functionality of Biblioshiny,
       "SR"
     )
 
-    DTformat(
+    renderBibliobox(
       tmDataDoc,
       nrow = 10,
       filename = "Thematic_Map_Period_4_Documents",
@@ -9114,8 +12280,8 @@ To ensure the functionality of Biblioshiny,
     )
   })
 
-  output$TMTableDocument5 <- DT::renderDT({
-    TEMAP()
+  output$TMTableDocument5 <- renderUI({
+    req(values$nexus)
     tmDataDoc <- values$nexus$TM[[5]]$documentToClusters
     tmDataDoc$DI <- paste0(
       '<a href=\"https://doi.org/',
@@ -9136,7 +12302,7 @@ To ensure the functionality of Biblioshiny,
       "SR"
     )
 
-    DTformat(
+    renderBibliobox(
       tmDataDoc,
       nrow = 10,
       filename = "Thematic_Map_Period_5_Documents",
@@ -9165,7 +12331,12 @@ To ensure the functionality of Biblioshiny,
       res <- addDataScreenWb(list_df, wb = values$wb, sheetname = sheetname)
       #values$wb <- res$wb
       #values$fileTFP <- screenSh(selector = "#TEPlot") ## screenshot
-      values$fileTEplot <- screenSh(values$TEplot, zoom = 2, type = "plotly")
+      values$fileTEplot <- screenSh(
+        values$TEplot,
+        type = "plotly",
+        dpi = values$report_dpi,
+        height = values$h
+      )
       values$list_file <- rbind(
         values$list_file,
         c(sheetname = res$sheetname, values$fileTEplot, res$col)
@@ -9205,30 +12376,155 @@ To ensure the functionality of Biblioshiny,
 
   # INTELLECTUAL STRUCTURE ####
   ### Co-citation network ----
-  COCITnetwork <- eventReactive(input$applyCocit, {
-    values <- intellectualStructure(input, values)
+  observeEvent(input$applyCocit, {
+    # Extract params
+    n <- input$citNodes
+    label.n <- input$citLabels
+    cit_field <- input$citField
+    cit_sep <- input$citSep
+    cit_shortlabel <- input$citShortlabel
+    cit_layout <- input$citlayout
+    cit_curved <- (input$cocit.curved == "Yes")
+    cit_labelsize <- input$citlabelsize
+    cit_shape <- input$cocit.shape
+    cit_shadow <- (input$cocit.shadow == "Yes")
+    cit_noOverlap <- input$citNoOverlap
+    cit_label_cex <- (input$citlabel.cex == "Yes")
+    cit_edges_min <- input$citedges.min
+    cit_isolates <- (input$cit.isolates == "yes")
+    cit_edgesize <- input$citedgesize
+    cit_cluster <- input$cocitCluster
+    cit_repulsion <- input$cocit.repulsion / 2
+    shortlabel <- (cit_shortlabel == "Yes")
+
+    if (label.n > n) {
+      label.n <- n
+    }
+
+    # Synchronous: metaTagExtraction + biblioNetwork (modifies M + builds matrix)
+    M_data <- values$M
+    need_rebuild <- (dim(values$NetRefs)[1] == 1 |
+      !(cit_field == values$citField) |
+      !(cit_sep == values$citSep) |
+      !(cit_shortlabel == values$citShortlabel) |
+      (dim(values$NetRefs)[1] != n))
+
+    if (need_rebuild) {
+      values$citField <- cit_field
+      values$citSep <- cit_sep
+      values$citShortlabel <- cit_shortlabel
+      NetRefs <- switch(
+        cit_field,
+        CR = {
+          bibliometrix::biblioNetwork(
+            M_data,
+            analysis = "co-citation",
+            network = "references",
+            n = n,
+            sep = cit_sep,
+            shortlabel = shortlabel
+          )
+        },
+        CR_AU = {
+          if (!("CR_AU" %in% names(M_data))) {
+            M_data <- bibliometrix::metaTagExtraction(
+              M_data,
+              Field = "CR_AU",
+              sep = cit_sep
+            )
+            values$M <- M_data
+          }
+          bibliometrix::biblioNetwork(
+            M_data,
+            analysis = "co-citation",
+            network = "authors",
+            n = n,
+            sep = cit_sep
+          )
+        },
+        CR_SO = {
+          if (!("CR_SO" %in% names(M_data))) {
+            M_data <- bibliometrix::metaTagExtraction(
+              M_data,
+              Field = "CR_SO",
+              sep = cit_sep
+            )
+            values$M <- M_data
+          }
+          bibliometrix::biblioNetwork(
+            M_data,
+            analysis = "co-citation",
+            network = "sources",
+            n = n,
+            sep = cit_sep
+          )
+        }
+      )
+      values$NetRefs <- NetRefs
+      values$Title <- switch(
+        cit_field,
+        CR = "Cited References network",
+        CR_AU = "Cited Authors network",
+        CR_SO = "Cited Sources network"
+      )
+    } else {
+      NetRefs <- values$NetRefs
+    }
+    net_title <- values$Title
+
+    cocitnet <- tryCatch({
+      withProgress(message = 'Co-citation Network: computing...', value = 0, {
+        bibliometrix::networkPlot(
+          NetRefs,
+          normalize = NULL,
+          Title = net_title,
+          type = cit_layout,
+          size.cex = TRUE,
+          size = 5,
+          remove.multiple = FALSE,
+          edgesize = cit_edgesize * 3,
+          labelsize = cit_labelsize,
+          label.cex = cit_label_cex,
+          curved = cit_curved,
+          label.n = label.n,
+          edges.min = cit_edges_min,
+          label.color = FALSE,
+          remove.isolates = cit_isolates,
+          alpha = 0.7,
+          cluster = cit_cluster,
+          community.repulsion = cit_repulsion,
+          verbose = FALSE
+        )
+      })
+    }, error = function(e) {
+      showNotification(paste("Co-citation Network error:", e$message), type = "error", duration = 8)
+      return(NULL)
+    })
+    req(cocitnet)
+
+    values$cocitnet <- cocitnet
     values$COCITnetwork <- igraph2vis(
-      g = values$cocitnet$graph,
-      curved = (input$cocit.curved == "Yes"),
-      labelsize = input$citlabelsize,
+      g = cocitnet$graph,
+      curved = cit_curved,
+      labelsize = cit_labelsize,
       opacity = 0.7,
-      type = input$citlayout,
-      shape = input$cocit.shape,
-      net = values$cocitnet,
-      shadow = (input$cocit.shadow == "Yes"),
-      noOverlap = input$citNoOverlap
+      type = cit_layout,
+      shape = cit_shape,
+      net = cocitnet,
+      shadow = cit_shadow,
+      noOverlap = cit_noOverlap
     )
     values$cocitOverlay <- overlayPlotly(values$COCITnetwork$VIS)
-    values$degreePlot <- degreePlot(values$cocitnet)
+    values$degreePlot <- degreePlot(cocitnet)
   })
 
   output$cocitPlot <- renderVisNetwork({
-    COCITnetwork()
+    req(values$COCITnetwork)
     isolate(values$COCITnetwork$VIS)
   })
 
   output$cocitOverlay <- renderPlotly({
-    COCITnetwork()
+    req(values$cocitOverlay)
     values$cocitOverlay
   })
 
@@ -9247,7 +12543,8 @@ To ensure the functionality of Biblioshiny,
       paste("Co_citation_network-", Sys.Date(), ".zip", sep = "")
     },
     content <- function(file) {
-      tmpdir <- tempdir()
+      req(values$cocitnet)
+      tmpdir <- getWD()
       owd <- setwd(tmpdir)
       on.exit(setwd(owd))
       # print(tmpdir)
@@ -9262,8 +12559,8 @@ To ensure the functionality of Biblioshiny,
     contentType = "zip"
   )
 
-  output$cocitTable <- DT::renderDT({
-    COCITnetwork()
+  output$cocitTable <- renderUI({
+    req(values$cocitnet)
     cocitData = values$cocitnet$cluster_res
     names(cocitData) = c(
       "Node",
@@ -9272,7 +12569,7 @@ To ensure the functionality of Biblioshiny,
       "Closeness",
       "PageRank"
     )
-    DTformat(
+    renderBibliobox(
       cocitData,
       nrow = 10,
       filename = "CoCitation_Network",
@@ -9297,6 +12594,7 @@ To ensure the functionality of Biblioshiny,
   output$networkCocit.fig <- downloadHandler(
     filename = "network.html",
     content <- function(con) {
+      req(values$COCITnetwork)
       savenetwork(con, values$COCITnetwork$VIS)
     },
     contentType = "html"
@@ -9304,7 +12602,7 @@ To ensure the functionality of Biblioshiny,
 
   ### Degree Plot Co-citation analysis ####
   output$cocitDegree <- renderPlotly({
-    COCITnetwork()
+    req(values$cocitnet)
     #p <- degreePlot(values$cocitnet)
     plot.ly(values$degreePlot)
   })
@@ -9322,7 +12620,6 @@ To ensure the functionality of Biblioshiny,
       list_df <- list(values$cocitnet$cluster_res)
       list_plot <- list(values$degreePlot)
       res <- addDataScreenWb(list_df, wb = values$wb, sheetname = sheetname)
-      #values$wb <- res$wb
       values$wb <- addGgplotsWb(
         list_plot,
         wb = res$wb,
@@ -9332,32 +12629,115 @@ To ensure the functionality of Biblioshiny,
         height = 8,
         dpi = 75
       )
-      #values$fileTFP <- screenSh(selector = "#cocitPlot") ## screenshot
-      values$fileCOCIT <- screenSh(
-        values$COCITnetwork$VIS,
-        zoom = 2,
-        type = "vis"
+      values$vis_report_config <- list(
+        callback = function(file_path) {
+          values$fileCOCIT <- file_path
+          values$list_file <- rbind(
+            values$list_file,
+            c(sheetname = res$sheetname, file_path, res$col)
+          )
+          popUp(title = "Co-citation Network", type = "success")
+          values$myChoices <- sheets(values$wb)
+        }
       )
-      values$list_file <- rbind(
-        values$list_file,
-        c(sheetname = res$sheetname, values$fileCOCIT, res$col)
-      )
-      popUp(title = "Co-citation Network", type = "success")
-      values$myChoices <- sheets(values$wb)
+      shinyjs::runjs(sprintf(
+        'captureVisReport("cocitPlot", %d);',
+        values$report_dpi
+      ))
     } else {
       popUp(type = "error")
     }
   })
 
   ### Historiograph ----
-  Hist <- eventReactive(input$applyHist, {
-    withProgress(message = 'Calculation in progress', value = 0, {
-      values <- historiograph(input, values)
+  observeEvent(input$applyHist, {
+    ## Cache check: skip historiograph() if params unchanged
+    hist_nodes <- input$histNodes
+    hist_size <- input$histsize
+    hist_isolates <- input$hist.isolates
+    hist_labelsize <- input$histlabelsize
+    hist_titlelabel <- input$titlelabel
+
+    cache_key <- make_cache_key(
+      fp = data_fingerprint(values$M),
+      histNodes = hist_nodes,
+      histsize = hist_size,
+      hist.isolates = hist_isolates,
+      histlabelsize = hist_labelsize,
+      titlelabel = hist_titlelabel
+    )
+
+    if (identical(cache_key, values$cache_HIST_key)) {
+      return()
+    }
+
+    M_data <- values$M
+    res <- tryCatch({
+      withProgress(message = 'Historiograph: computing...', value = 0, {
+        histResults <- bibliometrix::histNetwork(
+          M_data,
+          min.citations = 0,
+          sep = ";"
+        )
+        if (!is.list(histResults) || is.null(histResults$histData)) {
+          stop(
+            "No direct citations found among the documents in the collection."
+          )
+        }
+        histResults$histData <- histResults$histData %>%
+          tibble::rownames_to_column(var = "SR")
+        histPlot <- bibliometrix::histPlot(
+          histResults,
+          n = hist_nodes,
+          size = hist_size,
+          remove.isolates = (hist_isolates == "yes"),
+          labelsize = hist_labelsize,
+          label = hist_titlelabel,
+          verbose = FALSE
+        )
+        if (is.null(histPlot$layout)) {
+          stop(
+            "No direct citations found among the documents in the collection."
+          )
+        }
+        list(histResults = histResults, histPlot = histPlot)
+      })
+    }, error = function(e) {
+      showNotification(paste("Historiograph error:", e$message), type = "error", duration = 8)
+      return(NULL)
     })
+    req(res)
+
+    histResults <- res$histResults
+    histPlot <- res$histPlot
+
+    histResults$histData$DOI <- paste0(
+      '<a href=\"https://doi.org/',
+      histResults$histData$DOI,
+      '\" target=\"_blank\">',
+      histResults$histData$DOI,
+      "</a>"
+    )
+
+    histResults$histData <- histResults$histData %>%
+      dplyr::left_join(
+        histPlot$layout %>% dplyr::select(name, color),
+        by = c("Paper" = "name")
+      ) %>%
+      tidyr::drop_na(color) %>%
+      dplyr::mutate(cluster = match(color, unique(color))) %>%
+      dplyr::select(!color) %>%
+      dplyr::group_by(cluster) %>%
+      dplyr::arrange(Year, .by_group = TRUE)
+
+    values$histResults <- histResults
+    values$histPlot <- histPlot
+    values$histlog <- histPlot
+    values$cache_HIST_key <- cache_key
   })
 
   output$histPlotVis <- renderVisNetwork({
-    g <- Hist()
+    req(values$histPlot)
     values$histPlotVis <- hist2vis(
       values$histPlot,
       curved = TRUE,
@@ -9371,10 +12751,10 @@ To ensure the functionality of Biblioshiny,
     values$histPlotVis$VIS
   })
 
-  output$histTable <- DT::renderDT({
-    g <- Hist()
+  output$histTable <- renderUI({
+    req(values$histResults)
     Data <- values$histResults$histData
-    DTformat(
+    renderBibliobox(
       Data,
       nrow = 10,
       filename = "Historiograph_Network",
@@ -9411,18 +12791,21 @@ To ensure the functionality of Biblioshiny,
       sheetname <- "Historiograph"
       list_df <- list(values$histResults$histData)
       res <- addDataScreenWb(list_df, wb = values$wb, sheetname = sheetname)
-      #values$fileTFP <- screenSh(selector = "#histPlotVis") ## screenshot
-      values$fileHIST <- screenSh(
-        values$histPlotVis$VIS,
-        zoom = 2,
-        type = "vis"
+      values$vis_report_config <- list(
+        callback = function(file_path) {
+          values$fileHIST <- file_path
+          values$list_file <- rbind(
+            values$list_file,
+            c(sheetname = res$sheetname, file_path, res$col)
+          )
+          popUp(title = "Historiograph", type = "success")
+          values$myChoices <- sheets(values$wb)
+        }
       )
-      values$list_file <- rbind(
-        values$list_file,
-        c(sheetname = res$sheetname, values$fileHIST, res$col)
-      )
-      popUp(title = "Historiograph", type = "success")
-      values$myChoices <- sheets(values$wb)
+      shinyjs::runjs(sprintf(
+        'captureVisReport("histPlotVis", %d);',
+        values$report_dpi
+      ))
     } else {
       popUp(type = "error")
     }
@@ -9430,29 +12813,157 @@ To ensure the functionality of Biblioshiny,
 
   # SOCIAL STRUCTURE ####
   ### Collaboration network ----
-  COLnetwork <- eventReactive(input$applyCol, {
-    values <- socialStructure(input, values)
-    values$COLnetwork <- igraph2vis(
-      g = values$colnet$graph,
-      curved = (input$soc.curved == "Yes"),
-      labelsize = input$collabelsize,
-      opacity = input$colAlpha,
-      type = input$collayout,
-      shape = input$col.shape,
-      net = values$colnet,
-      shadow = (input$col.shadow == "Yes"),
-      noOverlap = input$colNoOverlap
-    )
-    values$colOverlay <- overlayPlotly(values$COLnetwork$VIS)
-    values$degreePlot <- degreePlot(values$colnet)
-    # years <- sort(unique(c(values$COLnetwork$VIS$x$nodes$year_med)))
-    values$years_col <- sort(unique(c(values$M %>% drop_na(PY) %>% pull(PY))))
-    values$index_col <- 0
-    values$playing_col <- FALSE
-    values$paused_col <- FALSE
-    values$current_year_col <- min(values$years_col)
+  observeEvent(input$applyCol, {
+    # Extract params
+    n <- input$colNodes
+    label.n <- input$colLabels
+    col_field <- input$colField
+    col_layout <- input$collayout
+    col_curved <- (input$soc.curved == "Yes")
+    col_labelsize <- input$collabelsize
+    col_alpha <- input$colAlpha
+    col_shape <- input$col.shape
+    col_shadow <- (input$col.shadow == "Yes")
+    col_noOverlap <- input$colNoOverlap
+    col_normalize <- if (input$colnormalize == "none") {
+      NULL
+    } else {
+      input$colnormalize
+    }
+    col_label_cex <- (input$collabel.cex == "Yes")
+    col_edges_min <- input$coledges.min
+    col_isolates <- (input$col.isolates == "yes")
+    col_edgesize <- input$coledgesize
+    col_cluster <- input$colCluster
+    col_repulsion <- input$col.repulsion / 2
+    col_filterMaxAuthors <- input$col.filterMaxAuthors
 
-    if (is.null(dim(values$colnet$cluster_res))) {
+    if (label.n > n) {
+      label.n <- n
+    }
+    layout_type <- if (col_layout == "worldmap") "auto" else col_layout
+
+    # Synchronous: metaTagExtraction + biblioNetwork
+    M_data <- values$M
+    need_rebuild <- (dim(values$ColNetRefs)[1] == 1 |
+      !(col_field == values$colField) |
+      (dim(values$ColNetRefs)[1] != n))
+
+    if (need_rebuild) {
+      values$colField <- col_field
+      if (!"nAU" %in% names(M_data)) {
+        M_data$nAU <- stringr::str_count(M_data$AU, ";") + 1
+        values$M <- M_data
+      }
+      ColNetRefs <- switch(
+        col_field,
+        COL_AU = {
+          M_AU <- if (col_filterMaxAuthors) {
+            M_data %>% dplyr::filter(nAU <= 20)
+          } else {
+            M_data
+          }
+          values$fieldCOL <- "AU"
+          values$Title <- "Author Collaboration network"
+          bibliometrix::biblioNetwork(
+            M_AU,
+            analysis = "collaboration",
+            network = "authors",
+            n = n,
+            sep = ";"
+          )
+        },
+        COL_UN = {
+          if (!("AU_UN" %in% names(M_data))) {
+            M_data <- bibliometrix::metaTagExtraction(
+              M_data,
+              Field = "AU_UN",
+              sep = ";"
+            )
+            values$M <- M_data
+          }
+          values$fieldCOL <- "AU_UN"
+          values$Title <- "Edu Collaboration network"
+          bibliometrix::biblioNetwork(
+            M_data,
+            analysis = "collaboration",
+            network = "universities",
+            n = n,
+            sep = ";"
+          )
+        },
+        COL_CO = {
+          if (!("AU_CO" %in% names(M_data))) {
+            M_data <- bibliometrix::metaTagExtraction(
+              M_data,
+              Field = "AU_CO",
+              sep = ";"
+            )
+            values$M <- M_data
+          }
+          values$fieldCOL <- "AU_CO"
+          values$Title <- "Country Collaboration network"
+          bibliometrix::biblioNetwork(
+            M_data,
+            analysis = "collaboration",
+            network = "countries",
+            n = n,
+            sep = ";"
+          )
+        }
+      )
+      values$ColNetRefs <- ColNetRefs
+    } else {
+      ColNetRefs <- values$ColNetRefs
+    }
+    net_title <- values$Title
+    fieldCOL <- values$fieldCOL
+
+    colnet <- tryCatch({
+      withProgress(message = 'Collaboration Network: computing...', value = 0, {
+        bibliometrix::networkPlot(
+          ColNetRefs,
+          normalize = col_normalize,
+          Title = net_title,
+          type = layout_type,
+          size.cex = TRUE,
+          size = 5,
+          remove.multiple = FALSE,
+          edgesize = col_edgesize * 3,
+          labelsize = col_labelsize,
+          label.cex = col_label_cex,
+          curved = col_curved,
+          label.n = label.n,
+          edges.min = col_edges_min,
+          label.color = FALSE,
+          alpha = col_alpha,
+          remove.isolates = col_isolates,
+          cluster = col_cluster,
+          community.repulsion = col_repulsion,
+          verbose = FALSE
+        )
+      })
+    }, error = function(e) {
+      showNotification(paste("Collaboration Network error:", e$message), type = "error", duration = 8)
+      return(NULL)
+    })
+    req(colnet)
+
+    # Add year info
+    g <- colnet$graph
+    Y <- authors2Years(M_data, fieldCOL)
+    label_df <- data.frame(Item = igraph::V(g)$name)
+    df <- label_df %>%
+      dplyr::left_join(
+        Y %>% dplyr::mutate(Item = tolower(Item)),
+        by = "Item"
+      ) %>%
+      dplyr::rename(year_med = FirstYear)
+    igraph::V(g)$year_med <- df$year_med
+    colnet$graph <- g
+    values$colnet <- colnet
+
+    if (is.null(dim(colnet$cluster_res))) {
       values$colnet$cluster_res <- data.frame(
         Node = NA,
         Cluster = NA,
@@ -9470,6 +12981,26 @@ To ensure the functionality of Biblioshiny,
       )
     }
 
+    values$COLnetwork <- igraph2vis(
+      g = colnet$graph,
+      curved = col_curved,
+      labelsize = col_labelsize,
+      opacity = col_alpha,
+      type = col_layout,
+      shape = col_shape,
+      net = colnet,
+      shadow = col_shadow,
+      noOverlap = col_noOverlap
+    )
+    values$colOverlay <- overlayPlotly(values$COLnetwork$VIS)
+    values$degreePlot <- degreePlot(colnet)
+    values$years_col <- sort(unique(c(
+      M_data %>% tidyr::drop_na(PY) %>% dplyr::pull(PY)
+    )))
+    values$index_col <- 0
+    values$playing_col <- FALSE
+    values$paused_col <- FALSE
+    values$current_year_col <- min(values$years_col)
     output$year_slider_colUI <- renderUI({
       sliderInput(
         "year_slider_col",
@@ -9487,12 +13018,12 @@ To ensure the functionality of Biblioshiny,
     })
   })
   output$colPlot <- renderVisNetwork({
-    COLnetwork()
+    req(values$COLnetwork)
     values$COLnetwork$VIS
   })
 
   output$colOverlay <- renderPlotly({
-    COLnetwork()
+    req(values$colOverlay)
     values$colOverlay
   })
 
@@ -9645,7 +13176,8 @@ To ensure the functionality of Biblioshiny,
       paste("Collaboration_network-", Sys.Date(), ".zip", sep = "")
     },
     content <- function(file) {
-      tmpdir <- tempdir()
+      req(values$colnet)
+      tmpdir <- getWD()
       owd <- setwd(tmpdir)
       on.exit(setwd(owd))
       # print(tmpdir)
@@ -9660,10 +13192,10 @@ To ensure the functionality of Biblioshiny,
     contentType = "zip"
   )
 
-  output$colTable <- DT::renderDT({
-    COLnetwork()
+  output$colTable <- renderUI({
+    req(values$colnet)
     colData = values$colnet$cluster_res
-    DTformat(
+    renderBibliobox(
       colData,
       nrow = 10,
       filename = "Collaboration_Network",
@@ -9688,6 +13220,7 @@ To ensure the functionality of Biblioshiny,
   output$networkCol.fig <- downloadHandler(
     filename = "network.html",
     content <- function(con) {
+      req(values$COLnetwork)
       savenetwork(con, values$COLnetwork$VIS)
     },
     contentType = "html"
@@ -9695,7 +13228,7 @@ To ensure the functionality of Biblioshiny,
 
   ### Degree Plot Collaboration analysis ####
   output$colDegree <- renderPlotly({
-    COLnetwork()
+    req(values$colnet)
     p <- degreePlot(values$colnet)
     plot.ly(p)
   })
@@ -9715,30 +13248,51 @@ To ensure the functionality of Biblioshiny,
         height = 8,
         dpi = 75
       )
-      #values$fileTFP <- screenSh(selector = "#colPlot") ## screenshot
-      values$fileCOL <- screenSh(values$COLnetwork$VIS, zoom = 2, type = "vis")
-      values$list_file <- rbind(
-        values$list_file,
-        c(sheetname = res$sheetname, values$fileCOL, res$col)
+      values$vis_report_config <- list(
+        callback = function(file_path) {
+          values$fileCOL <- file_path
+          values$list_file <- rbind(
+            values$list_file,
+            c(sheetname = res$sheetname, file_path, res$col)
+          )
+          popUp(title = "Collaboration Network", type = "success")
+          values$myChoices <- sheets(values$wb)
+        }
       )
-      popUp(title = "Collaboration Network", type = "success")
-      values$myChoices <- sheets(values$wb)
+      shinyjs::runjs(sprintf(
+        'captureVisReport("colPlot", %d);',
+        values$report_dpi
+      ))
     } else {
       popUp(type = "error")
     }
   })
 
   ### WPPlot ----
-  WMnetwork <- eventReactive(input$applyWM, {
-    values$WMmap <- countrycollaboration_plotly(
-      values$M,
-      min.edges = input$WMedges.min,
-      edge_opacity = 0.4,
-      edgesize = input$WMedgesize * 2,
-      min_edgesize = 1
-    )
-    values$WMmap$tab <- values$WMmap$tab[, c(1, 2, 11)]
-    names(values$WMmap$tab) = c("From", "To", "Frequency")
+  observeEvent(input$applyWM, {
+    M_data <- values$M
+    wm_min_edges <- input$WMedges.min
+    wm_edgesize <- input$WMedgesize * 2
+
+    WMmap <- tryCatch({
+      withProgress(message = 'World Collaboration Map: computing...', value = 0, {
+        countrycollaboration_plotly(
+          M_data,
+          min.edges = wm_min_edges,
+          edge_opacity = 0.4,
+          edgesize = wm_edgesize,
+          min_edgesize = 1
+        )
+      })
+    }, error = function(e) {
+      showNotification(paste("World Map error:", e$message), type = "error", duration = 8)
+      return(NULL)
+    })
+    req(WMmap)
+
+    WMmap$tab <- WMmap$tab[, c(1, 2, 11)]
+    names(WMmap$tab) <- c("From", "To", "Frequency")
+    values$WMmap <- WMmap
   })
 
   # gemini button for World Map
@@ -9752,25 +13306,24 @@ To ensure the functionality of Biblioshiny,
   })
 
   observeEvent(input$CCplot.save, {
-    filename = paste(
-      "CountryCollaborationMap-",
-      "_",
-      gsub(" |:", "", Sys.time()),
-      ".png",
-      sep = ""
+    screen2export(
+      values$WMmap$g,
+      filename = "CountryCollaborationMap",
+      type = "plotly",
+      dpi = values$dpi,
+      height = values$h
     )
-    screenShot(values$WMmap$g, filename = filename, type = "plotly")
   })
 
   output$WMPlot <- renderPlotly({
-    WMnetwork()
+    req(values$WMmap)
     values$WMmap$g
   })
 
-  output$WMTable <- DT::renderDT({
-    WMnetwork()
+  output$WMTable <- renderUI({
+    req(values$WMmap)
     colData = values$WMmap$tab
-    DTformat(
+    renderBibliobox(
       colData,
       nrow = 10,
       filename = "Collaboration_WorldMap",
@@ -9799,7 +13352,12 @@ To ensure the functionality of Biblioshiny,
       if (length(ind) > 0) {
         sheetname <- paste(sheetname, "(", length(ind) + 1, ")", sep = "")
       }
-      values$fileWMap <- screenSh(values$WMmap$g, zoom = 2, type = "plotly")
+      values$fileWMap <- screenSh(
+        values$WMmap$g,
+        type = "plotly",
+        dpi = values$report_dpi,
+        height = values$h
+      )
       values$list_file <- rbind(
         values$list_file,
         c(sheetname, values$fileWMap, 1)
@@ -9829,6 +13387,7 @@ To ensure the functionality of Biblioshiny,
       paste("BiblioshinyReport-", Sys.Date(), ".xlsx", sep = "")
     },
     content <- function(file) {
+      req(values$wb)
       wb_export <- copyWorkbook(values$wb)
       if (nrow(values$list_file) > 0) {
         wb_export <- addScreenWb(df = values$list_file, wb = wb_export) #, width=10, height=7, dpi=300)
@@ -9922,106 +13481,211 @@ To ensure the functionality of Biblioshiny,
     ignoreNULL = TRUE
   )
 
+  ### Disable download/screenshot buttons until analysis is run ----
+  .toggleDownloadBtn <- function(id, enabled) {
+    if (enabled) {
+      shinyjs::runjs(sprintf(
+        "var el=document.getElementById('%s'); if(el){el.removeAttribute('disabled'); el.classList.remove('disabled');}",
+        id
+      ))
+    } else {
+      shinyjs::runjs(sprintf(
+        "var el=document.getElementById('%s'); if(el){el.setAttribute('disabled','disabled'); el.classList.add('disabled');}",
+        id
+      ))
+    }
+  }
+
+  # Collection
+  observe({ .toggleDownloadBtn("collection.save", !is.null(values$M)) })
+  observe({ .toggleDownloadBtn("collection.saveMerge", !is.null(values$M)) })
+  observe({ .toggleDownloadBtn("collection.save_api", !is.null(values$M)) })
+  # Overview
+  observe({ .toggleDownloadBtn("ASPplot.save", !is.null(values$ASPplot)) })
+  observe({ .toggleDownloadBtn("ACpYplot.save", !is.null(values$ACpYplot)) })
+  observe({ .toggleDownloadBtn("DLCplot.save", !is.null(values$DLC)) })
+  observe({ .toggleDownloadBtn("screenTFP", !is.null(values$TFP)) })
+  # Sources
+  observe({ .toggleDownloadBtn("MRSplot.save", !is.null(values$MRSplot)) })
+  observe({ .toggleDownloadBtn("MLCSplot.save", !is.null(values$MLCSplot)) })
+  observe({ .toggleDownloadBtn("BLplot.save", !is.null(values$bradford)) })
+  observe({ .toggleDownloadBtn("SIplot.save", !is.null(values$SIplot)) })
+  observe({ .toggleDownloadBtn("SDplot.save", !is.null(values$SDplot)) })
+  # Authors
+  observe({ .toggleDownloadBtn("MRAplot.save", !is.null(values$MRAplot)) })
+  observe({ .toggleDownloadBtn("MLCAplot.save", !is.null(values$MLCAplot)) })
+  observe({ .toggleDownloadBtn("AIplot.save", !is.null(values$AIplot)) })
+  observe({ .toggleDownloadBtn("APOTplot.save", !is.null(values$AUProdOverTime)) })
+  observe({ .toggleDownloadBtn("LLplot.save", !is.null(values$LLplot)) })
+  # Affiliations
+  observe({ .toggleDownloadBtn("AFFplot.save", !is.null(values$AFFplot)) })
+  observe({ .toggleDownloadBtn("AffOverTimeplot.save", !is.null(values$AffOverTimePlot)) })
+  # Countries
+  observe({ .toggleDownloadBtn("MRCOplot.save", !is.null(values$MRCOplot)) })
+  observe({ .toggleDownloadBtn("CSPplot.save", !is.null(values$mapworld)) })
+  observe({ .toggleDownloadBtn("CountryOverTimeplot.save", !is.null(values$CountryOverTimePlot)) })
+  observe({ .toggleDownloadBtn("MCCplot.save", !is.null(values$MCCplot)) })
+  # Documents
+  observe({ .toggleDownloadBtn("MGCDplot.save", !is.null(values$MGCDplot)) })
+  observe({ .toggleDownloadBtn("MLCDplot.save", !is.null(values$MLCDplot)) })
+  observe({ .toggleDownloadBtn("MLCRplot.save", !is.null(values$MLCRplot)) })
+  observe({ .toggleDownloadBtn("RSplot.save", !is.null(values$res)) })
+  # Words
+  observe({ .toggleDownloadBtn("MRWplot.save", !is.null(values$MRWplot)) })
+  observe({ .toggleDownloadBtn("screenWC", !is.null(values$WordCloud)) })
+  observe({ .toggleDownloadBtn("screenTREEMAP", !is.null(values$TreeMap)) })
+  observe({ .toggleDownloadBtn("WDplot.save", !is.null(values$WDplot)) })
+  observe({ .toggleDownloadBtn("TTplot.save", !is.null(values$trendTopics)) })
+  # Clustering/Maps
+  observe({ .toggleDownloadBtn("CMplot.save", !is.null(values$CM)) })
+  observe({ .toggleDownloadBtn("FAplot.save", !is.null(values$CS)) })
+  observe({ .toggleDownloadBtn("TMplot.save", !is.null(values$TM)) })
+  observe({ .toggleDownloadBtn("TEplot.save", !is.null(values$nexus)) })
+  # Networks
+  observe({ .toggleDownloadBtn("network.coc", !is.null(values$cocnet)) })
+  observe({ .toggleDownloadBtn("networkCoc.fig", !is.null(values$COCnetwork)) })
+  observe({ .toggleDownloadBtn("network.cocit", !is.null(values$cocitnet)) })
+  observe({ .toggleDownloadBtn("networkCocit.fig", !is.null(values$COCITnetwork)) })
+  observe({ .toggleDownloadBtn("network.col", !is.null(values$colnet)) })
+  observe({ .toggleDownloadBtn("networkCol.fig", !is.null(values$COLnetwork)) })
+  # Report
+  observe({ .toggleDownloadBtn("report.save", !is.null(values$wb)) })
+  observe({ .toggleDownloadBtn("tall.save", !is.null(values$tallDf)) })
+  observe({ .toggleDownloadBtn("missingDataSave", !is.null(values$missingdf_formatted)) })
+
   ### screenshot buttons ----
-  observeEvent(input$screenTFP, {
-    filename = paste(
-      "ThreeFieldPlot-",
-      "_",
-      gsub(" |:", "", Sys.time()),
-      ".png",
-      sep = ""
+  JScode_screenshot <- "
+    var link = document.createElement('a');
+    link.href = '%s';
+    link.download = '%s';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  "
+
+  observeEvent(input$missingDataSave, {
+    req(values$missingdf_formatted)
+    screen2export(
+      values$missingdf_formatted,
+      filename = "missingDataTable",
+      type = "df2html",
+      dpi = values$dpi,
+      height = values$h
     )
-    screenShot(values$TFP, filename = filename, type = "plotly")
+  })
+
+  observeEvent(input$screenTFP, {
+    req(values$TFP)
+    base_name <- paste0("ThreeFieldPlot-", gsub(" |:", "", Sys.time()), ".png")
+    full_path <- file.path(getWD(), base_name)
+    plotlySankey2png(values$TFP, filename = full_path, dpi = values$dpi, height = values$h)
+    # Trigger browser download
+    img_data <- base64enc::dataURI(file = full_path, mime = "image/png")
+    shinyjs::runjs(sprintf(
+      "var link = document.createElement('a'); link.href = '%s'; link.download = '%s'; document.body.appendChild(link); link.click(); document.body.removeChild(link);",
+      img_data, base_name
+    ))
   })
 
   observeEvent(input$screenWC, {
-    filename = paste(
-      "WordCloud-",
-      "_",
-      gsub(" |:", "", Sys.time()),
-      ".png",
-      sep = ""
+    req(values$WordCloud)
+    screen2export(
+      obj = values$WordCloud,
+      filename = "WordCloud",
+      type = "plotly",
+      dpi = values$dpi,
+      height = values$h
     )
-    screenShot(values$WordCloud, filename = filename, type = "plotly")
   })
 
   observeEvent(input$screenTREEMAP, {
-    filename = paste(
-      "TreeMap-",
-      "_",
-      gsub(" |:", "", Sys.time()),
-      ".png",
-      sep = ""
+    req(values$TreeMap)
+    screen2export(
+      obj = values$TreeMap,
+      filename = "TreeMap",
+      type = "plotly",
+      dpi = values$dpi,
+      height = values$h
     )
-    screenShot(values$TreeMap, filename = filename, type = "plotly")
   })
 
   observeEvent(input$screenCOC, {
-    filename = paste(
-      "Co_occurrenceNetwork-",
-      "_",
-      gsub(" |:", "", Sys.time()),
-      ".png",
-      sep = ""
-    )
-    screenShot(values$COCnetwork$VIS, filename = filename, type = "vis")
+    shinyjs::runjs(sprintf(
+      'captureVisExport("cocPlot", "%s", %d);',
+      paste0("Co_occurrenceNetwork-", gsub(" |:", "", Sys.time()), ".png"),
+      values$dpi
+    ))
   })
 
   observeEvent(input$export_coc, {
-    filename = paste(
-      "Co_occurrenceNetwork-Year-",
-      values$current_year_coc,
-      "__",
-      gsub(" |:", "", Sys.time()),
-      ".png",
-      sep = ""
-    )
-    screenShot(values$COCnetworkOverTime, filename = filename, type = "vis")
+    shinyjs::runjs(sprintf(
+      'captureVisExport("cocOverTime", "%s", %d);',
+      paste0(
+        "Co-occurence_Network-Year-",
+        values$current_year_col,
+        "_-",
+        gsub(" |:", "", Sys.time()),
+        ".png"
+      ),
+      values$dpi
+    ))
   })
 
   observeEvent(input$screenCOCIT, {
-    filename = paste(
-      "Co_citationNetwork-",
-      "_",
-      gsub(" |:", "", Sys.time()),
-      ".png",
-      sep = ""
-    )
-    screenShot(values$COCITnetwork$VIS, filename = filename, type = "vis")
+    shinyjs::runjs(sprintf(
+      'captureVisExport("cocitPlot", "%s", %d);',
+      paste0("Co_citationNetwork-", gsub(" |:", "", Sys.time()), ".png"),
+      values$dpi
+    ))
   })
 
   observeEvent(input$screenHIST, {
-    filename = paste(
-      "Historiograph-",
-      "_",
-      gsub(" |:", "", Sys.time()),
-      ".png",
-      sep = ""
-    )
-    screenShot(values$histPlotVis$VIS, filename = filename, type = "vis")
+    shinyjs::runjs(sprintf(
+      'captureVisExport("histPlotVis", "%s", %d);',
+      paste0("Historiograph-", gsub(" |:", "", Sys.time()), ".png"),
+      values$dpi
+    ))
   })
 
   observeEvent(input$screenCOL, {
-    filename = paste(
-      "Collaboration_Network-",
-      "_",
-      gsub(" |:", "", Sys.time()),
-      ".png",
-      sep = ""
-    )
-    screenShot(values$COLnetwork$VIS, filename = filename, type = "vis")
+    shinyjs::runjs(sprintf(
+      'captureVisExport("colPlot", "%s", %d);',
+      paste0("Collaboration_Network-", gsub(" |:", "", Sys.time()), ".png"),
+      values$dpi
+    ))
   })
 
   observeEvent(input$export_col, {
-    filename = paste(
-      "Collaboration_Network-Year-",
-      values$current_year_col,
-      "__",
-      gsub(" |:", "", Sys.time()),
-      ".png",
-      sep = ""
+    shinyjs::runjs(sprintf(
+      'captureVisExport("colOverTime", "%s", %d);',
+      paste0(
+        "Collaboration_Network-Year-",
+        values$current_year_col,
+        "_-",
+        gsub(" |:", "", Sys.time()),
+        ".png"
+      ),
+      values$dpi
+    ))
+  })
+
+  ## visNetwork report canvas observer ----
+  observeEvent(input$vis_canvas_report, {
+    req(values$vis_report_config)
+    config <- values$vis_report_config
+    values$vis_report_config <- NULL
+    base64_str <- sub(
+      "^data:image/png;base64,",
+      "",
+      input$vis_canvas_report$data
     )
-    screenShot(values$COLnetworkOverTime, filename = filename, type = "vis")
+    raw_data <- base64enc::base64decode(base64_str)
+    file_path <- file.path(
+      getWD(),
+      paste0("figureImage_", format(Sys.time(), "%Y-%m-%d_%H%M%S"), ".png")
+    )
+    writeBin(raw_data, file_path)
+    config$callback(file_path)
   })
 
   ## TALL EXPORT ----
@@ -10064,9 +13728,9 @@ To ensure the functionality of Biblioshiny,
     }
   )
 
-  output$tallTable <- renderDT({
+  output$tallTable <- renderUI({
     req(values$tallDf)
-    DTformat(
+    renderBibliobox(
       values$tallDf,
       nrow = 3,
       filename = "tallDf",
@@ -10093,6 +13757,7 @@ To ensure the functionality of Biblioshiny,
       paste("tallFile-", Sys.Date(), ".csv", sep = "")
     },
     content <- function(file) {
+      req(values$tallDf)
       write.csv(values$tallDf, file = file, row.names = FALSE)
     },
     contentType = "csv"
@@ -10173,13 +13838,37 @@ To ensure the functionality of Biblioshiny,
   )
 
   ## SETTING ----
+  saveGraphSettings <- function() {
+    writeLines(
+      c(
+        as.character(values$dpi),
+        as.character(values$report_dpi),
+        as.character(values$h),
+        as.character(values$aspect)
+      ),
+      file.path(homeFolder(), ".biblio_graph_settings.txt")
+    )
+  }
+
   observeEvent(input$dpi, {
     values$dpi <- as.numeric(input$dpi)
-  })
+    saveGraphSettings()
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$report_dpi, {
+    values$report_dpi <- as.numeric(input$report_dpi)
+    saveGraphSettings()
+  }, ignoreInit = TRUE)
 
   observeEvent(input$h, {
     values$h <- as.numeric(input$h)
-  })
+    saveGraphSettings()
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$aspect, {
+    values$aspect <- as.numeric(input$aspect)
+    saveGraphSettings()
+  }, ignoreInit = TRUE)
 
   # Server code for randomize seed button
   observeEvent(input$randomize_seed, {
@@ -10247,15 +13936,17 @@ To ensure the functionality of Biblioshiny,
         label = "Select the Gemini Model",
         choices = c(
           "Gemini 2.5 Flash" = "2.5-flash",
-          "Gemini 2.5 Flash Lite" = "2.5-flash-lite"
-          # "Gemini 2.0 Flash" = "2.0-flash",
+          "Gemini 2.5 Flash Lite" = "2.5-flash-lite",
+          "Gemini 3.0 Flash" = "3-flash-preview",
+          "Gemini 3.1 Pro" = "3.1-pro-preview",
+          "Gemini Pro Latest" = "pro-latest"
           # "Gemini 2.0 Flash Lite" = "2.0-flash-lite",
           # "Gemini 1.5 Flash" = "1.5-flash",
           # "Gemini 1.5 Flash Lite" = "1.5-flash-8b"
         ),
         selected = ifelse(
           is.null(values$gemini_api_model),
-          "2.0-flash",
+          "2.5-flash",
           values$gemini_api_model
         )
       ),
@@ -10280,51 +13971,27 @@ To ensure the functionality of Biblioshiny,
           tags$br(),
           "Latency time: Low"
         ))
-      ) #,
-      # conditionalPanel(
-      #   condition = "input.gemini_api_model == '2.0-flash-lite'",
-      #   helpText(strong("Free Tier Rate Limits:")),
-      #   helpText(em(
-      #     "Request per Minutes: 30",
-      #     tags$br(),
-      #     "Requests per Day: 1500",
-      #     tags$br(),
-      #     "Latency time: Low"
-      #   ))
-      # ),
-      # conditionalPanel(
-      #   condition = "input.gemini_api_model == '2.0-flash'",
-      #   helpText(strong("Free Tier Rate Limits:")),
-      #   helpText(em(
-      #     "Request per Minutes: 15",
-      #     tags$br(),
-      #     "Requests per Day: 1500",
-      #     tags$br(),
-      #     "Latency time: Medium"
-      #   ))
-      # ),
-      # conditionalPanel(
-      #   condition = "input.gemini_api_model == '1.5-flash'",
-      #   helpText(strong("Free Tier Rate Limits:")),
-      #   helpText(em(
-      #     "Request per Minutes: 15",
-      #     tags$br(),
-      #     "Requests per Day: 1500",
-      #     tags$br(),
-      #     "Latency time: Medium"
-      #   ))
-      # ),
-      # conditionalPanel(
-      #   condition = "input.gemini_api_model == '1.5-flash-8b'",
-      #   helpText(strong("Free Tier Rate Limits:")),
-      #   helpText(em(
-      #     "Request per Minutes: 15",
-      #     tags$br(),
-      #     "Requests per Day: 1500",
-      #     tags$br(),
-      #     "Latency time: Low"
-      #   ))
-      # )
+      ),
+      conditionalPanel(
+        condition = "input.gemini_api_model == '3-flash-preview'",
+        helpText(strong("Free Tier Rate Limits:")),
+        helpText(em(
+          "Request per Minutes: 10",
+          tags$br(),
+          "Requests per Day: 500",
+          tags$br(),
+          "Latency time: Medium"
+        ))
+      ),
+      conditionalPanel(
+        condition = "input.gemini_api_model == '3.1-pro-preview' || input.gemini_api_model == 'pro-latest'",
+        helpText(strong(style = "color: #d9534f;", "Paid API Key Required")),
+        helpText(em(
+          "Pro models require a paid (non-free tier) API key.",
+          tags$br(),
+          "Free tier API keys will not work with these models."
+        ))
+      )
     )
   })
 
@@ -10336,6 +14003,18 @@ To ensure the functionality of Biblioshiny,
       )
       values$gemini_api_model <- input$gemini_api_model
       values$gemini_output_size <- input$gemini_output_size
+
+      # Alert for Pro models requiring paid API key
+      if (input$gemini_api_model %in% c("3.1-pro-preview", "pro-latest")) {
+        showModal(modalDialog(
+          title = "Paid API Key Required",
+          tags$p("The selected Pro model requires a ", tags$strong("paid (non-free tier)"), " Google AI API key."),
+          tags$p("Free tier API keys do not support Pro models. If you are using a free tier key, the API calls will fail."),
+          tags$p("You can upgrade your API key at: ", tags$a(href = "https://aistudio.google.com/apikey", target = "_blank", "Google AI Studio")),
+          easyClose = TRUE,
+          footer = modalButton("OK")
+        ))
+      }
     }
   })
 
@@ -10352,25 +14031,52 @@ To ensure the functionality of Biblioshiny,
 
   observeEvent(input$set_key, {
     key <- input$api_key
-    last <- setGeminiAPI(key)
 
-    if (!last$valid) {
-      output$apiStatus <- renderUI({
-        output$status <- renderText(last$message)
+    # Show validating message
+    output$apiStatus <- renderUI({
+      output$status <- renderText("Validating API key...")
+    })
+
+    # Async: validate API key in background
+    promises::future_promise(
+      {
+        setGeminiAPI(key)
+      },
+      seed = TRUE
+    ) %...>%
+      (function(last) {
+        if (!last$valid) {
+          output$apiStatus <- renderUI({
+            output$status <- renderText(last$message)
+          })
+          values$geminiAPI <- FALSE
+        } else {
+          output$apiStatus <- renderUI({
+            output$status <- renderText(paste0(
+              "✅ API key has been set: ",
+              last$message
+            ))
+          })
+          values$geminiAPI <- TRUE
+          home <- homeFolder()
+          path_gemini_key <- paste0(
+            home,
+            "/.biblio_gemini_key.txt",
+            collapse = ""
+          )
+          Sys.setenv(GEMINI_API_KEY = key)
+          writeLines(key, path_gemini_key)
+        }
+      }) %...!%
+      (function(err) {
+        output$apiStatus <- renderUI({
+          output$status <- renderText(paste(
+            "Error validating key:",
+            conditionMessage(err)
+          ))
+        })
+        values$geminiAPI <- FALSE
       })
-      values$geminiAPI <- FALSE
-    } else {
-      output$apiStatus <- renderUI({
-        output$status <- renderText(paste0(
-          "✅ API key has been set: ",
-          last$message
-        ))
-      })
-      values$geminiAPI <- TRUE
-      home <- homeFolder()
-      path_gemini_key <- paste0(home, "/.biblio_gemini_key.txt", collapse = "")
-      writeLines(Sys.getenv("GEMINI_API_KEY"), path_gemini_key)
-    }
   })
 
   observeEvent(input$remove_key, {
@@ -10383,6 +14089,181 @@ To ensure the functionality of Biblioshiny,
         output$status <- renderText(paste0("❌ API key has been removed"))
       })
     }
+  })
+
+  # ============================================
+  # OpenAlex API Key
+  # ============================================
+
+  # Show API key status on load
+  output$oaApiKeyStatus <- renderUI({
+    if (!is.null(values$oaApiKey) && nchar(values$oaApiKey) >= 10) {
+      masked_key <- paste0(
+        "...",
+        substr(
+          values$oaApiKey,
+          nchar(values$oaApiKey) - 3,
+          nchar(values$oaApiKey)
+        )
+      )
+      div(
+        style = "color: #155724; background-color: #d4edda; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+        icon("check-circle"),
+        sprintf(" API key active: %s", masked_key)
+      )
+    } else {
+      div(
+        style = "color: #856404; background-color: #fff3cd; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+        icon("exclamation-triangle"),
+        " No API key set. Limited to 100 credits/day (testing only)."
+      )
+    }
+  })
+
+  # Pre-fill API key input if already saved
+  observeEvent(
+    TRUE,
+    {
+      if (!is.null(values$oaApiKey) && nchar(values$oaApiKey) >= 10) {
+        updateTextInput(session, "oaApiKey", value = values$oaApiKey)
+      }
+    },
+    once = TRUE
+  )
+
+  # Save API key
+  observeEvent(input$oaSetApiKey, {
+    key <- trimws(input$oaApiKey)
+    if (is.null(key) || nchar(key) < 10) {
+      output$oaApiKeyStatus <- renderUI({
+        div(
+          style = "color: #721c24; background-color: #f8d7da; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+          icon("times-circle"),
+          " Please enter a valid API key (at least 10 characters)."
+        )
+      })
+      return()
+    }
+
+    home <- homeFolder()
+    path_oa_apikey <- file.path(home, ".biblio_openalex_apikey.txt")
+    writeLines(key, path_oa_apikey)
+    Sys.setenv(openalexR.apikey = key)
+    options(openalexR.apikey = key)
+    values$oaApiKey <- key
+
+    masked_key <- paste0("...", substr(key, nchar(key) - 3, nchar(key)))
+    output$oaApiKeyStatus <- renderUI({
+      div(
+        style = "color: #155724; background-color: #d4edda; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+        icon("check-circle"),
+        sprintf(" API key saved: %s", masked_key)
+      )
+    })
+  })
+
+  # Remove API key
+  observeEvent(input$oaRemoveApiKey, {
+    home <- homeFolder()
+    path_oa_apikey <- file.path(home, ".biblio_openalex_apikey.txt")
+    if (file.exists(path_oa_apikey)) {
+      file.remove(path_oa_apikey)
+    }
+    Sys.unsetenv("openalexR.apikey")
+    options(openalexR.apikey = NULL)
+    values$oaApiKey <- NULL
+    updateTextInput(session, "oaApiKey", value = "")
+
+    output$oaApiKeyStatus <- renderUI({
+      div(
+        style = "color: #856404; background-color: #fff3cd; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+        icon("exclamation-triangle"),
+        " API key removed. Limited to 100 credits/day (testing only)."
+      )
+    })
+  })
+
+  # ============================================
+  # OpenAlex Polite Pool Email
+  # ============================================
+
+  # Show status on load
+  output$oaEmailStatus <- renderUI({
+    if (!is.null(values$oaPoliteEmail) && nchar(values$oaPoliteEmail) >= 5) {
+      div(
+        style = "color: #155724; background-color: #d4edda; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+        icon("check-circle"),
+        sprintf(" Polite pool active: %s", values$oaPoliteEmail)
+      )
+    } else {
+      div(
+        style = "color: #856404; background-color: #fff3cd; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+        icon("exclamation-triangle"),
+        " No email set. Using common pool (slower rate limits)."
+      )
+    }
+  })
+
+  # Pre-fill email input if already saved
+  observeEvent(
+    TRUE,
+    {
+      if (!is.null(values$oaPoliteEmail) && nchar(values$oaPoliteEmail) >= 5) {
+        updateTextInput(session, "oaPoliteEmail", value = values$oaPoliteEmail)
+      }
+    },
+    once = TRUE
+  )
+
+  # Save email
+  observeEvent(input$oaSetEmail, {
+    email <- trimws(input$oaPoliteEmail)
+    if (is.null(email) || !grepl("^[^@]+@[^@]+\\.[^@]+$", email)) {
+      output$oaEmailStatus <- renderUI({
+        div(
+          style = "color: #721c24; background-color: #f8d7da; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+          icon("times-circle"),
+          " Please enter a valid email address."
+        )
+      })
+      return()
+    }
+
+    home <- homeFolder()
+    path_oa_email <- file.path(home, ".biblio_openalex_email.txt")
+    writeLines(email, path_oa_email)
+    Sys.setenv(openalexR.mailto = email)
+    options(openalexR.mailto = email)
+    values$oaPoliteEmail <- email
+
+    output$oaEmailStatus <- renderUI({
+      div(
+        style = "color: #155724; background-color: #d4edda; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+        icon("check-circle"),
+        sprintf(" Email saved. Polite pool active: %s", email)
+      )
+    })
+  })
+
+  # Remove email
+  observeEvent(input$oaRemoveEmail, {
+    home <- homeFolder()
+    path_oa_email <- file.path(home, ".biblio_openalex_email.txt")
+    if (file.exists(path_oa_email)) {
+      file.remove(path_oa_email)
+    }
+    Sys.unsetenv("openalexR.mailto")
+    options(openalexR.mailto = NULL)
+    values$oaPoliteEmail <- NULL
+    updateTextInput(session, "oaPoliteEmail", value = "")
+
+    output$oaEmailStatus <- renderUI({
+      div(
+        style = "color: #856404; background-color: #fff3cd; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+        icon("exclamation-triangle"),
+        " Email removed. Using common pool (slower rate limits)."
+      )
+    })
   })
 }
 

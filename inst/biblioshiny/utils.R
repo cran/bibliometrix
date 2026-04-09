@@ -1,7 +1,198 @@
 ### COMMON FUNCTIONS ####
 
-# Scroll to Top Button (Font Awesome version)
+## Count records in a bibliographic file without full conversion ----
+#' @description Lightweight record counter for bibliographic files.
+#'   Returns the number of publications contained in one or more files
+#'   without performing the full convert2df() conversion.
+#' @param file Character vector of file paths (or a single ZIP path).
+#' @param dbsource Character. The database source
+#'   ("isi","scopus","openalex","openalex_api","lens","cochrane","pubmed","dimensions").
+#' @param format Character. The file format
+#'   ("plaintext","bibtex","csv","pubmed","excel","api","endnote").
+#'   If NULL, it is auto-detected from the file extension.
+#' @return Integer. The total number of records across all files.
+countRecords <- function(file, dbsource = "isi", format = NULL) {
 
+  ## ---- helper: count lines matching a pattern ----
+  count_lines_matching <- function(paths, pattern) {
+    n <- 0L
+    for (f in paths) {
+      lines <- readLines(f, warn = FALSE, encoding = "UTF-8")
+      n <- n + sum(grepl(pattern, lines, perl = TRUE))
+    }
+    n
+  }
+
+  ## ---- helper: count CSV rows (data rows only, excluding header) ----
+  count_csv_rows <- function(paths) {
+    n <- 0L
+    for (f in paths) {
+      # Count total lines minus 1 for header
+      total <- length(readLines(f, warn = FALSE))
+      n <- n + max(0L, total - 1L)
+    }
+    n
+  }
+
+  ## ---- handle ZIP: extract to temp dir ----
+  paths <- file
+  if (length(file) == 1 && tolower(tools::file_ext(file)) == "zip") {
+    temp_exdir <- tempfile("countRecords_")
+    paths <- utils::unzip(file, exdir = temp_exdir)
+    on.exit(unlink(temp_exdir, recursive = TRUE), add = TRUE)
+  }
+
+  ## ---- auto-detect format from file extension if not provided ----
+  if (is.null(format)) {
+    ext <- tolower(tools::file_ext(paths[1]))
+    format <- switch(ext,
+      txt  = if (dbsource == "pubmed") "pubmed" else "plaintext",
+      csv  = "csv",
+      bib  = "bibtex",
+      ciw  = "plaintext",
+      xlsx = "excel",
+      rdata = "rdata", rda = "rdata", rds = "rds",
+      "plaintext"
+    )
+  }
+
+  ## ---- count records by format ----
+  n <- switch(format,
+    plaintext = ,
+    endnote = {
+      if (dbsource == "cochrane") {
+        count_lines_matching(paths, "^Record #")
+      } else {
+        # WoS: each record starts with "PT "
+        count_lines_matching(paths, "^PT ")
+      }
+    },
+    bibtex = {
+      count_lines_matching(paths, "^@")
+    },
+    csv = {
+      count_csv_rows(paths)
+    },
+    pubmed = {
+      count_lines_matching(paths, "^PMID- ")
+    },
+    excel = {
+      n <- 0L
+      for (f in paths) {
+        df <- readxl::read_excel(f, col_types = "text",
+                                 range = readxl::cell_cols(1))
+        n <- n + nrow(df)
+      }
+      n
+    },
+    api = ,
+    rdata = {
+      n <- 0L
+      for (f in paths) {
+        env <- new.env(parent = emptyenv())
+        var <- load(f, envir = env)
+        obj <- get(var[1], envir = env)
+        n <- n + if (is.data.frame(obj)) nrow(obj) else length(obj)
+      }
+      n
+    },
+    rds = {
+      n <- 0L
+      for (f in paths) {
+        obj <- readRDS(f)
+        n <- n + if (is.data.frame(obj)) nrow(obj) else length(obj)
+      }
+      n
+    },
+    0L
+  )
+
+  as.integer(n)
+}
+
+## Cache helper: lightweight fingerprint of a data.frame
+data_fingerprint <- function(M) {
+  nr <- nrow(M)
+  if (nr == 0) return("empty")
+  paste(nr, ncol(M),
+        M$SR[1], M$SR[nr],
+        sep = "||")
+}
+
+## Cache helper: build a cache key from a named list of params
+make_cache_key <- function(...) {
+  args <- list(...)
+  lapply(args, function(x) {
+    if (is.null(x)) "<<NULL>>" else x
+  })
+}
+
+# Funzione helper aggiornata con titolo e affiliazione
+createAuthorCard <- function(
+  name,
+  title,
+  affiliation,
+  url,
+  photo,
+  scholar = FALSE
+) {
+  tags$a(
+    href = url,
+    target = "_blank",
+    style = "text-decoration: none;",
+    div(
+      style = "text-align: center; transition: transform 0.3s; cursor: pointer; padding: 15px; background: #f9f9f9; border-radius: 10px;",
+      onmouseover = "this.style.transform='translateY(-5px)'; this.style.boxShadow='0 8px 20px rgba(0,0,0,0.15)';",
+      onmouseout = "this.style.transform='translateY(0)'; this.style.boxShadow='none';",
+
+      # Foto circolare con bordo
+      div(
+        style = sprintf(
+          "width: 110px; height: 110px; border-radius: 50%%; background-image: url('%s'); background-size: cover; background-position: center; margin: 0 auto 15px; border: 4px solid #3c8dbc; box-shadow: 0 4px 15px rgba(0,0,0,0.2);",
+          photo
+        )
+      ),
+
+      # Nome
+      div(
+        name,
+        style = "font-weight: bold; color: #2c3e50; font-size: 16px; margin-bottom: 8px;"
+      ),
+
+      # Titolo
+      div(
+        title,
+        style = "color: #7f8c8d; font-size: 13px; font-weight: 500; margin-bottom: 5px;"
+      ),
+
+      # Affiliazione
+      div(
+        icon("university", style = "margin-right: 5px;"),
+        affiliation,
+        style = "color: #95a5a6; font-size: 12px; line-height: 1.4; margin-bottom: 10px;"
+      ),
+
+      # Link icon
+      div(
+        if (scholar) {
+          tagList(
+            icon("graduation-cap", style = "margin-right: 3px;"),
+            "Google Scholar"
+          )
+        } else {
+          tagList(
+            icon("link", style = "margin-right: 3px;"),
+            "Website"
+          )
+        },
+        style = "color: #3c8dbc; font-size: 12px; font-weight: 600;"
+      )
+    )
+  )
+}
+
+
+# Scroll to Top Button (Font Awesome version)
 scrollToTopButton <- function() {
   tags$div(
     # CSS per il pulsante
@@ -159,6 +350,21 @@ total_downloads <- function(
   return(as.integer(downloads))
 }
 
+# getFileNameExtension <- function(fn) {
+#   # remove a path
+#   splitted <- strsplit(x = fn, split = "/")[[1]]
+#   # or use .Platform$file.sep in stead of '/'
+#   fn <- splitted[length(splitted)]
+#   ext <- ""
+#   splitted <- strsplit(x = fn, split = "\\.")[[1]]
+#   l <- length(splitted)
+#   if (l > 1 && sum(splitted[1:(l - 1)] != "")) {
+#     ext <- splitted[l]
+#   }
+#   # the extention must be the suffix of a non-empty name
+#   ext
+# }
+
 # FILTER FUNCTIONS ----
 read_journal_ranking <- function(file_path) {
   ext <- tools::file_ext(file_path)
@@ -315,7 +521,7 @@ merge_files <- function(files) {
   ## load xlsx or rdata bibliometrix files
   if ("datapath" %in% names(files)) {
     file <- files$datapath
-    ext <- unlist(lapply(file, getFileNameExtension))
+    ext <- unlist(lapply(file, tools::file_ext))
   }
 
   Mfile <- list()
@@ -375,286 +581,7 @@ watchEmoji <- function(i) {
   emoji[i]
 }
 
-## RESET MODAL DIALOG INPUTS
-resetModalButtons <- function(session) {
-  session$sendCustomMessage("button_id", "null")
-  session$sendCustomMessage("button_id2", "null")
-  # session$sendCustomMessage("click", "null")
-  # session$sendCustomMessage("click-dend", "null")
-  # runjs("Shiny.setInputValue('plotly_click-A', null);")
-  return(session)
-}
-
-
-# DATA TABLE FORMAT ----
-DTformat <- function(
-  df,
-  nrow = 10,
-  filename = "Table",
-  pagelength = TRUE,
-  left = NULL,
-  right = NULL,
-  numeric = NULL,
-  dom = TRUE,
-  size = "85%",
-  filter = "top",
-  columnShort = NULL,
-  columnSmall = NULL,
-  round = 2,
-  title = "",
-  button = FALSE,
-  escape = FALSE,
-  selection = FALSE,
-  scrollX = FALSE,
-  scrollY = FALSE,
-  summary = FALSE
-) {
-  if ("text" %in% names(df)) {
-    df <- df %>%
-      mutate(text = gsub("<|>", "", text))
-  }
-
-  if (length(columnShort) > 0) {
-    columnDefs <- list(
-      list(
-        className = "dt-center",
-        targets = 0:(length(names(df)) - 1)
-      ),
-      list(
-        targets = columnShort - 1,
-        render = JS(
-          "function(data, type, row, meta) {",
-          "return type === 'display' && data.length > 500 ?",
-          "'<span title=\"' + data + '\">' + data.substr(0, 500) + '...</span>' : data;",
-          "}"
-        )
-      )
-    )
-  } else {
-    columnDefs <- list(list(
-      className = "dt-center",
-      targets = 0:(length(names(df)) - 1)
-    ))
-  }
-
-  initComplete <- NULL
-  # Summary Button
-  if (summary == "documents" & "Paper" %in% names(df)) {
-    df <- df %>%
-      mutate(
-        Summary = paste0(
-          '<div style="display: flex; justify-content: center; align-items: center; height: 100%; width: 100%;">',
-          '<button id="custom_btn" style="',
-          'width: 24px; height: 24px; ',
-          'border-radius: 50%; ',
-          'border: none; ',
-          'background: linear-gradient(135deg, #4285f4 0%, #1976d2 100%); ',
-          'color: white; ',
-          'cursor: pointer; ',
-          'display: flex; ',
-          'align-items: center; ',
-          'justify-content: center; ',
-          'box-shadow: 0 2px 4px rgba(0,0,0,0.2); ',
-          'transition: all 0.3s ease; ',
-          '" ',
-          'onmouseover="this.style.transform=\'scale(1.1)\'; this.style.boxShadow=\'0 4px 8px rgba(0,0,0,0.3)\';" ',
-          'onmouseout="this.style.transform=\'scale(1)\'; this.style.boxShadow=\'0 2px 4px rgba(0,0,0,0.2)\';" ',
-          'onclick="Shiny.onInputChange(\'button_id\', \'',
-          Paper,
-          '\')">',
-          '<i class="fas fa-search-plus" style="font-size: 14px;"></i>',
-          '</button>',
-          '</div>'
-        )
-      ) %>%
-      select(Summary, everything())
-  } else if (summary == "historiograph" & "Paper" %in% names(df)) {
-    df <- df %>%
-      mutate(
-        Summary = paste0(
-          '<div style="display: flex; justify-content: center; align-items: center; height: 100%; width: 100%;">',
-          '<button id="custom_btn" style="',
-          'width: 32px; height: 32px; ',
-          'border-radius: 50%; ',
-          'border: none; ',
-          'background: linear-gradient(135deg, #4285f4 0%, #1976d2 100%); ',
-          'color: white; ',
-          'cursor: pointer; ',
-          'display: flex; ',
-          'align-items: center; ',
-          'justify-content: center; ',
-          'box-shadow: 0 2px 4px rgba(0,0,0,0.2); ',
-          'transition: all 0.3s ease; ',
-          '" ',
-          'onmouseover="this.style.transform=\'scale(1.1)\'; this.style.boxShadow=\'0 4px 8px rgba(0,0,0,0.3)\';" ',
-          'onmouseout="this.style.transform=\'scale(1)\'; this.style.boxShadow=\'0 2px 4px rgba(0,0,0,0.2)\';" ',
-          'onclick="Shiny.onInputChange(\'button_id\', \'',
-          SR,
-          '\')">',
-          '<i class="fas fa-search-plus" style="font-size: 14px;"></i>',
-          '</button>',
-          '</div>'
-        )
-      ) %>%
-      select(Summary, everything()) %>%
-      select(-SR)
-  } else if (summary == "authors" & "Author" %in% names(df)) {
-    df <- df %>%
-      # mutate(Bio = paste0('<button id="custom_btn2" onclick="Shiny.onInputChange(\'button_id2\', \'', Author, '\')">▶️</button>')) %>%
-      # select(Bio, everything()) %>%
-      mutate(
-        Author = paste0(
-          '<span class="author-link" onclick="show_author_modal(\'',
-          gsub("'", "\\\\'", Author),
-          '\')">',
-          Author,
-          '</span>'
-        )
-      )
-    initComplete = JS(
-      "function(settings, json) {",
-      "  window.show_author_modal = function(author) {",
-      "    Shiny.setInputValue('selected_author', author, {priority: 'event'});",
-      "  };",
-      "}"
-    )
-    escape = FALSE
-  }
-
-  if (isTRUE(button)) {
-    if (isTRUE(pagelength)) {
-      buttons <- list(
-        list(extend = "pageLength"),
-        list(
-          extend = "excel",
-          filename = paste0(filename, "_bibliometrix_", Sys.Date()),
-          title = " ",
-          header = TRUE,
-          exportOptions = list(
-            modifier = list(page = "all")
-          )
-        )
-      )
-    } else {
-      buttons <- list(
-        list(
-          extend = "excel",
-          filename = paste0(filename, "_bibliometrix_", Sys.Date()),
-          title = " ",
-          header = TRUE,
-          exportOptions = list(
-            modifier = list(page = "all")
-          )
-        )
-      )
-    }
-  } else {
-    buttons <- list(list(extend = "pageLength"))
-  }
-
-  if (isTRUE(dom)) {
-    dom <- "Brtip"
-  } else if (dom == FALSE) {
-    dom <- "Bftp"
-  } else {
-    dom <- "t"
-  }
-
-  if (nchar(title) > 0) {
-    caption <- htmltools::tags$caption(
-      style = "caption-side: top; text-align: center; color:black;  font-size:140% ;",
-      title
-    )
-  } else {
-    caption <- htmltools::tags$caption(
-      style = "caption-side: top; text-align: center; color:black;  font-size:140% ;",
-      ""
-    )
-  }
-
-  if (isTRUE(selection)) {
-    extensions <- c("Buttons", "Select", "ColReorder", "FixedHeader")
-    buttons <- c(buttons, c("selectAll", "selectNone"))
-    select <- list(style = "multiple", items = "row", selected = 1:nrow(df))
-    # selection = list(mode = 'multiple', selected = 1:nrow(df), target = 'row')
-  } else {
-    extensions <- c("Buttons", "ColReorder", "FixedHeader")
-    select <- NULL
-    # selection = "none"
-  }
-
-  tab <- DT::datatable(
-    df,
-    escape = escape,
-    rownames = FALSE,
-    caption = caption,
-    selection = "none",
-    extensions = extensions,
-    filter = filter,
-    options = list(
-      headerCallback = DT::JS(
-        "function(thead) {",
-        "  $(thead).css('font-size', '1em');",
-        "}"
-      ),
-      initComplete = initComplete,
-      colReorder = TRUE,
-      fixedHeader = TRUE,
-      pageLength = nrow,
-      autoWidth = TRUE,
-      scrollX = scrollX,
-      scrollY = scrollY,
-      dom = dom,
-      buttons = buttons,
-      select = select,
-      lengthMenu = list(
-        c(10, 25, 50, -1),
-        c("10 rows", "25 rows", "50 rows", "Show all")
-      ),
-      columnDefs = columnDefs
-    ),
-    class = "cell-border compact stripe"
-  ) %>%
-    DT::formatStyle(
-      names(df),
-      backgroundColor = "white",
-      textAlign = "center",
-      fontSize = size
-    )
-
-  ## left aligning
-
-  if (!is.null(left)) {
-    tab <- tab %>%
-      DT::formatStyle(
-        names(df)[left],
-        backgroundColor = "white",
-        textAlign = "left",
-        fontSize = size
-      )
-  }
-
-  # right aligning
-  if (!is.null(right)) {
-    tab <- tab %>%
-      DT::formatStyle(
-        names(df)[right],
-        backgroundColor = "white",
-        textAlign = "right",
-        fontSize = size
-      )
-  }
-
-  # numeric round
-  if (!is.null(numeric)) {
-    tab <- tab %>%
-      formatRound(names(df)[c(numeric)], digits = round)
-  }
-
-  tab
-}
-
-
+## Author Name Format (Fullname or Surname, N.) ----
 authorNameFormat <- function(M, format) {
   if (format == "AF" & "AF" %in% names(M)) {
     M <- M %>%
@@ -722,50 +649,15 @@ AuthorNameMerge <- function(M) {
   return(M)
 }
 
-getFileNameExtension <- function(fn) {
-  # remove a path
-  splitted <- strsplit(x = fn, split = "/")[[1]]
-  # or use .Platform$file.sep in stead of '/'
-  fn <- splitted[length(splitted)]
-  ext <- ""
-  splitted <- strsplit(x = fn, split = "\\.")[[1]]
-  l <- length(splitted)
-  if (l > 1 && sum(splitted[1:(l - 1)] != "")) {
-    ext <- splitted[l]
-  }
-  # the extention must be the suffix of a non-empty name
-  ext
+## RESET MODAL DIALOG INPUTS
+resetModalButtons <- function(session) {
+  session$sendCustomMessage("button_id", "null")
+  session$sendCustomMessage("button_id2", "null")
+  # session$sendCustomMessage("click", "null")
+  # session$sendCustomMessage("click-dend", "null")
+  # runjs("Shiny.setInputValue('plotly_click-A', null);")
+  return(session)
 }
-
-# Initial to upper case
-firstup <- function(x) {
-  x <- tolower(x)
-  substr(x, 1, 1) <- toupper(substr(x, 1, 1))
-  x
-}
-
-
-# string preview (stopwords)
-strPreview <- function(string, sep = ",") {
-  str1 <- unlist(strsplit(string, sep))
-  str1 <- str1[1:min(c(length(str1), 5))]
-  str1 <- paste(str1, collapse = sep)
-  HTML(paste("<pre>", "File Preview: ", str1, "</pre>", sep = "<br/>"))
-}
-
-# string preview (synonyms)
-strSynPreview <- function(string) {
-  string <- string[1]
-  str1 <- unlist(strsplit(string, ";"))
-  str1 <- str1[1:min(c(length(str1), 5))]
-  str1 <- paste(
-    paste(str1[1], " <- ", collapse = ""),
-    paste(str1[-1], collapse = ";"),
-    collapse = ""
-  )
-  HTML(paste("<pre>", "File Preview: ", str1, "</pre>", sep = "<br/>"))
-}
-
 
 ### LIFE CYCLE PLOTLY FUNCTION ----
 
@@ -1234,7 +1126,7 @@ authorCard <- function(selected_author, values) {
   }
   author_position <- works_exact$author_position[1]
   doi <- works_exact$doi[1]
-  on_line <- check_online()
+  on_line <- check_online(method = "http")
 
   if (on_line) {
     if (!is.null(values$author_data)) {
@@ -1249,7 +1141,9 @@ authorCard <- function(selected_author, values) {
       suppressWarnings(
         AU_data <- tryCatch(
           {
-            authorBio(author_position = author_position, doi = doi)
+            oa_email <- Sys.getenv("openalexR.mailto", unset = "")
+            authorBio(author_position = author_position, doi = doi,
+                      mailto = if (nchar(oa_email) > 0) oa_email else NULL)
           },
           error = function(e) {
             NULL
@@ -1661,7 +1555,7 @@ create_author_bio_card <- function(
     top_topics <- topics_data[topics_data$type == "topic", ][
       1:min(max_topics, sum(topics_data$type == "topic")),
     ] %>%
-      sample_frac(size = 1)
+      slice_sample(prop = 1)
 
     # Calculate font sizes based on counts
     if (nrow(top_topics) > 0) {
@@ -2428,6 +2322,35 @@ create_empty_local_author_bio_card <- function(
 # Helper function for safe extraction (null coalescing operator)
 `%||%` <- function(x, y) if (is.null(x) || is.na(x) || length(x) == 0) y else x
 
+# Helper: return a working PNG device function (Windows ARM64 lacks png())
+safe_png_device <- function() {
+  # Prefer ragg: it works reliably on all platforms including Windows ARM64
+  # where grDevices::png() reports capabilities("png") == TRUE but fails
+  if (requireNamespace("ragg", quietly = TRUE)) {
+    return(ragg::agg_png)
+  }
+  if (capabilities("cairo")) {
+    return(function(filename, width, height, res = 72, units = "in", ...) {
+      grDevices::png(filename = filename, width = width, height = height,
+                     res = res, units = units, type = "cairo", ...)
+    })
+  }
+  if (capabilities("png")) {
+    return(grDevices::png)
+  }
+  stop("No PNG graphics device available. Install the 'ragg' package: install.packages('ragg')")
+}
+
+# Safe wrapper for ggsave that uses a working PNG device
+safe_ggsave <- function(..., device = NULL) {
+  args <- list(...)
+  filename <- args$filename %||% args[[1]]
+  if (is.null(device) && grepl("\\.png$", filename, ignore.case = TRUE)) {
+    device <- safe_png_device()
+  }
+  ggplot2::ggsave(..., device = device)
+}
+
 
 # from igraph to png file
 igraph2PNG <- function(x, filename, width = 10, height = 7, dpi = 75) {
@@ -2440,11 +2363,12 @@ igraph2PNG <- function(x, filename, width = 10, height = 7, dpi = 75) {
     group_by(cluster) %>%
     slice_head(n = 3)
   V(x)$label[!(V(x)$label %in% df$name)] <- ""
-  png(
+  png_dev <- safe_png_device()
+  png_dev(
     filename = filename,
     width = width,
     height = height,
-    unit = "in",
+    units = "in",
     res = dpi
   )
   grid::grid.draw(plot(x))
@@ -2509,7 +2433,16 @@ freqPlot <- function(
     )
   }
 
-  xx[, y] <- substr(xx[, y], 1, string.max)
+  xx[, y] <- sapply(substr(xx[, y], 1, string.max), function(s) {
+    if (nchar(s) > 40) paste0(stringr::str_wrap(s, width = 40)) else s
+  })
+
+  # Ensure unique labels to avoid multiple points on same y-axis row
+  dupes <- duplicated(xx[, y]) | duplicated(xx[, y], fromLast = TRUE)
+  if (any(dupes)) {
+    counts <- ave(seq_along(xx[, y]), xx[, y], FUN = seq_along)
+    xx[dupes, y] <- paste0(xx[dupes, y], " (", counts[dupes], ")")
+  }
 
   g <- ggplot(xx, aes(x = xx[, x], y = xx[, y], label = xx[, x], text = Text)) +
     geom_segment(
@@ -2518,14 +2451,16 @@ freqPlot <- function(
     ) +
     geom_point(aes(color = -xx[, x], size = xx[, x]), show.legend = FALSE) +
     scale_radius(range = c(5, 12)) +
-    geom_text(color = "white", size = 3) +
+    geom_text(color = "#333333", size = 3.5, fontface = "bold", hjust = 0,
+              nudge_x = max(xx[, x]) * 0.04) +
     scale_y_discrete(limits = rev(xx[, y])) +
+    scale_x_continuous(expand = expansion(mult = c(0, 0.15))) +
     scale_fill_continuous(type = "gradient") +
     labs(title = title, y = textLaby) +
     labs(x = textLabx) +
     expand_limits(y = c(1, length(xx[, y]) + 1)) +
     theme_minimal() +
-    theme(axis.text.y = element_text(angle = 0, hjust = 0)) +
+    theme(axis.text.y = element_text(angle = 0, hjust = 1, face = "bold", size = 11)) +
     annotation_custom(
       values$logoGrid,
       xmin = xl[1],
@@ -2564,7 +2499,7 @@ check_online <- function(
   host = "8.8.8.8",
   timeout = 5,
   # min_success = 1,
-  method = "ping" # method = c("ping", "socket", "http")
+  method = "http" # method = c("ping", "socket", "http")
 ) {
   #method <- match.arg(method)
 
@@ -2658,7 +2593,7 @@ check_online <- function(
 
 notifications <- function() {
   ## check connection and download notifications
-  online <- check_online(host = "www.bibliometrix.org")
+  online <- check_online(host = "www.bibliometrix.org", method = "http")
   location <- "https://www.bibliometrix.org/bs_notifications/biblioshiny_notifications.csv"
   notifOnline <- NULL
   if (isTRUE(online)) {
@@ -2675,7 +2610,7 @@ notifications <- function() {
   ## check if a file exists on the local machine and load it
   home <- homeFolder()
 
-  file <- paste(home, "/biblioshiny_notifications.csv", sep = "")
+  file <- file.path(home, "biblioshiny_notifications.csv")
   fileTrue <- file.exists(file)
   if (isTRUE(fileTrue)) {
     suppressWarnings(notifLocal <- read.csv(file, header = TRUE, sep = ","))
@@ -3258,7 +3193,7 @@ AffiliationOverTime <- function(values, n) {
     arrange(Year) %>%
     ungroup() %>%
     pivot_wider(Affiliation, names_from = Year, values_from = n) %>%
-    mutate_all(~ replace(., is.na(.), 0)) %>%
+    mutate(across(everything(), ~ replace(., is.na(.), 0))) %>%
     pivot_longer(
       cols = !Affiliation,
       names_to = "Year",
@@ -3284,18 +3219,27 @@ AffiliationOverTime <- function(values, n) {
     values$AffOverTime$Articles,
     sep = ""
   )
-  width_scale <- 1.7 * 26 / length(unique(values$AffOverTime$Affiliation))
   x <- c(
-    max(values$AffOverTime$Year) -
-      0.02 -
-      diff(range(values$AffOverTime$Year)) * 0.15,
-    max(values$AffOverTime$Year) - 0.02
-  ) +
-    1
+    min(values$AffOverTime$Year) + 0.02,
+    min(values$AffOverTime$Year) + 0.02 +
+      diff(range(values$AffOverTime$Year)) * 0.15
+  )
   y <- c(
-    min(values$AffOverTime$Articles),
-    min(values$AffOverTime$Articles) +
-      diff(range(values$AffOverTime$Articles)) * 0.15
+    max(values$AffOverTime$Articles) -
+      diff(range(values$AffOverTime$Articles)) * 0.15,
+    max(values$AffOverTime$Articles)
+  )
+
+  # Reorder legend by descending max cumulative value
+  values$AffOverTime$Affiliation <- factor(values$AffOverTime$Affiliation,
+    levels = names(sort(tapply(values$AffOverTime$Articles, values$AffOverTime$Affiliation, max), decreasing = TRUE)))
+
+  # Truncate long affiliation names for legend readability
+  trunc_aff_labels <- setNames(
+    ifelse(nchar(levels(values$AffOverTime$Affiliation)) > 35,
+           paste0(substr(levels(values$AffOverTime$Affiliation), 1, 32), "..."),
+           levels(values$AffOverTime$Affiliation)),
+    levels(values$AffOverTime$Affiliation)
   )
 
   values$AffOverTimePlot <- ggplot(
@@ -3315,26 +3259,25 @@ AffiliationOverTime <- function(values, n) {
       title = "Affiliations' Production over Time"
     ) +
     scale_x_continuous(
-      breaks = (values$AffOverTime$Year[seq(
-        1,
-        length(values$AffOverTime$Year),
-        by = ceiling(length(values$AffOverTime$Year) / 20)
-      )])
+      breaks = {
+        yrs <- sort(unique(values$AffOverTime$Year))
+        yrs[seq(1, length(yrs), by = max(1, ceiling(length(yrs) / 20)))]
+      }
     ) +
     geom_hline(aes(yintercept = 0), alpha = 0.1) +
     labs(color = "Affiliation") +
     theme(
       text = element_text(color = "#444444"),
-      legend.text = ggplot2::element_text(size = width_scale),
-      legend.box.margin = margin(6, 6, 6, 6),
+      legend.text = ggplot2::element_text(size = 9, face = "bold"),
+      legend.box.margin = margin(2, 2, 2, 2),
       legend.title = ggplot2::element_text(
-        size = 1.5 * width_scale,
+        size = 10,
         face = "bold"
       ),
       legend.position = "bottom",
-      legend.direction = "vertical",
-      legend.key.size = grid::unit(width_scale / 50, "inch"),
-      legend.key.width = grid::unit(width_scale / 50, "inch"),
+      legend.direction = "horizontal",
+      legend.key.size = grid::unit(0.4, "cm"),
+      legend.key.width = grid::unit(0.6, "cm"),
       plot.caption = element_text(
         size = 9,
         hjust = 0.5,
@@ -3352,6 +3295,8 @@ AffiliationOverTime <- function(values, n) {
       axis.line.x = element_line(color = "black", linewidth = 0.5),
       axis.line.y = element_line(color = "black", linewidth = 0.5)
     ) +
+    scale_color_discrete(labels = trunc_aff_labels) +
+    guides(color = guide_legend(ncol = 2)) +
     annotation_custom(
       values$logoGrid,
       xmin = x[1],
@@ -3380,7 +3325,7 @@ CountryOverTime <- function(values, n) {
     arrange(Year) %>%
     ungroup() %>%
     pivot_wider(Affiliation, names_from = Year, values_from = n) %>%
-    mutate_all(~ replace(., is.na(.), 0)) %>%
+    mutate(across(everything(), ~ replace(., is.na(.), 0))) %>%
     pivot_longer(
       cols = !Affiliation,
       names_to = "Year",
@@ -3407,19 +3352,20 @@ CountryOverTime <- function(values, n) {
     values$CountryOverTime$Articles,
     sep = ""
   )
-  width_scale <- 1.7 * 26 / length(unique(values$CountryOverTime$Country))
   x <- c(
-    max(values$CountryOverTime$Year) -
-      0.02 -
-      diff(range(values$CountryOverTime$Year)) * 0.15,
-    max(values$CountryOverTime$Year) - 0.02
-  ) +
-    1
-  y <- c(
-    min(values$CountryOverTime$Articles),
-    min(values$CountryOverTime$Articles) +
-      diff(range(values$CountryOverTime$Articles)) * 0.15
+    min(values$CountryOverTime$Year) + 0.02,
+    min(values$CountryOverTime$Year) + 0.02 +
+      diff(range(values$CountryOverTime$Year)) * 0.15
   )
+  y <- c(
+    max(values$CountryOverTime$Articles) -
+      diff(range(values$CountryOverTime$Articles)) * 0.15,
+    max(values$CountryOverTime$Articles)
+  )
+
+  # Reorder legend by descending max cumulative value
+  values$CountryOverTime$Country <- factor(values$CountryOverTime$Country,
+    levels = names(sort(tapply(values$CountryOverTime$Articles, values$CountryOverTime$Country, max), decreasing = TRUE)))
 
   values$CountryOverTimePlot <- ggplot(
     values$CountryOverTime,
@@ -3432,26 +3378,25 @@ CountryOverTime <- function(values, n) {
       title = "Country Production over Time"
     ) +
     scale_x_continuous(
-      breaks = (values$CountryOverTime$Year[seq(
-        1,
-        length(values$CountryOverTime$Year),
-        by = ceiling(length(values$CountryOverTime$Year) / 20)
-      )])
+      breaks = {
+        yrs <- sort(unique(values$CountryOverTime$Year))
+        yrs[seq(1, length(yrs), by = max(1, ceiling(length(yrs) / 20)))]
+      }
     ) +
     geom_hline(aes(yintercept = 0), alpha = 0.1) +
     labs(color = "Country") +
     theme(
       text = element_text(color = "#444444"),
-      legend.text = ggplot2::element_text(size = width_scale),
+      legend.text = ggplot2::element_text(size = 10),
       legend.box.margin = margin(6, 6, 6, 6),
       legend.title = ggplot2::element_text(
-        size = 1.5 * width_scale,
+        size = 12,
         face = "bold"
       ),
-      legend.position = "bottom",
+      legend.position = "right",
       legend.direction = "vertical",
-      legend.key.size = grid::unit(width_scale / 50, "inch"),
-      legend.key.width = grid::unit(width_scale / 50, "inch"),
+      legend.key.size = grid::unit(0.4, "cm"),
+      legend.key.width = grid::unit(0.6, "cm"),
       plot.caption = element_text(
         size = 9,
         hjust = 0.5,
@@ -5694,12 +5639,12 @@ addGgplotsWb <- function(
   l <- length(list_plot)
   startRow <- 1
   for (i in 1:l) {
-    fileName <- tempfile(
-      pattern = "figureImage",
-      fileext = ".png"
+    fileName <- file.path(
+      getWD(),
+      paste0("figureImage_", i, "_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".png")
     )
     if (inherits(list_plot[[i]], "ggplot")) {
-      ggsave(
+      safe_ggsave(
         plot = list_plot[[i]],
         filename = fileName,
         width = width,
@@ -5718,18 +5663,15 @@ addGgplotsWb <- function(
       )
     }
     if (inherits(list_plot[[i]], "bibliodendrogram")) {
-      # print("dendrogram plot")
-      # 1. Open jpeg file
-      png(
+      png_dev <- safe_png_device()
+      png_dev(
         filename = fileName,
         width = width,
         height = height,
         res = 300,
         units = "in"
       )
-      # 2. Create the plot
       plot(list_plot[[i]])
-      # 3. Close the file
       dev.off()
     }
     insertImage(
@@ -5748,57 +5690,209 @@ addGgplotsWb <- function(
   return(wb)
 }
 
-screenSh <- function(p, zoom = 2, type = "vis") {
-  tmpdir <- tempdir()
-  fileName <- tempfile(
-    pattern = "figureImage",
-    tmpdir = tmpdir,
-    fileext = ".png"
-  ) # %>% substr(.,2,nchar(.))
+screenSh <- function(p, type = "vis", dpi = 300, height = 7) {
+  #tmpdir <- getWD()
 
-  plot2png(p, filename = fileName, zoom = zoom, type = type, tmpdir = tmpdir)
+  fileName <- file.path(
+    getWD(),
+    paste0("figureImage_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".png")
+  )
+
+  plot2png(p, filename = fileName, type = type, dpi = dpi, height = height)
 
   return(fileName)
 }
 
-screenShot <- function(p, filename, type) {
-  home <- homeFolder()
+screenShot <- function(p, filename, type, dpi = 300, height = 7) {
+  #home <- homeFolder()
 
-  # setting up the main directory
-  # filename <- paste0(file.path(home,"downloads/"),filename)
-  if ("downloads" %in% tolower(dir(home))) {
-    filename <- paste0(file.path(home, "downloads"), "/", filename)
-  } else {
-    filename <- paste0(home, "/", filename)
-  }
+  # # setting up the main directory
+  # if ("downloads" %in% tolower(dir(home))) {
+  #   filename <- file.path(home, "downloads", filename)
+  # } else {
+  #   filename <- file.path(home, filename)
+  # }
 
-  plot2png(p, filename, zoom = 2, type = type, tmpdir = tempdir())
+  plot2png(p, filename, type = type, dpi = dpi, height = height)
+  filename_html <- paste0(tools::file_path_sans_ext(filename), ".html")
+  file.remove(filename_html)
+  unlink(
+    paste0(tools::file_path_sans_ext(filename), "_files"),
+    recursive = TRUE
+  )
 }
 
-plot2png <- function(p, filename, zoom = 2, type = "vis", tmpdir) {
-  html_name <- tempfile(
-    fileext = ".html",
-    tmpdir = tmpdir
-  )
+plot2png <- function(p, filename, type = "vis", dpi = 300, height = 7) {
+  zoom <- dpi / 96
+  vwidth  <- round(height * 2 * 96)
+  vheight <- round(height * 96)
+
+  filename_html <- tools::file_path_sans_ext(filename)
+  html_name <- paste0(filename_html, ".html")
   switch(
     type,
     vis = {
       visSave(p, html_name)
     },
     plotly = {
-      htmlwidgets::saveWidget(p, file = html_name)
+      htmlwidgets::saveWidget(p, file = html_name, selfcontained = FALSE)
+    },
+    df2html = {
+      screenHtml(p, html_name)
     }
   )
-  biblioShot(url = html_name, zoom = zoom, file = filename) # , verbose=FALSE)
+  biblioShot(url = html_name, zoom = zoom, vwidth = vwidth, vheight = vheight, file = filename)
 
   popUpGeneric(
     title = NULL,
     type = "success",
     color = c("#1d8fe1"),
-    subtitle = paste0("Plot was saved in the following path: ", filename),
+    subtitle = paste0("Plot saved to file:\n", basename(filename)),
     btn_labels = "OK",
     size = "40%"
   )
+}
+
+## Export Plotly Sankey to PNG using Plotly.toImage() via chromote
+## Chromote has a rendering bug with complex SVG paths (Sankey links
+## render at ~5% opacity). Plotly.toImage() uses canvas rendering instead.
+plotlySankey2png <- function(p, filename, dpi = 300, height = 7) {
+  vw <- max(round(height * 2 * 96), 1344)
+  vh <- max(round(height * 96), 672)
+  img_scale <- dpi / 96
+
+  export_plot <- p %>%
+    htmlwidgets::onRender(sprintf("
+      function(el, x) {
+        var plotDiv = el.querySelector('.js-plotly-plot') || el;
+        Plotly.toImage(plotDiv, {format:'png', width:%d, height:%d, scale:%f}).then(function(url) {
+          document.title = url;
+        });
+      }
+    ", vw, vh, img_scale))
+
+  html_name <- paste0(tools::file_path_sans_ext(filename), ".html")
+  htmlwidgets::saveWidget(export_plot, file = html_name, selfcontained = TRUE)
+
+  b <- chromote::ChromoteSession$new(width = vw, height = vh)
+  tryCatch({
+    p_event <- b$Page$loadEventFired(wait_ = FALSE)
+    html_url <- paste0("file:///", normalizePath(html_name, winslash = "/", mustWork = TRUE))
+    b$Page$navigate(html_url)
+    b$wait_for(p_event)
+    Sys.sleep(3)
+    result <- b$Runtime$evaluate("document.title")
+    base64_str <- result$result$value
+    if (grepl("^data:image/png;base64,", base64_str)) {
+      raw_data <- base64enc::base64decode(sub("^data:image/png;base64,", "", base64_str))
+      writeBin(raw_data, filename)
+    } else {
+      # Fallback: call Plotly.toImage directly
+      result2 <- b$Runtime$evaluate(sprintf("
+        new Promise(function(resolve) {
+          var plotDiv = document.querySelector('.js-plotly-plot');
+          if (plotDiv) {
+            Plotly.toImage(plotDiv, {format:'png', width:%d, height:%d, scale:%f}).then(resolve);
+          } else { resolve(''); }
+        })
+      ", vw, vh, img_scale), awaitPromise = TRUE)
+      base64_str2 <- result2$result$value
+      if (nchar(base64_str2) > 100) {
+        raw_data <- base64enc::base64decode(sub("^data:image/png;base64,", "", base64_str2))
+        writeBin(raw_data, filename)
+      } else {
+        # Last resort: use biblioShot (links may be faint)
+        biblioShot(url = html_name, file = filename,
+          zoom = dpi / 96, vwidth = vw, vheight = vh, delay = 2)
+      }
+    }
+  }, finally = {
+    try(b$close(), silent = TRUE)
+  })
+  unlink(html_name)
+  unlink(paste0(tools::file_path_sans_ext(html_name), "_files"), recursive = TRUE)
+}
+
+## screenshot of html objects
+screenHtml <- function(df, html_file) {
+  # Genera l'HTML direttamente usando htmlBoxFormat
+  html_content <- htmlBoxFormat(
+    df = df,
+    title = "Missing Data Analysis",
+    nrow = nrow(df),
+    escape = FALSE,
+    scrollX = TRUE,
+    dom = FALSE,
+    filter = "none",
+    pagelength = FALSE,
+    button = FALSE,
+    round = 2
+  )
+
+  # Crea una pagina HTML completa con stili
+  html_page <- sprintf(
+    '
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Missing Data Table</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body {
+      padding: 20px;
+      background-color: white;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .container-fluid {
+      max-width: 100%%;
+    }
+  </style>
+</head>
+<body>
+  <div class="container-fluid">
+    %s
+  </div>
+</body>
+</html>
+    ',
+    html_content
+  )
+
+  # Salva il file HTML
+  writeLines(html_page, html_file, useBytes = TRUE)
+}
+
+## export screen to browser download
+screen2export <- function(filename = "file", obj, type, dpi = 300, height = 7) {
+  JScode_screenshot <- "
+    var link = document.createElement('a');
+    link.href = '%s';
+    link.download = '%s';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  "
+
+  base_name <- paste0(
+    filename,
+    "-",
+    gsub(" |:", "", Sys.time()),
+    ".png",
+    sep = ""
+  )
+  full_path <- file.path(getWD(), base_name)
+  screenShot(
+    obj,
+    filename = full_path,
+    type = type,
+    dpi = dpi,
+    height = height
+  )
+  img_data <- base64enc::dataURI(file = full_path, mime = "image/png")
+  shinyjs::runjs(sprintf(JScode_screenshot, img_data, base_name))
 }
 
 addScreenWb <- function(df, wb, width = 14, height = 8, dpi = 75) {
@@ -5913,7 +6007,8 @@ dfLabel <- function() {
     "CoCitNet",
     "Historiograph",
     "CollabNet",
-    "CollabWorldMap"
+    "CollabWorldMap",
+    "PRISMA_Diagram"
   )
 
   long <- c(
@@ -5962,7 +6057,8 @@ dfLabel <- function() {
     "Co-citation Network",
     "Historiograph",
     "Collaboration Network",
-    "Countries Collaboration World Map"
+    "Countries Collaboration World Map",
+    "PRISMA Diagram"
   )
   data.frame(short = short, long = long)
 }
@@ -6155,14 +6251,42 @@ overlayPlotly <- function(VIS) {
     mutate(log = ceiling(log(deg))) %>%
     slice(rep(1, each = log))
 
-  p <- plot_ly(nodes2, x = ~x, y = ~y) %>%
-    add_histogram2d(
-      histnorm = "density",
-      zsmooth = "fast",
+  # Compute 2D kernel density estimation for smooth heatmap
+  x_range <- range(nodes2$x, na.rm = TRUE)
+  y_range <- range(nodes2$y, na.rm = TRUE)
+  x_pad <- diff(x_range) * 0.15
+  y_pad <- diff(y_range) * 0.15
+
+  kde <- tryCatch({
+    bw_x <- diff(x_range) / 4
+    bw_y <- diff(y_range) / 4
+    dens <- MASS::kde2d(nodes2$x, nodes2$y, n = 300,
+                        h = c(bw_x, bw_y),
+                        lims = c(x_range[1] - x_pad, x_range[2] + x_pad,
+                                 y_range[1] - y_pad, y_range[2] + y_pad))
+    list(x = dens$x, y = dens$y, z = dens$z)
+  }, error = function(e) NULL)
+
+  if (!is.null(kde)) {
+    # z from kde2d is [x_index, y_index]; plotly heatmap expects z[y_index, x_index]
+    p <- plotly::plot_ly(
+      x = kde$x, y = kde$y, z = t(kde$z),
+      type = "heatmap",
       colorscale = Reds,
-      # colorscale=colori[15],
-      showscale = FALSE
+      showscale = FALSE,
+      zsmooth = "best",
+      hoverinfo = "none"
     )
+  } else {
+    # Fallback to histogram2d
+    p <- plot_ly(nodes2, x = ~x, y = ~y) %>%
+      add_histogram2d(
+        histnorm = "density",
+        zsmooth = "fast",
+        colorscale = Reds,
+        showscale = FALSE
+      )
+  }
 
   for (i in 1:nrow(nodes)) {
     p <- p %>%
@@ -6172,6 +6296,7 @@ overlayPlotly <- function(VIS) {
         x = nodes$x[i],
         y = nodes$y[i],
         text = nodes$label[i],
+        xanchor = "center",
         font = list(
           family = "Arial",
           size = nodes$font.size[i],
@@ -6540,4 +6665,312 @@ homeFolder <- function() {
     }
   )
   return(home)
+}
+
+### PRISMA Flow Diagram ----
+#' Draw a PRISMA Flow Diagram for bibliometric studies
+#'
+#' @param db_name Character. Name of the primary database.
+#' @param query Character. Search query or topic description.
+#' @param n_total Integer. Total records retrieved from primary source.
+#' @param other_source Character. Description of additional source (or "").
+#' @param n_other Integer. Records from additional source.
+#' @param steps A data.frame with columns: phase, criterion, values, n_excluded, n_remaining.
+#'   phase is one of "Screening" or "Eligibility".
+#' @param n_included Integer. Final number of studies included.
+#' @return Invisible NULL. Draws directly on the current graphics device.
+drawPrismaFlowDiagram <- function(db_name = "Web of Science",
+                                   query = "",
+                                   n_total = 0,
+                                   other_source = "",
+                                   n_other = 0,
+                                   steps = data.frame(),
+                                   n_included = 0) {
+
+  format_n <- function(n) format(n, big.mark = ",")
+
+  # Wrap long text to fit within a given character width
+  wrap_text <- function(text, max_chars = 50) {
+    lines <- strsplit(text, "\n")[[1]]
+    wrapped <- character(0)
+    for (line in lines) {
+      if (nchar(line) <= max_chars) {
+        wrapped <- c(wrapped, line)
+      } else {
+        words <- strsplit(line, " ")[[1]]
+        current <- words[1]
+        for (w in words[-1]) {
+          if (nchar(paste(current, w)) <= max_chars) {
+            current <- paste(current, w)
+          } else {
+            wrapped <- c(wrapped, current)
+            current <- w
+          }
+        }
+        wrapped <- c(wrapped, current)
+      }
+    }
+    paste(wrapped, collapse = "\n")
+  }
+
+  count_lines <- function(label) length(strsplit(label, "\n")[[1]])
+
+  # Height per line of text in npc units
+  line_h <- 0.022
+  # Base box padding (top + bottom)
+  pad_h <- 0.025
+
+  # Compute box height from label
+  box_height <- function(label) pad_h + count_lines(label) * line_h
+
+  # Helper: draw box with text, supporting optional secondary text (smaller font)
+  draw_box <- function(x, y, w, h, label, fill = "#D6E8F5", border = "#2B5C8A",
+                       font_size = 14, font_face = "plain", text_col = "black",
+                       sub_label = NULL, sub_font_size = 11) {
+    grid::grid.roundrect(
+      x = grid::unit(x, "npc"), y = grid::unit(y, "npc"),
+      width = grid::unit(w, "npc"), height = grid::unit(h, "npc"),
+      r = grid::unit(0.008, "npc"),
+      gp = grid::gpar(fill = fill, col = border, lwd = 2.5)
+    )
+    if (is.null(sub_label)) {
+      grid::grid.text(
+        label, x = grid::unit(x, "npc"), y = grid::unit(y, "npc"),
+        gp = grid::gpar(fontsize = font_size, fontface = font_face,
+                         col = text_col, lineheight = 1.15),
+        just = "centre"
+      )
+    } else {
+      # Two-part text: main label on top, sub_label below in smaller font
+      n_main <- count_lines(label)
+      n_sub <- count_lines(sub_label)
+      total_text_h <- n_main * line_h + n_sub * (line_h * sub_font_size / font_size)
+      y_main <- y + total_text_h / 2 - (n_main * line_h) / 2
+      y_sub <- y_main - (n_main * line_h) / 2 - (n_sub * line_h * sub_font_size / font_size) / 2 - 0.003
+      grid::grid.text(
+        label, x = grid::unit(x, "npc"), y = grid::unit(y_main, "npc"),
+        gp = grid::gpar(fontsize = font_size, fontface = font_face,
+                         col = text_col, lineheight = 1.15),
+        just = "centre"
+      )
+      grid::grid.text(
+        sub_label, x = grid::unit(x, "npc"), y = grid::unit(y_sub, "npc"),
+        gp = grid::gpar(fontsize = sub_font_size, fontface = "italic",
+                         col = "#444444", lineheight = 1.10),
+        just = "centre"
+      )
+    }
+  }
+
+  draw_phase_label <- function(x, y, w, h, label) {
+    grid::grid.roundrect(
+      x = grid::unit(x, "npc"), y = grid::unit(y, "npc"),
+      width = grid::unit(w, "npc"), height = grid::unit(h, "npc"),
+      r = grid::unit(0.008, "npc"),
+      gp = grid::gpar(fill = "#1B3A5C", col = "#1B3A5C", lwd = 2)
+    )
+    grid::grid.text(
+      label, x = grid::unit(x, "npc"), y = grid::unit(y, "npc"),
+      gp = grid::gpar(fontsize = 15, fontface = "bold", col = "white")
+    )
+  }
+
+  draw_arrow <- function(x0, y0, x1, y1, col = "#2B5C8A") {
+    grid::grid.lines(
+      x = grid::unit(c(x0, x1), "npc"), y = grid::unit(c(y0, y1), "npc"),
+      arrow = grid::arrow(length = grid::unit(0.012, "npc"), type = "closed"),
+      gp = grid::gpar(col = col, fill = col, lwd = 2.5)
+    )
+  }
+
+  draw_line <- function(x0, y0, x1, y1, col = "#2B5C8A") {
+    grid::grid.lines(
+      x = grid::unit(c(x0, x1), "npc"), y = grid::unit(c(y0, y1), "npc"),
+      gp = grid::gpar(col = col, lwd = 2)
+    )
+  }
+
+  # Layout constants
+  cx <- 0.42
+  rbox_x <- 0.81
+  bw <- 0.34
+  rbw <- 0.28
+  fs <- 14
+  fs_side <- 13
+  fs_query <- 11
+  plx <- 0.09
+  plw <- 0.13
+  plh <- 0.042
+  main_wrap <- 50   # max chars per line for main boxes
+  side_wrap <- 35   # max chars per line for side boxes
+  query_wrap <- 55  # wider wrap for query text (smaller font)
+
+  has_other <- nchar(trimws(other_source)) > 0 && n_other > 0
+  n_steps <- nrow(steps)
+
+  # --- Pre-compute all labels and box heights ---
+
+  # Identification: separate main label from query (shown in smaller font)
+  has_query <- nchar(trimws(query)) > 0
+  id_main_label <- paste0("Records identified from ", db_name, "\n(n = ", format_n(n_total), ")")
+  id_main_label <- wrap_text(id_main_label, main_wrap)
+  id_query_label <- NULL
+
+  if (has_query) {
+    id_query_label <- wrap_text(query, query_wrap)
+    n_main <- count_lines(id_main_label)
+    n_query <- count_lines(id_query_label)
+    id_bh <- pad_h + n_main * line_h + n_query * (line_h * fs_query / fs) + 0.008
+  } else {
+    id_bh <- box_height(id_main_label)
+  }
+
+  # Total records label
+  total_n <- n_total + ifelse(has_other, n_other, 0)
+  total_label <- wrap_text(paste0("Total records retrieved\n(n = ", format_n(total_n), ")"), main_wrap)
+  total_bh <- box_height(total_label)
+
+  # Step labels
+  step_labels <- character(0)
+  step_bhs <- numeric(0)
+  excl_labels <- character(0)
+  excl_bhs <- numeric(0)
+  for (i in seq_len(n_steps)) {
+    step <- steps[i, ]
+    has_values <- nchar(trimws(step$values)) > 0
+    if (has_values) {
+      ml <- paste0("After ", step$criterion, " filter\n",
+                    step$values, "\n(n = ", format_n(step$n_remaining), ")")
+    } else {
+      ml <- paste0("After ", step$criterion, " filter\n(n = ", format_n(step$n_remaining), ")")
+    }
+    ml <- wrap_text(ml, main_wrap)
+    step_labels <- c(step_labels, ml)
+    step_bhs <- c(step_bhs, box_height(ml))
+
+    el <- wrap_text(paste0("Excluded by ", step$criterion, "\n(n = ", format_n(step$n_excluded), ")"), side_wrap)
+    excl_labels <- c(excl_labels, el)
+    excl_bhs <- c(excl_bhs, box_height(el))
+  }
+
+  # Inclusion label
+  inc_label <- wrap_text(paste0("Studies included in the analysis\n(n = ", format_n(n_included), ")"), main_wrap)
+  inc_bh <- box_height(inc_label)
+
+  # Other source label
+  if (has_other) {
+    other_label <- wrap_text(paste0("Records from\n", other_source, "\n(n = ", format_n(n_other), ")"), main_wrap)
+    other_bh <- box_height(other_label)
+  }
+
+  # --- Compute Y positions: distribute evenly to fill vertical space ---
+  all_bhs <- c(id_bh, total_bh, step_bhs, inc_bh)
+  n_rows <- length(all_bhs)
+
+  y_top_start <- 0.91
+  y_bottom_end <- 0.05
+  total_space <- y_top_start - y_bottom_end
+  total_box_h <- sum(all_bhs)
+
+  # Distribute remaining space equally as gaps
+  gap <- if (n_rows > 1) (total_space - total_box_h) / (n_rows - 1) else 0
+  gap <- max(gap, 0.010)  # minimum gap
+
+  # If boxes + min gaps exceed space, shrink proportionally
+  if (total_box_h + (n_rows - 1) * 0.010 > total_space) {
+    scale <- (total_space - (n_rows - 1) * 0.010) / total_box_h
+    all_bhs <- all_bhs * scale
+    id_bh <- all_bhs[1]; total_bh <- all_bhs[2]
+    if (n_steps > 0) step_bhs <- all_bhs[3:(2 + n_steps)]
+    inc_bh <- all_bhs[n_rows]
+    gap <- 0.010
+  }
+
+  # Compute y centers top-down
+  y_centers <- numeric(n_rows)
+  y_cur <- y_top_start - all_bhs[1] / 2
+  y_centers[1] <- y_cur
+  for (j in 2:n_rows) {
+    y_cur <- y_cur - all_bhs[j - 1] / 2 - gap - all_bhs[j] / 2
+    y_centers[j] <- y_cur
+  }
+
+  y_id <- y_centers[1]
+  y_total <- y_centers[2]
+  y_steps <- if (n_steps > 0) y_centers[3:(2 + n_steps)] else numeric(0)
+  y_inc <- y_centers[n_rows]
+
+  # Phase labels y positions
+  screening_ys <- if (n_steps > 0) y_steps[steps$phase == "Screening"] else numeric(0)
+  eligibility_ys <- if (n_steps > 0) y_steps[steps$phase == "Eligibility"] else numeric(0)
+
+  # --- Start drawing ---
+  grid::grid.newpage()
+  grid::pushViewport(grid::viewport(width = 0.96, height = 0.96))
+  grid::grid.rect(gp = grid::gpar(fill = "white", col = NA))
+
+  # Title
+  grid::grid.text("PRISMA Flow Diagram",
+                   x = grid::unit(0.5, "npc"), y = grid::unit(0.97, "npc"),
+                   gp = grid::gpar(fontsize = 22, fontface = "bold", col = "#1B3A5C"))
+  grid::grid.text("(adapted for bibliometric studies)",
+                   x = grid::unit(0.5, "npc"), y = grid::unit(0.945, "npc"),
+                   gp = grid::gpar(fontsize = 14, fontface = "italic", col = "#555555"))
+
+  # Phase labels
+  draw_phase_label(plx, y_id, plw, plh, "Identification")
+  if (length(screening_ys) > 0)
+    draw_phase_label(plx, screening_ys[1], plw, plh, "Screening")
+  if (length(eligibility_ys) > 0)
+    draw_phase_label(plx, eligibility_ys[1], plw, plh, "Eligibility")
+  draw_phase_label(plx, y_inc, plw, plh, "Inclusion")
+
+  # Identification boxes
+  if (has_other) {
+    id_left_x <- 0.32
+    id_right_x <- 0.58
+    id_bw <- 0.24
+    draw_box(id_left_x, y_id, id_bw, id_bh, id_main_label,
+             font_size = fs, sub_label = id_query_label, sub_font_size = fs_query)
+    draw_box(id_right_x, y_id, id_bw, other_bh, other_label, font_size = fs - 1)
+    draw_arrow(id_left_x, y_id - id_bh / 2, cx, y_total + total_bh / 2)
+    draw_arrow(id_right_x, y_id - other_bh / 2, cx, y_total + total_bh / 2)
+  } else {
+    draw_box(cx, y_id, bw, id_bh, id_main_label,
+             font_size = fs, sub_label = id_query_label, sub_font_size = fs_query)
+    draw_arrow(cx, y_id - id_bh / 2, cx, y_total + total_bh / 2)
+  }
+
+  # Total records
+  draw_box(cx, y_total, bw, total_bh, total_label, font_size = fs)
+
+  # Steps
+  prev_y <- y_total
+  prev_bh <- total_bh
+  for (i in seq_len(n_steps)) {
+    cur_y <- y_steps[i]
+    cur_bh <- step_bhs[i]
+
+    draw_arrow(cx, prev_y - prev_bh / 2, cx, cur_y + cur_bh / 2)
+    draw_box(cx, cur_y, bw, cur_bh, step_labels[i], font_size = fs)
+
+    # Right exclusion box
+    draw_box(rbox_x, cur_y, rbw, excl_bhs[i], excl_labels[i],
+             fill = "#FFFFFF", border = "#8B2020",
+             font_size = fs_side, text_col = "#8B2020")
+    draw_line(cx + bw / 2, cur_y, rbox_x - rbw / 2, cur_y, col = "#8B2020")
+
+    prev_y <- cur_y
+    prev_bh <- cur_bh
+  }
+
+  # Inclusion
+  draw_arrow(cx, prev_y - prev_bh / 2, cx, y_inc + inc_bh / 2)
+
+  draw_box(cx, y_inc, bw, inc_bh, inc_label,
+           fill = "#D6E8F5", border = "#1B3A5C",
+           font_size = fs, font_face = "bold")
+
+  grid::popViewport()
+  invisible(NULL)
 }

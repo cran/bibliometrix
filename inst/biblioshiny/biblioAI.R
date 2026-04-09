@@ -1,3 +1,92 @@
+## OpenRouter AI function
+openrouter_ai <- function(
+  image = NULL,
+  docs = NULL,
+  prompt = "Explain these images",
+  model = "google/gemma-3-27b-it:free", # Nota: usa 27b, il 32b potrebbe avere ID diverso
+  image_type = "png",
+  retry_503 = 5,
+  api_key = NULL,
+  outputSize = "medium"
+) {
+  library(httr2)
+  library(base64enc)
+
+  # 1. Setup API Key
+  if (is.null(api_key)) {
+    api_key <- Sys.getenv("OPENROUTER_API_KEY")
+  }
+
+  # 2. Configurazione Tokens (Semplificata per evitare 400)
+  # Molti modelli free falliscono se chiedi troppi token in uscita
+  max_val <- switch(
+    outputSize,
+    "small" = 1000,
+    "medium" = 2000,
+    "large" = 4000,
+    2000
+  )
+
+  # 3. Costruzione Content (Standard rigoroso OpenAI)
+  content_list <- list(
+    list(type = "text", text = prompt)
+  )
+
+  if (!is.null(image)) {
+    for (img_path in as.vector(image)) {
+      if (file.exists(img_path)) {
+        # Importante: usiamo una compressione base64 pulita
+        img_b64 <- base64encode(img_path)
+        content_list <- append(
+          content_list,
+          list(
+            list(
+              type = "image_url",
+              image_url = list(
+                url = paste0("data:image/", image_type, ";base64,", img_b64)
+              )
+            )
+          )
+        )
+      }
+    }
+  }
+
+  # 4. Request Body
+  # Rimosso 'seed' e altri parametri opzionali che possono causare 400 su certi provider
+  request_body <- list(
+    model = model,
+    messages = list(
+      list(role = "user", content = content_list)
+    ),
+    max_tokens = max_val,
+    temperature = 0.7
+  )
+
+  # 5. Invio Richiesta
+  url <- "https://openrouter.ai/api/v1/chat/completions"
+
+  req <- request(url) |>
+    req_headers(
+      "Authorization" = paste("Bearer", api_key),
+      "HTTP-Referer" = "https://github.com/massimoaria/bibliometrix", # Referer specifico
+      "X-Title" = "Biblioshiny Client",
+      "Content-Type" = "application/json"
+    ) |>
+    req_body_json(request_body) |>
+    req_timeout(120) |>
+    req_retry(max_tries = retry_503)
+
+  resp <- req_perform(req) |>
+    resp_body_json()
+
+  if (!is.null(resp$choices)) {
+    return(resp$choices[[1]]$message$content)
+  } else {
+    return(paste("❌ Errore API:", resp$error$message))
+  }
+}
+
 ## gemini AI tools
 gemini_ai <- function(
   image = NULL,
@@ -173,7 +262,8 @@ gemini_ai <- function(
     req <- request(url) |>
       req_url_query(key = api_key) |>
       req_headers("Content-Type" = "application/json") |>
-      req_body_json(request_body)
+      req_body_json(request_body) |>
+      req_timeout(120)
 
     resp <- tryCatch(
       req_perform(req),
@@ -202,7 +292,7 @@ gemini_ai <- function(
           retry_503,
           ")..."
         ))
-        Sys.sleep(2)
+        Sys.sleep(min(2^attempt, 16))
         next
       } else {
         return(
@@ -249,7 +339,7 @@ gemini_ai <- function(
     # Successful response
     candidates <- httr2::resp_body_json(resp)$candidates
     outputs <- unlist(lapply(candidates, \(c) c$content$parts))
-    return(outputs)
+    return(outputs[1])
   }
 }
 
@@ -589,16 +679,45 @@ biblioAiPrompts <- function(values, activeTab) {
     "collabWorldMap" = {
       #values$WMGemini
       prompt <- paste0(
-        "Provide an interpretation of this 'Countries’ Collaboration World Map'. The map visualizes international scientific ",
+        "Provide an interpretation of this ‘Countries’ Collaboration World Map’. The map visualizes international scientific ",
         "collaboration by showing, for each country, the total number of articles with at least one contributing author. ",
         "The color intensity of each country is proportional to its research output. The connecting lines represent collaborative ",
         "links between countries, based on co-authorship across all authors (not only corresponding authors). ",
         "Focus on identifying major hubs of scientific production, key international partnerships, and global patterns of collaboration."
       )
     },
+    "bradford" = {
+      prompt <- paste0(
+        "Provide an interpretation of this Bradford bibliograph and Bradford’s Law analysis. ",
+        "The plot shows the cumulative number of articles (y-axis) against the logarithm of source rank (x-axis). ",
+        "The solid black line is the empirical curve and the dashed red line is the theoretical fitted Bradford distribution: C(r) = a + b * log(r). ",
+        "The three shaded zones represent the Bradford zones: Zone 1 (core journals), Zone 2 (intermediate), and Zone 3 (periphery). ",
+        "Each zone contains approximately one-third of the total articles, but the number of journals increases geometrically (ratio 1:k:k^2). ",
+        "Focus on: (1) the degree of concentration vs dispersion in the field’s publication landscape, ",
+        "(2) the shape of the curve (steep initial drop = high concentration, flatter = more dispersion), ",
+        "(3) how well the empirical data fits the theoretical Bradford distribution (R-squared and KS test), ",
+        "(4) the Bradford multiplier k and what it reveals about the zone structure, ",
+        "(5) identifying and discussing the core journals and their role in the field."
+      )
+    },
+    "lotka" = {
+      prompt <- paste0(
+        "Provide an interpretation of this Lotka’s Law plot and analysis. ",
+        "The plot shows the author productivity distribution: the percentage of authors (y-axis) who published a given number of documents (x-axis). ",
+        "Three curves are displayed: (1) the solid black line is the empirical distribution, ",
+        "(2) the dashed red line is the theoretical Lotka’s Law with Beta=2 (inverse square law), ",
+        "(3) the dot-dash blue line is the fitted generalized inverse power law with the estimated Beta. ",
+        "Lotka’s Law states that f(n) = C / n^Beta, where f(n) is the proportion of authors publishing n articles. ",
+        "Focus on: (1) how well the empirical data fits the theoretical (Beta=2) and fitted distributions (KS test results), ",
+        "(2) the estimated Beta value and what it reveals about productivity concentration in the field, ",
+        "(3) the proportion of single-paper authors vs prolific authors, ",
+        "(4) whether Beta > 2 (more concentrated, typical of niche fields) or Beta < 2 (more dispersed, typical of broad fields), ",
+        "(5) implications for the field’s author productivity patterns."
+      )
+    },
     {
       prompt <- paste0(
-        "Provide an interpretation of this plot creted with 'bibliometrix R Package'"
+        "Provide an interpretation of this plot creted with ‘bibliometrix R Package’"
       )
     }
   )
@@ -607,210 +726,6 @@ biblioAiPrompts <- function(values, activeTab) {
   return(prompt)
 }
 
-geminiGenerate <- function(
-  values,
-  activeTab,
-  gemini_additional,
-  gemini_model_parameters,
-  input
-) {
-  if (gemini_additional != "") {
-    desc <- paste0(
-      values$collection_description,
-      gemini_additional,
-      gemini_model_parameters,
-      collapse = ". "
-    )
-  } else {
-    desc <- paste0(
-      values$collection_description,
-      gemini_model_parameters,
-      collapse = ". "
-    )
-  }
-  prompt <- biblioAiPrompts(values, activeTab)
-  switch(
-    activeTab,
-    "mainInfo" = {
-      req(values$TABvb)
-      values$MainInfoGemini <- geminiPromptImage(
-        obj = NULL,
-        type = "text",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "lifeCycle" = {
-      req(values$DLC)
-      files <- DLC2Gemini(values$DLCplotYear, values$DLCplotCum)
-      values$DLCGemini <- geminiPromptImage(
-        obj = files,
-        type = "multi",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "threeFieldPlot" = {
-      req(values$TFP)
-      values$TFPGemini <- geminiPromptImage(
-        obj = values$TFP,
-        type = "plotly",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "authorsProdOverTime" = {
-      req(values$AUProdOverTime)
-      values$ApotGemini <- geminiPromptImage(
-        obj = values$AUProdOverTime$graph,
-        type = "ggplot2",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "correspAuthorCountry" = {
-      req(values$TABCo)
-      values$MostRelCountriesGemini <- geminiPromptImage(
-        obj = values$MRCOplot,
-        type = "ggplot2",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "mostLocalCitDoc" = {
-      req(values$TABLocDoc)
-      values$MostLocCitDocsGemini <- geminiPromptImage(
-        obj = NULL,
-        type = "text",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "trendTopic" = {
-      req(values$trendTopics)
-      values$trendTopicsGemini <- geminiPromptImage(
-        obj = values$trendTopics$graph,
-        type = "ggplot2",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "ReferenceSpect" = {
-      req(values$res)
-      values$rpysGemini <- geminiPromptImage(
-        obj = values$res$spectroscopy,
-        type = "ggplot2",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "coOccurenceNetwork" = {
-      req(values$COCnetwork)
-      values$cocGemini <- geminiPromptImage(
-        obj = values$COCnetwork$VIS,
-        type = "vis",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "thematicMap" = {
-      req(values$TMmap)
-      values$TMGemini <- geminiPromptImage(
-        obj = values$TMmap,
-        type = "plotly",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "thematicEvolution" = {
-      req(values$nexus)
-      files <- TE2Gemini(values$nexus, values$TEplot)
-      values$TEGemini <- geminiPromptImage(
-        obj = files,
-        type = "multi",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "factorialAnalysis" = {
-      req(values$plotCS)
-      values$CSGemini <- geminiPromptImage(
-        obj = values$plotCS,
-        type = "plotly",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "coCitationNetwork" = {
-      req(values$COCITnetwork)
-      values$cocitGemini <- geminiPromptImage(
-        obj = values$COCITnetwork$VIS,
-        type = "vis",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "historiograph" = {
-      req(values$histPlotVis$VIS)
-      values$histGemini <- geminiPromptImage(
-        obj = values$histPlotVis$VIS,
-        type = "vis",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "collabNetwork" = {
-      req(values$COLnetwork$VIS)
-      values$colGemini <- geminiPromptImage(
-        obj = values$COLnetwork$VIS,
-        type = "vis",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    },
-    "collabWorldMap" = {
-      values$WMGemini <- geminiPromptImage(
-        obj = values$WMmap$g,
-        type = "plotly",
-        prompt = prompt,
-        key = values$geminiAPI,
-        desc = desc,
-        values = values
-      )
-    }
-  )
-  return(values)
-}
 
 geminiParameterPrompt <- function(values, activeTab, input) {
   if ("DB_Original" %in% names(values$M)) {
@@ -946,81 +861,40 @@ geminiParameterPrompt <- function(values, activeTab, input) {
     },
     "collabWorldMap" = {
       req(values$WMmap)
+    },
+    "bradford" = {
+      req(values$bradford)
+      s <- values$bradford$stat
+      zs <- values$bradford$zoneSummary
+      txt <- paste0(
+        txt,
+        " Bradford's Law analysis results: ",
+        "Fitted model C(r) = ", round(s$a, 2), " + ", round(s$b, 2), " * log(r), ",
+        "R-squared = ", round(s$R2, 4), ", ",
+        "Bradford multiplier k = ", round(s$k, 2), ", ",
+        "KS test p-value = ", format.pval(s$ks.pvalue, digits = 3), ". ",
+        "Zone summary: ", merge_df_to_string(zs)
+      )
+    },
+    "lotka" = {
+      req(values$lotka)
+      s <- values$lotka$stat
+      txt <- paste0(
+        txt,
+        " Lotka's Law analysis results: ",
+        "Estimated Beta = ", round(s$Beta, 4), ", ",
+        "Constant C = ", round(s$C, 4), ", ",
+        "R-squared = ", round(s$R2, 4), ", ",
+        "KS p-value (theoretical Beta=2) = ", format.pval(s$ks.theo.pvalue, digits = 3), ", ",
+        "KS p-value (fitted Beta) = ", format.pval(s$ks.fit.pvalue, digits = 3), ". ",
+        "Author productivity table: ", merge_df_to_string(values$lotka$AuthorProd)
+      )
     }
   )
   return(txt)
 }
 
-## gemini prompt for images
-geminiPromptImage <- function(
-  obj,
-  type = "vis",
-  prompt = "Explain the topics in this map",
-  key,
-  desc = NULL,
-  values
-) {
-  ## Check Computer configuration to work with Biblio AI
-  ### Internet Connection
-  if (!is_online()) {
-    res <- '⚠️ **Note**: Biblio AI requires an active internet connection to work.'
-    return(res)
-  }
-  ### Chromium Browser
-  if (is.null(values$Chrome_url)) {
-    res <- '⚠️ **Note**: Biblio AI requires a **Chrome-based browser** (such as Google Chrome or Microsoft Edge) installed on your computer to work correctly.'
-    return(res)
-  }
 
-  if (key) {
-    if (!is.null(desc)) {
-      prompt <- paste0(prompt, desc, collapse = ". ")
-    }
-    tmpdir <- tempdir()
-    owd <- setwd(tmpdir)
-    on.exit(setwd(owd))
-    file_path <- paste0(tempfile(), ".png", collapse = "")
-    switch(
-      type,
-      "vis" = {
-        plot2pngGemini(obj, filename = file_path, type = "vis")
-      },
-      "plotly" = {
-        plot2pngGemini(obj, filename = file_path, type = "plotly")
-      },
-      "multi" = {
-        # prompt with multiple image files
-        file_path <- obj
-      },
-      "text" = {
-        # prompt based only on text
-        file_path <- NULL
-      },
-      "ggplot2" = {
-        ggsave(
-          filename = file_path,
-          plot = obj,
-          dpi = 72,
-          height = 7,
-          width = 14,
-          bg = "transparent"
-        )
-      }
-    )
-
-    res <- gemini_ai(
-      image = file_path,
-      prompt = prompt,
-      image_type = "png",
-      model = values$gemini_api_model,
-      outputSize = values$gemini_output_size
-    )
-  } else {
-    res <- 'To access this feature, please provide a valid Gemini AI API key. You can obtain your API key by visiting the official <a href="https://aistudio.google.com/" target="_blank">Google AI Studio website</a>.'
-  }
-
-  return(res)
-}
 
 geminiWaitingMessage <- function(values, activeTab) {
   messageTxt <- "⌛ Thinking..."
@@ -1090,9 +964,281 @@ geminiWaitingMessage <- function(values, activeTab) {
     "collabWorldMap" = {
       req(values$WMmap)
       values$WMGemini <- messageTxt
+    },
+    "bradford" = {
+      req(values$bradford)
+      values$BradfordGemini <- messageTxt
+    },
+    "lotka" = {
+      req(values$lotka)
+      values$LotkaGemini <- messageTxt
     }
   )
   return(values)
+}
+
+## Map activeTab to reactive field name in values
+geminiFieldName <- function(activeTab) {
+  switch(
+    activeTab,
+    "mainInfo" = "MainInfoGemini",
+    "lifeCycle" = "DLCGemini",
+    "threeFieldPlot" = "TFPGemini",
+    "authorsProdOverTime" = "ApotGemini",
+    "correspAuthorCountry" = "MostRelCountriesGemini",
+    "mostLocalCitDoc" = "MostLocCitDocsGemini",
+    "trendTopic" = "trendTopicsGemini",
+    "ReferenceSpect" = "rpysGemini",
+    "coOccurenceNetwork" = "cocGemini",
+    "thematicMap" = "TMGemini",
+    "thematicEvolution" = "TEGemini",
+    "factorialAnalysis" = "CSGemini",
+    "coCitationNetwork" = "cocitGemini",
+    "historiograph" = "histGemini",
+    "collabNetwork" = "colGemini",
+    "collabWorldMap" = "WMGemini",
+    "bradford" = "BradfordGemini",
+    "lotka" = "LotkaGemini",
+    NULL
+  )
+}
+
+## Prepare image files for Gemini (synchronous part of geminiPromptImage)
+geminiPrepareImage <- function(obj, type, prompt, key, desc, values) {
+  # Check internet connection
+  if (!is_online()) {
+    return(list(
+      prompt = NULL,
+      image_paths = NULL,
+      error_msg = '⚠️ **Note**: Biblio AI requires an active internet connection to work.'
+    ))
+  }
+  # Check Chrome browser
+  if (is.null(values$Chrome_url)) {
+    return(list(
+      prompt = NULL,
+      image_paths = NULL,
+      error_msg = '⚠️ **Note**: Biblio AI requires a **Chrome-based browser** (such as Google Chrome or Microsoft Edge) installed on your computer to work correctly.'
+    ))
+  }
+
+  if (!key) {
+    return(list(
+      prompt = NULL,
+      image_paths = NULL,
+      error_msg = 'To access this feature, please provide a valid Gemini AI API key. You can obtain your API key by visiting the official <a href="https://aistudio.google.com/" target="_blank">Google AI Studio website</a>.'
+    ))
+  }
+
+  # Build prompt with description
+  if (!is.null(desc)) {
+    prompt <- paste0(prompt, desc, collapse = ". ")
+  }
+
+  # Convert plot to PNG
+  file_path <- tempfile(fileext = ".png", tmpdir = getWD())
+
+  result <- tryCatch({
+    switch(
+      type,
+      "vis" = {
+        plot2pngGemini(obj, filename = file_path, type = "vis")
+      },
+      "plotly" = {
+        plot2pngGemini(obj, filename = file_path, type = "plotly")
+      },
+      "multi" = {
+        file_path <- obj
+      },
+      "text" = {
+        file_path <- NULL
+      },
+      "ggplot2" = {
+        ggsave(
+          filename = file_path,
+          plot = obj,
+          dpi = 72,
+          height = 7,
+          width = 14,
+          bg = "transparent"
+        )
+      }
+    )
+    NULL  # no error
+  }, error = function(e) {
+    conditionMessage(e)
+  })
+
+  if (!is.null(result)) {
+    return(list(
+      prompt = NULL,
+      image_paths = NULL,
+      error_msg = paste("Error preparing image:", result)
+    ))
+  }
+
+  return(list(
+    prompt = prompt,
+    image_paths = file_path,
+    error_msg = NULL
+  ))
+}
+
+## Cleanup temporary files after Gemini API call
+geminiCleanupFiles <- function(image_paths) {
+  if (!is.null(image_paths[1])) {
+    tryCatch({
+      filename_html <- paste0(tools::file_path_sans_ext(image_paths), ".html")
+      existing <- c(image_paths, filename_html)
+      existing <- existing[file.exists(existing)]
+      if (length(existing) > 0) file.remove(existing)
+      dirs <- paste0(tools::file_path_sans_ext(image_paths), "_files")
+      dirs <- dirs[dir.exists(dirs)]
+      if (length(dirs) > 0) unlink(dirs, recursive = TRUE)
+    }, error = function(e) {
+      # Silently ignore cleanup errors
+    })
+  }
+}
+
+## Prepare all data for async Gemini call (synchronous orchestration)
+geminiPrepareAll <- function(values, activeTab, input) {
+  field <- geminiFieldName(activeTab)
+  if (is.null(field)) {
+    return(list(field = "MainInfoGemini", can_proceed = FALSE,
+                error_msg = "Unsupported tab for Biblio AI."))
+  }
+
+  # Build description
+  gemini_additional <- values$gemini_additional
+  gemini_model_parameters <- values$gemini_model_parameters
+  if (!is.null(gemini_additional) && gemini_additional != "") {
+    desc <- paste0(
+      values$collection_description,
+      gemini_additional,
+      gemini_model_parameters,
+      collapse = ". "
+    )
+  } else {
+    desc <- paste0(
+      values$collection_description,
+      gemini_model_parameters,
+      collapse = ". "
+    )
+  }
+
+  # Build prompt
+  prompt <- biblioAiPrompts(values, activeTab)
+
+  # Determine obj and type for each tab
+  obj <- NULL
+  type <- "text"
+
+  switch(
+    activeTab,
+    "mainInfo" = {
+      obj <- NULL
+      type <- "text"
+    },
+    "lifeCycle" = {
+      files <- DLC2Gemini(values$DLCplotYear, values$DLCplotCum)
+      obj <- files
+      type <- "multi"
+    },
+    "threeFieldPlot" = {
+      obj <- values$TFP
+      type <- "plotly"
+    },
+    "authorsProdOverTime" = {
+      obj <- values$AUProdOverTime$graph
+      type <- "ggplot2"
+    },
+    "correspAuthorCountry" = {
+      obj <- values$MRCOplot
+      type <- "ggplot2"
+    },
+    "mostLocalCitDoc" = {
+      obj <- NULL
+      type <- "text"
+    },
+    "trendTopic" = {
+      obj <- values$trendTopics$graph
+      type <- "ggplot2"
+    },
+    "ReferenceSpect" = {
+      obj <- values$res$spectroscopy
+      type <- "ggplot2"
+    },
+    "coOccurenceNetwork" = {
+      obj <- values$COCnetwork$VIS
+      type <- "vis"
+    },
+    "thematicMap" = {
+      obj <- values$TMmap
+      type <- "plotly"
+    },
+    "thematicEvolution" = {
+      files <- TE2Gemini(values$nexus, values$TEplot)
+      obj <- files
+      type <- "multi"
+    },
+    "factorialAnalysis" = {
+      obj <- values$plotCS
+      type <- "plotly"
+    },
+    "coCitationNetwork" = {
+      obj <- values$COCITnetwork$VIS
+      type <- "vis"
+    },
+    "historiograph" = {
+      obj <- values$histPlotVis$VIS
+      type <- "vis"
+    },
+    "collabNetwork" = {
+      obj <- values$COLnetwork$VIS
+      type <- "vis"
+    },
+    "collabWorldMap" = {
+      obj <- values$WMmap$g
+      type <- "plotly"
+    },
+    "bradford" = {
+      obj <- values$bradford$graph
+      type <- "ggplot2"
+    },
+    "lotka" = {
+      obj <- values$lotka$g
+      type <- "ggplot2"
+    }
+  )
+
+  # Prepare image (synchronous)
+  prep <- geminiPrepareImage(
+    obj = obj,
+    type = type,
+    prompt = prompt,
+    key = values$geminiAPI,
+    desc = desc,
+    values = values
+  )
+
+  if (!is.null(prep$error_msg)) {
+    return(list(
+      field = field,
+      can_proceed = FALSE,
+      error_msg = prep$error_msg,
+      prompt = NULL,
+      image_paths = NULL
+    ))
+  }
+
+  return(list(
+    field = field,
+    can_proceed = TRUE,
+    error_msg = NULL,
+    prompt = prep$prompt,
+    image_paths = prep$image_paths
+  ))
 }
 
 geminiSave <- function(values, activeTab) {
@@ -1145,6 +1291,12 @@ geminiSave <- function(values, activeTab) {
     },
     "collabWorldMap" = {
       gemini <- values$WMGemini
+    },
+    "bradford" = {
+      gemini <- values$BradfordGemini
+    },
+    "lotka" = {
+      gemini <- values$LotkaGemini
     }
   )
   if (is.null(gemini)) {
@@ -1427,25 +1579,39 @@ merge_df_to_string <- function(df) {
 }
 
 plot2pngGemini <- function(p, filename, zoom = 2, type = "vis") {
-  html_name <- tempfile(fileext = ".html")
+  #html_name <- tempfile(fileext = ".html")
+  # remove file extensions from filename
+  filename_html <- tools::file_path_sans_ext(filename)
+  temp_html <- paste0(filename_html, ".html")
   switch(
     type,
     vis = {
-      visSave(p, html_name)
+      visSave(p, temp_html)
     },
     plotly = {
-      htmlwidgets::saveWidget(p, file = html_name)
+      htmlwidgets::saveWidget(p, file = temp_html, selfcontained = TRUE)
     }
   )
 
-  biblioShot(html_name, zoom = zoom, file = filename)
+  biblioShot(temp_html, zoom = zoom, file = filename, delay = 2.5)
+}
+
+getWD <- function() {
+  home_path <- Sys.getenv("HOME")
+  temp_path <- file.path(home_path, "temp")
+
+  if (!dir.exists(temp_path)) {
+    dir.create(temp_path, recursive = TRUE)
+  }
+
+  return(temp_path)
 }
 
 ## save all plots of the life cycle analysis
 DLC2Gemini <- function(DLCplotYear, DLCplotCum) {
   plots <- c("annual", "cumulative")
   files <- unlist(lapply(plots, function(x) {
-    paste0(tempdir(), "/plotDLC_", x, ".png")
+    paste0(getWD(), "/plotDLC_", x, ".png")
   }))
 
   plot2pngGemini(DLCplotYear, filename = files[1], type = "plotly")
@@ -1459,9 +1625,9 @@ TE2Gemini <- function(nexus, plotTE) {
   K <- length(nexus$TM)
   periods <- nexus$Nodes %>% select(group) %>% distinct() %>% pull()
   files <- unlist(lapply(periods, function(x) {
-    paste0(tempdir(), "/", x, "_period.png")
+    file.path(getWD(), paste0(x, "_period.png"))
   }))
-  files <- c(paste0(tempdir(), "/Evolution_Plot.png"), files)
+  files <- c(file.path(getWD(), "Evolution_Plot.png"), files)
 
   plot2pngGemini(plotTE, filename = files[1], type = "plotly")
 
@@ -1527,46 +1693,76 @@ gemini_to_html <- function(text, font_size = "16px") {
   # Divide text into lines
   lines <- unlist(strsplit(text, "\n", fixed = TRUE))
 
-  # Remove empty rows
-  lines <- lines[lines != ""]
-
   # Initialize HTML output with CSS styles including font size
   html_lines <- c(
     paste0(
-      "<div style='font-family: Arial, sans-serif; line-height: 1.3; margin: 0 auto; padding: 20px; font-size: ",
+      "<div style='font-family: Arial, sans-serif; line-height: 1.4; margin: 0 auto; padding: 15px; font-size: ",
       font_size,
       ";'>"
     )
   )
+
   in_list <- FALSE
   list_type <- ""
+  last_ol_number <- 0
 
-  for (i in 1:length(lines)) {
+  close_list <- function() {
+    if (in_list) {
+      if (list_type == "ul") {
+        html_lines <<- c(html_lines, "</ul>")
+      } else {
+        html_lines <<- c(html_lines, "</ol>")
+      }
+      in_list <<- FALSE
+    }
+  }
+
+  for (i in seq_along(lines)) {
     line <- trimws(lines[i])
 
-    # Jump empty lines
-    if (line == "") {
-      next
-    }
+    # Skip empty lines
+    if (line == "") next
 
-    # Title management (lines enclosed in **)
-    if (stringr::str_detect(line, "^\\*\\*[^*]+\\*\\*$")) {
-      # Close any open lists
-      if (in_list) {
-        if (list_type == "ul") {
-          html_lines <- c(html_lines, "</ul>")
-        } else {
-          html_lines <- c(html_lines, "</ol>")
-        }
-        in_list <- FALSE
-      }
+    # Skip horizontal rules (--- or ***)
+    if (grepl("^[-*_]{3,}\\s*$", line)) next
 
-      # Convert titles
-      title_text <- stringr::str_replace_all(line, "^\\*\\*(.+)\\*\\*$", "\\1")
+    # Markdown header management (lines starting with #, ##, ###, ####)
+    if (stringr::str_detect(line, "^#{1,4}\\s+")) {
+      close_list()
+
+      header_level <- nchar(stringr::str_extract(line, "^#+"))
+      header_text <- stringr::str_replace(line, "^#+\\s+", "")
+      header_text <- stringr::str_replace(header_text, "\\s*#+\\s*$", "")
+      header_text <- stringr::str_replace_all(header_text, "\\*\\*([^*]+)\\*\\*", "\\1")
+
+      h_tag <- paste0("h", min(header_level + 1, 5))
+      h_size <- switch(as.character(header_level),
+        "1" = "font-size: 1.3em;",
+        "2" = "font-size: 1.15em;",
+        "3" = "font-size: 1.05em;",
+        "font-size: 1em;"
+      )
       html_lines <- c(
         html_lines,
         paste0(
-          "<h3 style='color: #333; border-bottom: 2px solid #007acc; padding-bottom: 5px; margin-bottom: 10px; margin-top: 20px;'>",
+          "<", h_tag, " style='color: #333; border-bottom: 1px solid #007acc; padding-bottom: 4px; margin-bottom: 6px; margin-top: 14px; ", h_size, "'>",
+          header_text,
+          "</", h_tag, ">"
+        )
+      )
+      next
+    }
+
+    # Title management (lines enclosed in ** only)
+    if (stringr::str_detect(line, "^\\*\\*[^*]+\\*\\*$")) {
+      close_list()
+
+      title_text <- stringr::str_replace_all(line, "^\\*\\*(.+)\\*\\*$", "\\1")
+      title_text <- stringr::str_replace(title_text, "^\\d+\\.\\s*", "")
+      html_lines <- c(
+        html_lines,
+        paste0(
+          "<h3 style='color: #333; border-bottom: 1px solid #007acc; padding-bottom: 4px; margin-bottom: 6px; margin-top: 14px;'>",
           title_text,
           "</h3>"
         )
@@ -1574,82 +1770,66 @@ gemini_to_html <- function(text, font_size = "16px") {
       next
     }
 
-    # Managing bulleted lists (starting with *)
-    if (stringr::str_detect(line, "^\\s*\\*\\s+")) {
-      # If we are not already in a bulleted list, start it
+    # Managing bulleted lists (starting with * or -)
+    if (stringr::str_detect(line, "^\\s*[*\\-]\\s+")) {
       if (!in_list || list_type != "ul") {
-        if (in_list && list_type == "ol") {
-          html_lines <- c(html_lines, "</ol>")
-        }
+        close_list()
         html_lines <- c(
           html_lines,
-          "<ul style='margin-bottom: 10px; margin-top: 5px;'>"
+          "<ul style='margin-bottom: 6px; margin-top: 4px;'>"
         )
         in_list <- TRUE
         list_type <- "ul"
       }
 
-      # Remove the asterisk and format the content
-      item_text <- stringr::str_replace(line, "^\\s*\\*\\s+", "")
+      item_text <- stringr::str_replace(line, "^\\s*[*\\-]\\s+", "")
       item_text <- format_inline_text(item_text)
+
       html_lines <- c(
         html_lines,
-        paste0("<li style='margin-bottom: 3px;'>", item_text, "</li>")
+        paste0("<li style='margin-bottom: 2px;'>", item_text, "</li>")
       )
       next
     }
 
     # Managing numbered lists (starting with a number followed by a period)
     if (stringr::str_detect(line, "^\\s*\\d+\\.\\s+")) {
-      # If we are not already in a numbered list, start it
+      item_number <- as.integer(stringr::str_extract(line, "^\\s*\\d+"))
+
       if (!in_list || list_type != "ol") {
-        if (in_list && list_type == "ul") {
-          html_lines <- c(html_lines, "</ul>")
-        }
+        close_list()
+        start_attr <- if (item_number > 1) paste0(" start='", item_number, "'") else ""
         html_lines <- c(
           html_lines,
-          "<ol style='margin-bottom: 10px; margin-top: 5px;'>"
+          paste0("<ol style='margin-bottom: 6px; margin-top: 4px;'", start_attr, ">")
         )
         in_list <- TRUE
         list_type <- "ol"
       }
 
-      # Remove the number and format the content
+      last_ol_number <- item_number
       item_text <- stringr::str_replace(line, "^\\s*\\d+\\.\\s+", "")
       item_text <- format_inline_text(item_text)
       html_lines <- c(
         html_lines,
-        paste0("<li style='margin-bottom: 3px;'>", item_text, "</li>")
+        paste0("<li style='margin-bottom: 2px;'>", item_text, "</li>")
       )
       next
     }
 
-    # If we get here and we're in a list, let's close it
-    if (in_list) {
-      if (list_type == "ul") {
-        html_lines <- c(html_lines, "</ul>")
-      } else {
-        html_lines <- c(html_lines, "</ol>")
-      }
-      in_list <- FALSE
-    }
+    # Non-list, non-header line: close any open list
+    close_list()
 
     # Normal paragraph management
     formatted_line <- format_inline_text(line)
     html_lines <- c(
       html_lines,
-      paste0("<p style='margin-bottom: 8px;'>", formatted_line, "</p>")
+      paste0("<p style='margin-bottom: 5px; margin-top: 2px;'>", formatted_line, "</p>")
     )
   }
 
   # Close any lists that remain open
-  if (in_list) {
-    if (list_type == "ul") {
-      html_lines <- c(html_lines, "</ul>")
-    } else {
-      html_lines <- c(html_lines, "</ol>")
-    }
-  }
+  close_list()
 
   # Close the container div
   html_lines <- c(html_lines, "</div>")

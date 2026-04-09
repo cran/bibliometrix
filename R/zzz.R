@@ -19,6 +19,7 @@ utils::globalVariables(c("matches", "KW_Merged"))
 #' @import openalexR
 #' @import ca
 #' @import visNetwork
+#' @importFrom methods new
 #' @importFrom purrr map2_dfr
 #' @importFrom purrr map_dfr
 #' @importFrom purrr map_df
@@ -35,7 +36,9 @@ utils::globalVariables(c("matches", "KW_Merged"))
 #' @importFrom dplyr lead
 #' @importFrom dplyr pull
 #' @importFrom dplyr arrange
-#' @importFrom dplyr do
+#' @importFrom dplyr everything
+#' @importFrom dplyr where
+#' @importFrom dplyr pick
 #' @importFrom dplyr distinct
 #' @importFrom dplyr join_by
 #' @importFrom dplyr n
@@ -49,9 +52,6 @@ utils::globalVariables(c("matches", "KW_Merged"))
 #' @importFrom dplyr bind_rows
 #' @importFrom dplyr group_by
 #' @importFrom dplyr mutate
-#' @importFrom dplyr mutate_at
-#' @importFrom dplyr mutate_if
-#' @importFrom dplyr mutate_all
 #' @importFrom dplyr ungroup
 #' @importFrom dplyr rename
 #' @importFrom dplyr rename_with
@@ -63,7 +63,6 @@ utils::globalVariables(c("matches", "KW_Merged"))
 #' @importFrom dplyr inner_join
 #' @importFrom dplyr left_join
 #' @importFrom dplyr right_join
-#' @importFrom dplyr top_n
 #' @importFrom dplyr relocate
 #' @importFrom dplyr slice_head
 #' @importFrom dplyr slice_tail
@@ -100,9 +99,6 @@ utils::globalVariables(c("matches", "KW_Merged"))
 #' @importFrom grDevices pdf
 #' @importFrom grDevices chull
 #' @importFrom grDevices heat.colors
-#' @importFrom DT DTOutput
-#' @importFrom DT renderDT
-#' @importFrom DT datatable
 #' @importFrom stringdist stringdistmatrix
 #' @importFrom rscopus affiliation_retrieval
 #' @importFrom rscopus author_df_orig
@@ -296,8 +292,10 @@ utils::globalVariables(c("matches", "KW_Merged"))
 # @importFrom rio import
 .onAttach <- function(...) {
   packageStartupMessage(
-    "Please note that our software is open source and available for use, distributed under the MIT license.\nWhen it is used in a publication, we ask that authors properly cite the following reference:\n\nAria, M. & Cuccurullo, C. (2017) bibliometrix: An R-tool for comprehensive science mapping analysis,
-                        Journal of Informetrics, 11(4), pp 959-975, Elsevier.\n\nFailure to properly cite the software is considered a violation of the license.
+    "Please note that our software is open source and available for use, distributed under the MIT license.\nWhen it is used in a publication, we ask that authors properly cite the following references:\n\nAria, M. & Cuccurullo, C. (2017) bibliometrix: An R-tool for comprehensive science mapping analysis,
+                        Journal of Informetrics, 11(4), pp 959-975, Elsevier.\n
+Aria, M. & Cuccurullo, C. (2026) Science Mapping Analysis - A primer with Biblioshiny,
+                        McGraw-Hill, ISBN: 978-88-386-2297-7.\n\nFailure to properly cite the software is considered a violation of the license.
                         \nFor information and bug reports:
                         - Take a look at https://www.bibliometrix.org
                         - Send an email to info@bibliometrix.org
