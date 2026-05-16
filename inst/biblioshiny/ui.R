@@ -1016,11 +1016,7 @@ body <- dashboardBody(
           column(1),
           column(
             10,
-            HTML(info),
-            div(
-              img(src = "table_DBformats.jpg", height = "70%", width = "70%"),
-              style = "text-align: center;"
-            )
+            HTML(info)
           ),
           column(1)
         )
@@ -3695,6 +3691,7 @@ body <- dashboardBody(
         column(
           9,
           tabsetPanel(
+            id = "authorProfileTabs",
             type = "tabs",
             tabPanel(
               "Global Profile",
@@ -3774,7 +3771,23 @@ body <- dashboardBody(
                     )
                   )
                 ),
-                column(4)
+                column(
+                  4,
+                  div(
+                    align = "center",
+                    title = "Export profile card as PNG",
+                    do.call(
+                      "actionButton",
+                      c(list(
+                        label = NULL,
+                        style = "display:block; height: 37px; width: 37px; border-radius: 50%;
+                                      border: 1px; margin-top: 16px;",
+                        icon = icon(name = "download", lib = "glyphicon"),
+                        inputId = "exportAuthorCard"
+                      ))
+                    )
+                  )
+                )
               ),
               br(),
               div(
@@ -5691,7 +5704,7 @@ body <- dashboardBody(
                   )
                 ),
 
-                # Text Editing Box (collapsed)
+                # Text Editing Box
                 box(
                   title = span(
                     icon("edit", style = "margin-right: 5px;"),
@@ -5703,87 +5716,104 @@ body <- dashboardBody(
                   solidHeader = FALSE,
                   collapsed = TRUE,
                   status = "warning",
-
-                  selectInput(
-                    "MostRelWordsStopFile",
-                    "Load a list of terms to remove",
-                    choices = c(
-                      "Yes" = "Y",
-                      "No" = "N"
-                    ),
-                    selected = "N"
-                  ),
-                  conditionalPanel(
-                    condition = "input.MostRelWordsStopFile == 'Y'",
-                    helpText(
-                      h5(strong(
-                        "Upload a TXT or CSV file containing a list of terms you want to remove from the analysis."
-                      )),
-                      h5(
-                        ("Terms have to be separated by a standard separator (comma, semicolon or tabulator).")
-                      )
-                    ),
-                    fileInput(
-                      "MostRelWordsStop",
-                      "",
-                      multiple = FALSE,
-                      accept = c(
-                        "text/csv",
-                        "text/comma-separated-values,text/plain",
-                        ".csv",
-                        ".txt"
-                      )
+                  div(
+                    style = "background-color: #fff8e6; padding: 12px; border-radius: 5px; margin-bottom: 15px; border-left: 3px solid #f39c12;",
+                    h6(
+                      icon("ban", style = "margin-right: 5px;"),
+                      strong("Stop Words"),
+                      style = "color: #e67e22; margin-bottom: 10px;"
                     ),
                     selectInput(
-                      "MostRelWordsSep",
-                      "File Separator",
-                      choices = c(
-                        'Comma ","' = ",",
-                        'Semicolon ";"' = ";",
-                        "Tab " = "\t"
-                      ),
-                      selected = ","
+                      "MostRelWordsStopFile",
+                      "Load a list of terms to remove",
+                      choices = c("Yes" = "Y", "No" = "N"),
+                      selected = "N"
+                    ),
+                    conditionalPanel(
+                      condition = "input.MostRelWordsStopFile == 'Y'",
+                      div(
+                        style = "margin-top: 10px; padding: 10px; background-color: #fff; border-radius: 4px;",
+                        helpText(
+                          h5(strong(
+                            "Upload a TXT or CSV file containing a list of terms you want to remove from the analysis."
+                          )),
+                          h5(
+                            "Terms have to be separated by a standard separator (comma, semicolon or tabulator)."
+                          ),
+                          style = "color: #666;"
+                        ),
+                        fileInput(
+                          "MostRelWordsStop",
+                          "",
+                          multiple = FALSE,
+                          accept = c(
+                            "text/csv",
+                            "text/comma-separated-values,text/plain",
+                            ".csv",
+                            ".txt"
+                          )
+                        ),
+                        selectInput(
+                          "MostRelWordsSep",
+                          "File Separator",
+                          choices = c(
+                            'Comma ","' = ",",
+                            'Semicolon ";"' = ";",
+                            "Tab" = "\t"
+                          ),
+                          selected = ","
+                        )
+                      )
                     )
                   ),
-                  selectInput(
-                    "MRWSynFile",
-                    "Load a list of synonyms",
-                    choices = c(
-                      "Yes" = "Y",
-                      "No" = "N"
-                    ),
-                    selected = "N"
-                  ),
-                  conditionalPanel(
-                    condition = "input.MRWSynFile == 'Y'",
-                    helpText(
-                      h5(strong(
-                        "Upload a TXT or CSV file containing terms and their respective synonyms."
-                      )),
-                      h5(
-                        ("Each row must contain a term and related synonyms, separated by a standard separator (comma, semicolon or tabulator).")
-                      )
-                    ),
-                    fileInput(
-                      "MRWSyn",
-                      "",
-                      multiple = FALSE,
-                      accept = c(
-                        "text/csv",
-                        "text/comma-separated-values,text/plain",
-                        ".csv",
-                        ".txt"
-                      )
+                  div(
+                    style = "background-color: #e8f5e9; padding: 12px; border-radius: 5px; border-left: 3px solid #4caf50;",
+                    h6(
+                      icon("exchange-alt", style = "margin-right: 5px;"),
+                      strong("Synonyms"),
+                      style = "color: #2e7d32; margin-bottom: 10px;"
                     ),
                     selectInput(
-                      "MRWSynSep",
-                      "File Separator",
-                      choices = c(
-                        'Comma ","' = ",",
-                        'Semicolon ";"' = ";",
-                        "Tab " = "\t"
-                      ),
-                      selected = ","
+                      "MRWSynFile",
+                      "Load a list of synonyms",
+                      choices = c("Yes" = "Y", "No" = "N"),
+                      selected = "N"
+                    ),
+                    conditionalPanel(
+                      condition = "input.MRWSynFile == 'Y'",
+                      div(
+                        style = "margin-top: 10px; padding: 10px; background-color: #fff; border-radius: 4px;",
+                        helpText(
+                          h5(strong(
+                            "Upload a TXT or CSV file containing, in each row, a list of synonyms that will be merged into a single term."
+                          )),
+                          h5(
+                            "Terms have to be separated by a standard separator. Rows have to be separated by return separator."
+                          ),
+                          style = "color: #666;"
+                        ),
+                        fileInput(
+                          "MRWSyn",
+                          "",
+                          multiple = FALSE,
+                          accept = c(
+                            "text/csv",
+                            "text/comma-separated-values,text/plain",
+                            ".csv",
+                            ".txt"
+                          )
+                        ),
+                        selectInput(
+                          "MRWSynSep",
+                          "File Separator",
+                          choices = c(
+                            'Comma ","' = ",",
+                            'Semicolon ";"' = ";",
+                            "Tab" = "\t"
+                          ),
+                          selected = ","
+                        )
+                      )
                     )
                   )
                 ),
@@ -5941,9 +5971,7 @@ body <- dashboardBody(
                   )
                 ),
 
-                # ============================================
-                # TEXT EDITING BOX
-                # ============================================
+                # Text Editing Box
                 box(
                   title = span(
                     icon("edit", style = "margin-right: 5px;"),
@@ -5955,87 +5983,104 @@ body <- dashboardBody(
                   solidHeader = FALSE,
                   collapsed = TRUE,
                   status = "warning",
-
-                  selectInput(
-                    "WCStopFile",
-                    "Load a list of terms to remove",
-                    choices = c(
-                      "Yes" = "Y",
-                      "No" = "N"
-                    ),
-                    selected = "N"
-                  ),
-                  conditionalPanel(
-                    condition = "input.WCStopFile == 'Y'",
-                    helpText(
-                      h5(strong(
-                        "Upload a TXT or CSV file containing a list of terms you want to remove from the analysis."
-                      )),
-                      h5(
-                        ("Terms have to be separated by a standard separator (comma, semicolon or tabulator).")
-                      )
-                    ),
-                    fileInput(
-                      "WCStop",
-                      "",
-                      multiple = FALSE,
-                      accept = c(
-                        "text/csv",
-                        "text/comma-separated-values,text/plain",
-                        ".csv",
-                        ".txt"
-                      )
+                  div(
+                    style = "background-color: #fff8e6; padding: 12px; border-radius: 5px; margin-bottom: 15px; border-left: 3px solid #f39c12;",
+                    h6(
+                      icon("ban", style = "margin-right: 5px;"),
+                      strong("Stop Words"),
+                      style = "color: #e67e22; margin-bottom: 10px;"
                     ),
                     selectInput(
-                      "WCSep",
-                      "File Separator",
-                      choices = c(
-                        'Comma ","' = ",",
-                        'Semicolon ";"' = ";",
-                        "Tab " = "\t"
-                      ),
-                      selected = ","
+                      "WCStopFile",
+                      "Load a list of terms to remove",
+                      choices = c("Yes" = "Y", "No" = "N"),
+                      selected = "N"
+                    ),
+                    conditionalPanel(
+                      condition = "input.WCStopFile == 'Y'",
+                      div(
+                        style = "margin-top: 10px; padding: 10px; background-color: #fff; border-radius: 4px;",
+                        helpText(
+                          h5(strong(
+                            "Upload a TXT or CSV file containing a list of terms you want to remove from the analysis."
+                          )),
+                          h5(
+                            "Terms have to be separated by a standard separator (comma, semicolon or tabulator)."
+                          ),
+                          style = "color: #666;"
+                        ),
+                        fileInput(
+                          "WCStop",
+                          "",
+                          multiple = FALSE,
+                          accept = c(
+                            "text/csv",
+                            "text/comma-separated-values,text/plain",
+                            ".csv",
+                            ".txt"
+                          )
+                        ),
+                        selectInput(
+                          "WCSep",
+                          "File Separator",
+                          choices = c(
+                            'Comma ","' = ",",
+                            'Semicolon ";"' = ";",
+                            "Tab" = "\t"
+                          ),
+                          selected = ","
+                        )
+                      )
                     )
                   ),
-                  selectInput(
-                    "WCSynFile",
-                    "Load a list of synonyms",
-                    choices = c(
-                      "Yes" = "Y",
-                      "No" = "N"
-                    ),
-                    selected = "N"
-                  ),
-                  conditionalPanel(
-                    condition = "input.WCSynFile == 'Y'",
-                    helpText(
-                      h5(strong(
-                        "Upload a TXT or CSV file containing, in each row, a list of synonyms, that will be merged into a single term (the first word contained in the row)"
-                      )),
-                      h5(
-                        ("Terms have to be separated by a standard separator (comma, semicolon or tabulator). Rows have to be separated by return separator.")
-                      )
-                    ),
-                    fileInput(
-                      "WCSyn",
-                      "",
-                      multiple = FALSE,
-                      accept = c(
-                        "text/csv",
-                        "text/comma-separated-values,text/plain",
-                        ".csv",
-                        ".txt"
-                      )
+                  div(
+                    style = "background-color: #e8f5e9; padding: 12px; border-radius: 5px; border-left: 3px solid #4caf50;",
+                    h6(
+                      icon("exchange-alt", style = "margin-right: 5px;"),
+                      strong("Synonyms"),
+                      style = "color: #2e7d32; margin-bottom: 10px;"
                     ),
                     selectInput(
-                      "WCSynSep",
-                      "File Separator",
-                      choices = c(
-                        'Comma ","' = ",",
-                        'Semicolon ";"' = ";",
-                        "Tab " = "\t"
-                      ),
-                      selected = ","
+                      "WCSynFile",
+                      "Load a list of synonyms",
+                      choices = c("Yes" = "Y", "No" = "N"),
+                      selected = "N"
+                    ),
+                    conditionalPanel(
+                      condition = "input.WCSynFile == 'Y'",
+                      div(
+                        style = "margin-top: 10px; padding: 10px; background-color: #fff; border-radius: 4px;",
+                        helpText(
+                          h5(strong(
+                            "Upload a TXT or CSV file containing, in each row, a list of synonyms that will be merged into a single term."
+                          )),
+                          h5(
+                            "Terms have to be separated by a standard separator. Rows have to be separated by return separator."
+                          ),
+                          style = "color: #666;"
+                        ),
+                        fileInput(
+                          "WCSyn",
+                          "",
+                          multiple = FALSE,
+                          accept = c(
+                            "text/csv",
+                            "text/comma-separated-values,text/plain",
+                            ".csv",
+                            ".txt"
+                          )
+                        ),
+                        selectInput(
+                          "WCSynSep",
+                          "File Separator",
+                          choices = c(
+                            'Comma ","' = ",",
+                            'Semicolon ";"' = ";",
+                            "Tab" = "\t"
+                          ),
+                          selected = ","
+                        )
+                      )
                     )
                   )
                 ),
@@ -6342,7 +6387,7 @@ body <- dashboardBody(
                   )
                 ),
 
-                # Text Editing Box (collapsed)
+                # Text Editing Box
                 box(
                   title = span(
                     icon("edit", style = "margin-right: 5px;"),
@@ -6354,87 +6399,104 @@ body <- dashboardBody(
                   solidHeader = FALSE,
                   collapsed = TRUE,
                   status = "warning",
-
-                  selectInput(
-                    "TreeMapStopFile",
-                    "Load a list of terms to remove",
-                    choices = c(
-                      "Yes" = "Y",
-                      "No" = "N"
-                    ),
-                    selected = "N"
-                  ),
-                  conditionalPanel(
-                    condition = "input.TreeMapStopFile == 'Y'",
-                    helpText(
-                      h5(strong(
-                        "Upload a TXT or CSV file containing a list of terms you want to remove from the analysis."
-                      )),
-                      h5(
-                        ("Terms have to be separated by a standard separator (comma, semicolon or tabulator).")
-                      )
-                    ),
-                    fileInput(
-                      "TreeMapStop",
-                      "",
-                      multiple = FALSE,
-                      accept = c(
-                        "text/csv",
-                        "text/comma-separated-values,text/plain",
-                        ".csv",
-                        ".txt"
-                      )
+                  div(
+                    style = "background-color: #fff8e6; padding: 12px; border-radius: 5px; margin-bottom: 15px; border-left: 3px solid #f39c12;",
+                    h6(
+                      icon("ban", style = "margin-right: 5px;"),
+                      strong("Stop Words"),
+                      style = "color: #e67e22; margin-bottom: 10px;"
                     ),
                     selectInput(
-                      "TreeMapSep",
-                      "File Separator",
-                      choices = c(
-                        'Comma ","' = ",",
-                        'Semicolon ";"' = ";",
-                        "Tab " = "\t"
-                      ),
-                      selected = ","
+                      "TreeMapStopFile",
+                      "Load a list of terms to remove",
+                      choices = c("Yes" = "Y", "No" = "N"),
+                      selected = "N"
+                    ),
+                    conditionalPanel(
+                      condition = "input.TreeMapStopFile == 'Y'",
+                      div(
+                        style = "margin-top: 10px; padding: 10px; background-color: #fff; border-radius: 4px;",
+                        helpText(
+                          h5(strong(
+                            "Upload a TXT or CSV file containing a list of terms you want to remove from the analysis."
+                          )),
+                          h5(
+                            "Terms have to be separated by a standard separator (comma, semicolon or tabulator)."
+                          ),
+                          style = "color: #666;"
+                        ),
+                        fileInput(
+                          "TreeMapStop",
+                          "",
+                          multiple = FALSE,
+                          accept = c(
+                            "text/csv",
+                            "text/comma-separated-values,text/plain",
+                            ".csv",
+                            ".txt"
+                          )
+                        ),
+                        selectInput(
+                          "TreeMapSep",
+                          "File Separator",
+                          choices = c(
+                            'Comma ","' = ",",
+                            'Semicolon ";"' = ";",
+                            "Tab" = "\t"
+                          ),
+                          selected = ","
+                        )
+                      )
                     )
                   ),
-                  selectInput(
-                    "TreeMapSynFile",
-                    "Load a list of synonyms",
-                    choices = c(
-                      "Yes" = "Y",
-                      "No" = "N"
-                    ),
-                    selected = "N"
-                  ),
-                  conditionalPanel(
-                    condition = "input.TreeMapSynFile == 'Y'",
-                    helpText(
-                      h5(strong(
-                        "Upload a TXT or CSV file containing terms and their respective synonyms."
-                      )),
-                      h5(
-                        ("Each row must contain a term and related synonyms, separated by a standard separator (comma, semicolon or tabulator).")
-                      )
-                    ),
-                    fileInput(
-                      "TreeMapSyn",
-                      "",
-                      multiple = FALSE,
-                      accept = c(
-                        "text/csv",
-                        "text/comma-separated-values,text/plain",
-                        ".csv",
-                        ".txt"
-                      )
+                  div(
+                    style = "background-color: #e8f5e9; padding: 12px; border-radius: 5px; border-left: 3px solid #4caf50;",
+                    h6(
+                      icon("exchange-alt", style = "margin-right: 5px;"),
+                      strong("Synonyms"),
+                      style = "color: #2e7d32; margin-bottom: 10px;"
                     ),
                     selectInput(
-                      "TreeMapSynSep",
-                      "File Separator",
-                      choices = c(
-                        'Comma ","' = ",",
-                        'Semicolon ";"' = ";",
-                        "Tab " = "\t"
-                      ),
-                      selected = ","
+                      "TreeMapSynFile",
+                      "Load a list of synonyms",
+                      choices = c("Yes" = "Y", "No" = "N"),
+                      selected = "N"
+                    ),
+                    conditionalPanel(
+                      condition = "input.TreeMapSynFile == 'Y'",
+                      div(
+                        style = "margin-top: 10px; padding: 10px; background-color: #fff; border-radius: 4px;",
+                        helpText(
+                          h5(strong(
+                            "Upload a TXT or CSV file containing, in each row, a list of synonyms that will be merged into a single term."
+                          )),
+                          h5(
+                            "Terms have to be separated by a standard separator. Rows have to be separated by return separator."
+                          ),
+                          style = "color: #666;"
+                        ),
+                        fileInput(
+                          "TreeMapSyn",
+                          "",
+                          multiple = FALSE,
+                          accept = c(
+                            "text/csv",
+                            "text/comma-separated-values,text/plain",
+                            ".csv",
+                            ".txt"
+                          )
+                        ),
+                        selectInput(
+                          "TreeMapSynSep",
+                          "File Separator",
+                          choices = c(
+                            'Comma ","' = ",",
+                            'Semicolon ";"' = ";",
+                            "Tab" = "\t"
+                          ),
+                          selected = ","
+                        )
+                      )
                     )
                   )
                 ),
@@ -6576,9 +6638,7 @@ body <- dashboardBody(
                   )
                 ),
 
-                # ============================================
-                # TEXT EDITING BOX
-                # ============================================
+                # Text Editing Box
                 box(
                   title = span(
                     icon("edit", style = "margin-right: 5px;"),
@@ -6590,87 +6650,104 @@ body <- dashboardBody(
                   solidHeader = FALSE,
                   collapsed = TRUE,
                   status = "warning",
-
-                  selectInput(
-                    "WDStopFile",
-                    "Load a list of terms to remove",
-                    choices = c(
-                      "Yes" = "Y",
-                      "No" = "N"
-                    ),
-                    selected = "N"
-                  ),
-                  conditionalPanel(
-                    condition = "input.WDStopFile == 'Y'",
-                    helpText(
-                      h5(strong(
-                        "Upload a TXT or CSV file containing a list of terms you want to remove from the analysis."
-                      )),
-                      h5(
-                        ("Terms have to be separated by a standard separator (comma, semicolon or tabulator).")
-                      )
-                    ),
-                    fileInput(
-                      "WDStop",
-                      "",
-                      multiple = FALSE,
-                      accept = c(
-                        "text/csv",
-                        "text/comma-separated-values,text/plain",
-                        ".csv",
-                        ".txt"
-                      )
+                  div(
+                    style = "background-color: #fff8e6; padding: 12px; border-radius: 5px; margin-bottom: 15px; border-left: 3px solid #f39c12;",
+                    h6(
+                      icon("ban", style = "margin-right: 5px;"),
+                      strong("Stop Words"),
+                      style = "color: #e67e22; margin-bottom: 10px;"
                     ),
                     selectInput(
-                      "WDSep",
-                      "File Separator",
-                      choices = c(
-                        'Comma ","' = ",",
-                        'Semicolon ";"' = ";",
-                        "Tab " = "\t"
-                      ),
-                      selected = ","
+                      "WDStopFile",
+                      "Load a list of terms to remove",
+                      choices = c("Yes" = "Y", "No" = "N"),
+                      selected = "N"
+                    ),
+                    conditionalPanel(
+                      condition = "input.WDStopFile == 'Y'",
+                      div(
+                        style = "margin-top: 10px; padding: 10px; background-color: #fff; border-radius: 4px;",
+                        helpText(
+                          h5(strong(
+                            "Upload a TXT or CSV file containing a list of terms you want to remove from the analysis."
+                          )),
+                          h5(
+                            "Terms have to be separated by a standard separator (comma, semicolon or tabulator)."
+                          ),
+                          style = "color: #666;"
+                        ),
+                        fileInput(
+                          "WDStop",
+                          "",
+                          multiple = FALSE,
+                          accept = c(
+                            "text/csv",
+                            "text/comma-separated-values,text/plain",
+                            ".csv",
+                            ".txt"
+                          )
+                        ),
+                        selectInput(
+                          "WDSep",
+                          "File Separator",
+                          choices = c(
+                            'Comma ","' = ",",
+                            'Semicolon ";"' = ";",
+                            "Tab" = "\t"
+                          ),
+                          selected = ","
+                        )
+                      )
                     )
                   ),
-                  selectInput(
-                    "WDSynFile",
-                    "Load a list of synonyms",
-                    choices = c(
-                      "Yes" = "Y",
-                      "No" = "N"
-                    ),
-                    selected = "N"
-                  ),
-                  conditionalPanel(
-                    condition = "input.WDSynFile == 'Y'",
-                    helpText(
-                      h5(strong(
-                        "Upload a TXT or CSV file containing, in each row, a list of synonyms, that will be merged into a single term (the first word contained in the row)"
-                      )),
-                      h5(
-                        ("Terms have to be separated by a standard separator (comma, semicolon or tabulator). Rows have to be separated by return separator.")
-                      )
-                    ),
-                    fileInput(
-                      "WDSyn",
-                      "",
-                      multiple = FALSE,
-                      accept = c(
-                        "text/csv",
-                        "text/comma-separated-values,text/plain",
-                        ".csv",
-                        ".txt"
-                      )
+                  div(
+                    style = "background-color: #e8f5e9; padding: 12px; border-radius: 5px; border-left: 3px solid #4caf50;",
+                    h6(
+                      icon("exchange-alt", style = "margin-right: 5px;"),
+                      strong("Synonyms"),
+                      style = "color: #2e7d32; margin-bottom: 10px;"
                     ),
                     selectInput(
-                      "WDSynSep",
-                      "File Separator",
-                      choices = c(
-                        'Comma ","' = ",",
-                        'Semicolon ";"' = ";",
-                        "Tab " = "\t"
-                      ),
-                      selected = ","
+                      "WDSynFile",
+                      "Load a list of synonyms",
+                      choices = c("Yes" = "Y", "No" = "N"),
+                      selected = "N"
+                    ),
+                    conditionalPanel(
+                      condition = "input.WDSynFile == 'Y'",
+                      div(
+                        style = "margin-top: 10px; padding: 10px; background-color: #fff; border-radius: 4px;",
+                        helpText(
+                          h5(strong(
+                            "Upload a TXT or CSV file containing, in each row, a list of synonyms that will be merged into a single term."
+                          )),
+                          h5(
+                            "Terms have to be separated by a standard separator. Rows have to be separated by return separator."
+                          ),
+                          style = "color: #666;"
+                        ),
+                        fileInput(
+                          "WDSyn",
+                          "",
+                          multiple = FALSE,
+                          accept = c(
+                            "text/csv",
+                            "text/comma-separated-values,text/plain",
+                            ".csv",
+                            ".txt"
+                          )
+                        ),
+                        selectInput(
+                          "WDSynSep",
+                          "File Separator",
+                          choices = c(
+                            'Comma ","' = ",",
+                            'Semicolon ";"' = ";",
+                            "Tab" = "\t"
+                          ),
+                          selected = ","
+                        )
+                      )
                     )
                   )
                 ),
@@ -6875,9 +6952,7 @@ body <- dashboardBody(
                   )
                 ),
 
-                # ============================================
-                # TEXT EDITING BOX
-                # ============================================
+                # Text Editing Box
                 box(
                   title = span(
                     icon("edit", style = "margin-right: 5px;"),
@@ -6889,87 +6964,104 @@ body <- dashboardBody(
                   solidHeader = FALSE,
                   collapsed = TRUE,
                   status = "warning",
-
-                  selectInput(
-                    "TTStopFile",
-                    "Load a list of terms to remove",
-                    choices = c(
-                      "Yes" = "Y",
-                      "No" = "N"
-                    ),
-                    selected = "N"
-                  ),
-                  conditionalPanel(
-                    condition = "input.TTStopFile == 'Y'",
-                    helpText(
-                      h5(strong(
-                        "Upload a TXT or CSV file containing a list of terms you want to remove from the analysis."
-                      )),
-                      h5(
-                        ("Terms have to be separated by a standard separator (comma, semicolon or tabulator).")
-                      )
-                    ),
-                    fileInput(
-                      "TTStop",
-                      "",
-                      multiple = FALSE,
-                      accept = c(
-                        "text/csv",
-                        "text/comma-separated-values,text/plain",
-                        ".csv",
-                        ".txt"
-                      )
+                  div(
+                    style = "background-color: #fff8e6; padding: 12px; border-radius: 5px; margin-bottom: 15px; border-left: 3px solid #f39c12;",
+                    h6(
+                      icon("ban", style = "margin-right: 5px;"),
+                      strong("Stop Words"),
+                      style = "color: #e67e22; margin-bottom: 10px;"
                     ),
                     selectInput(
-                      "TTSep",
-                      "File Separator",
-                      choices = c(
-                        'Comma ","' = ",",
-                        'Semicolon ";"' = ";",
-                        "Tab " = "\t"
-                      ),
-                      selected = ","
+                      "TTStopFile",
+                      "Load a list of terms to remove",
+                      choices = c("Yes" = "Y", "No" = "N"),
+                      selected = "N"
+                    ),
+                    conditionalPanel(
+                      condition = "input.TTStopFile == 'Y'",
+                      div(
+                        style = "margin-top: 10px; padding: 10px; background-color: #fff; border-radius: 4px;",
+                        helpText(
+                          h5(strong(
+                            "Upload a TXT or CSV file containing a list of terms you want to remove from the analysis."
+                          )),
+                          h5(
+                            "Terms have to be separated by a standard separator (comma, semicolon or tabulator)."
+                          ),
+                          style = "color: #666;"
+                        ),
+                        fileInput(
+                          "TTStop",
+                          "",
+                          multiple = FALSE,
+                          accept = c(
+                            "text/csv",
+                            "text/comma-separated-values,text/plain",
+                            ".csv",
+                            ".txt"
+                          )
+                        ),
+                        selectInput(
+                          "TTSep",
+                          "File Separator",
+                          choices = c(
+                            'Comma ","' = ",",
+                            'Semicolon ";"' = ";",
+                            "Tab" = "\t"
+                          ),
+                          selected = ","
+                        )
+                      )
                     )
                   ),
-                  selectInput(
-                    "TTSynFile",
-                    "Load a list of synonyms",
-                    choices = c(
-                      "Yes" = "Y",
-                      "No" = "N"
-                    ),
-                    selected = "N"
-                  ),
-                  conditionalPanel(
-                    condition = "input.TTSynFile == 'Y'",
-                    helpText(
-                      h5(strong(
-                        "Upload a TXT or CSV file containing, in each row, a list of synonyms, that will be merged into a single term (the first word contained in the row)"
-                      )),
-                      h5(
-                        ("Terms have to be separated by a standard separator (comma, semicolon or tabulator). Rows have to be separated by return separator.")
-                      )
-                    ),
-                    fileInput(
-                      "TTSyn",
-                      "",
-                      multiple = FALSE,
-                      accept = c(
-                        "text/csv",
-                        "text/comma-separated-values,text/plain",
-                        ".csv",
-                        ".txt"
-                      )
+                  div(
+                    style = "background-color: #e8f5e9; padding: 12px; border-radius: 5px; border-left: 3px solid #4caf50;",
+                    h6(
+                      icon("exchange-alt", style = "margin-right: 5px;"),
+                      strong("Synonyms"),
+                      style = "color: #2e7d32; margin-bottom: 10px;"
                     ),
                     selectInput(
-                      "TTSynSep",
-                      "File Separator",
-                      choices = c(
-                        'Comma ","' = ",",
-                        'Semicolon ";"' = ";",
-                        "Tab " = "\t"
-                      ),
-                      selected = ","
+                      "TTSynFile",
+                      "Load a list of synonyms",
+                      choices = c("Yes" = "Y", "No" = "N"),
+                      selected = "N"
+                    ),
+                    conditionalPanel(
+                      condition = "input.TTSynFile == 'Y'",
+                      div(
+                        style = "margin-top: 10px; padding: 10px; background-color: #fff; border-radius: 4px;",
+                        helpText(
+                          h5(strong(
+                            "Upload a TXT or CSV file containing, in each row, a list of synonyms that will be merged into a single term."
+                          )),
+                          h5(
+                            "Terms have to be separated by a standard separator. Rows have to be separated by return separator."
+                          ),
+                          style = "color: #666;"
+                        ),
+                        fileInput(
+                          "TTSyn",
+                          "",
+                          multiple = FALSE,
+                          accept = c(
+                            "text/csv",
+                            "text/comma-separated-values,text/plain",
+                            ".csv",
+                            ".txt"
+                          )
+                        ),
+                        selectInput(
+                          "TTSynSep",
+                          "File Separator",
+                          choices = c(
+                            'Comma ","' = ",",
+                            'Semicolon ";"' = ";",
+                            "Tab" = "\t"
+                          ),
+                          selected = ","
+                        )
+                      )
                     )
                   )
                 ),
@@ -7997,6 +8089,12 @@ body <- dashboardBody(
             tabPanel(
               "Table",
               shinycssloaders::withSpinner(uiOutput(outputId = "cocTable"))
+            ),
+            tabPanel(
+              "Documents",
+              shinycssloaders::withSpinner(uiOutput(
+                outputId = "cocTableDocument"
+              ))
             ),
             tabPanel(
               "Degree Plot",
@@ -11684,7 +11782,7 @@ body <- dashboardBody(
                           "shield-halved",
                           style = "color: #3498db; margin-right: 5px;"
                         ),
-                        "Your email is stored locally and only sent to OpenAlex for polite pool access."
+                        "Your email is stored locally and used as polite-pool identifier for both OpenAlex and PubMed (NCBI)."
                       ),
                       p(
                         icon(
@@ -11692,6 +11790,137 @@ body <- dashboardBody(
                           style = "color: #f39c12; margin-right: 5px;"
                         ),
                         "Polite pool users get faster responses and are not affected by rate limits."
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        ),
+
+        # ============================================
+        # SECTION 5: PUBMED API SETTINGS
+        # ============================================
+        fluidRow(
+          column(
+            12,
+            div(
+              class = "box box-primary",
+              div(
+                class = "box-header with-border",
+                h4(
+                  icon("dna", style = "margin-right: 8px;"),
+                  "PubMed API - Configuration",
+                  class = "box-title",
+                  style = "color: #16a085; font-weight: 600;"
+                )
+              ),
+              div(
+                class = "box-body",
+
+                # Description
+                div(
+                  style = "margin-bottom: 20px; padding: 15px; background-color: #d1f2eb; border-radius: 5px; border-left: 4px solid #16a085;",
+                  icon(
+                    "info-circle",
+                    style = "color: #117864; margin-right: 8px; font-size: 18px;"
+                  ),
+                  tags$span(
+                    style = "color: #0e6655; font-size: 14px;",
+                    HTML(
+                      "PubMed (NCBI E-utilities) accept an optional <strong>API key</strong> that raises the rate limit from <strong>3 to 10 requests/second</strong>. Get your free key at "
+                    ),
+                    tags$a(
+                      href = "https://www.ncbi.nlm.nih.gov/account/settings/",
+                      target = "_blank",
+                      style = "color: #0e6655; font-weight: bold; text-decoration: underline;",
+                      "ncbi.nlm.nih.gov/account/settings"
+                    ),
+                    HTML(
+                      ". The polite-pool email configured for OpenAlex above is also forwarded to NCBI."
+                    )
+                  )
+                ),
+
+                # API Key Configuration
+                fluidRow(
+                  column(
+                    6,
+                    div(
+                      style = "padding-right: 15px;",
+                      tags$label(
+                        "API Key",
+                        style = "font-weight: 600; color: #16a085; margin-bottom: 8px; display: block;"
+                      ),
+                      passwordInput(
+                        "pmApiKey",
+                        label = NULL,
+                        placeholder = "Enter your PubMed/NCBI API key",
+                        value = "",
+                        width = "100%"
+                      ),
+
+                      # Status Display
+                      div(
+                        style = "margin: 10px 0;",
+                        uiOutput("pmApiKeyStatus")
+                      ),
+
+                      # Action Buttons
+                      fluidRow(
+                        column(
+                          6,
+                          actionButton(
+                            "pmSetApiKey",
+                            "Save API Key",
+                            icon = icon("check"),
+                            class = "btn-primary btn-block",
+                            style = "font-weight: 600;"
+                          )
+                        ),
+                        column(
+                          6,
+                          actionButton(
+                            "pmRemoveApiKey",
+                            "Remove API Key",
+                            icon = icon("trash"),
+                            class = "btn-danger btn-block",
+                            style = "font-weight: 600;"
+                          )
+                        )
+                      )
+                    )
+                  ),
+                  column(
+                    6,
+                    div(
+                      style = "padding-left: 15px; margin-top: 28px; color: #555; font-size: 13px;",
+                      p(
+                        icon(
+                          "key",
+                          style = "color: #16a085; margin-right: 5px;"
+                        ),
+                        "Stored locally and exposed to pubmedR via the PUBMED_API_KEY / ENTREZ_KEY env vars."
+                      ),
+                      p(
+                        icon(
+                          "bolt",
+                          style = "color: #f39c12; margin-right: 5px;"
+                        ),
+                        "Without key: 3 requests/second. With free key: 10 requests/second."
+                      ),
+                      p(
+                        icon(
+                          "link",
+                          style = "color: #16a085; margin-right: 5px;"
+                        ),
+                        tags$a(
+                          href = "https://www.ncbi.nlm.nih.gov/account/settings/",
+                          target = "_blank",
+                          style = "color: #16a085; text-decoration: underline;",
+                          "Get your free NCBI API key here"
+                        )
                       )
                     )
                   )

@@ -1,7 +1,7 @@
 Package: bibliometrix
 Type: Package
 Title: Comprehensive Science Mapping Analysis
-Version: 5.3.0
+Version: 5.4.0
 Authors@R: c(
     person(given = "Massimo",
            family = "Aria",
@@ -31,19 +31,19 @@ Encoding: UTF-8
 Depends: R (>= 3.5.0)
 Imports: stats, grDevices, bibliometrixData, contentanalysis (>=
         1.0.0), dimensionsR, dplyr, ca, forcats, ggplot2, ggrepel,
-        igraph, Matrix, methods, plotly, openalexR, openxlsx, pubmedR,
-        purrr, readr, readxl, rscopus, shiny, shinycssloaders (>=
-        1.1.0), SnowballC, stringdist, stringi, stringr, tibble, tidyr,
-        tidytext, visNetwork
+        httr2, igraph, jsonlite, Matrix, methods, plotly, openalexR,
+        openxlsx, pubmedR (>= 1.0.1), purrr, readr, readxl, rscopus,
+        shiny, shinycssloaders (>= 1.1.0), SnowballC, stringdist,
+        stringi, stringr, tibble, tidyr, tidytext, visNetwork, xml2
 Suggests: knitr, ragg, rmarkdown, testthat (>= 3.0.0), wordcloud2
-RoxygenNote: 7.3.3
 NeedsCompilation: no
 Config/testthat/edition: 3
-Packaged: 2026-04-08 10:47:11 UTC; massimoaria
+Config/roxygen2/version: 8.0.0
+Packaged: 2026-05-16 10:59:38 UTC; massimoaria
 Author: Massimo Aria [cre, aut, cph] (ORCID:
     <https://orcid.org/0000-0002-8517-9411>),
   Corrado Cuccurullo [aut] (ORCID:
     <https://orcid.org/0000-0002-7401-8575>)
 Maintainer: Massimo Aria <aria@unina.it>
 Repository: CRAN
-Date/Publication: 2026-04-09 05:10:50 UTC
+Date/Publication: 2026-05-16 15:50:07 UTC

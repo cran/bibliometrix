@@ -321,13 +321,15 @@ To ensure the functionality of Biblioshiny,
   values$collection_description <- NULL
   values$gemini_additional <- NULL
 
-  ## OpenAlex polite pool email
+  ## OpenAlex polite pool email (also forwarded to PubMed/NCBI)
   path_oa_email <- file.path(home, ".biblio_openalex_email.txt")
   if (file.exists(path_oa_email)) {
     oa_saved_email <- trimws(readLines(path_oa_email, warn = FALSE)[1])
     if (!is.na(oa_saved_email) && nchar(oa_saved_email) >= 5) {
       Sys.setenv(openalexR.mailto = oa_saved_email)
       options(openalexR.mailto = oa_saved_email)
+      Sys.setenv(PUBMED_EMAIL = oa_saved_email)
+      Sys.setenv(ENTREZ_EMAIL = oa_saved_email)
       values$oaPoliteEmail <- oa_saved_email
     } else {
       values$oaPoliteEmail <- NULL
@@ -349,6 +351,21 @@ To ensure the functionality of Biblioshiny,
     }
   } else {
     values$oaApiKey <- NULL
+  }
+
+  ## PubMed / NCBI E-utilities API key
+  path_pm_apikey <- file.path(home, ".biblio_pubmed_apikey.txt")
+  if (file.exists(path_pm_apikey)) {
+    pm_saved_apikey <- trimws(readLines(path_pm_apikey, warn = FALSE)[1])
+    if (!is.na(pm_saved_apikey) && nchar(pm_saved_apikey) >= 10) {
+      Sys.setenv(PUBMED_API_KEY = pm_saved_apikey)
+      Sys.setenv(ENTREZ_KEY = pm_saved_apikey)
+      values$pmApiKey <- pm_saved_apikey
+    } else {
+      values$pmApiKey <- NULL
+    }
+  } else {
+    values$pmApiKey <- NULL
   }
 
   path_gemini_model <- file.path(home, ".biblio_gemini_model.txt")
@@ -2668,6 +2685,16 @@ To ensure the functionality of Biblioshiny,
           icon = icon("exclamation-sign", lib = "glyphicon")
         ),
         actionButton(
+          label = "Complete",
+          inputId = "missingComplete",
+          icon = icon("download", lib = "glyphicon")
+        ),
+        actionButton(
+          label = "Undo",
+          inputId = "missingCompleteUndo",
+          icon = icon("repeat", lib = "glyphicon")
+        ),
+        actionButton(
           label = "Report",
           inputId = "missingReport",
           icon = icon("plus", lib = "glyphicon")
@@ -2681,6 +2708,445 @@ To ensure the functionality of Biblioshiny,
       ),
     )
   }
+
+  ## ---- Metadata completion result modal (Before / After) -----------------
+  enrichmentResultModal <- function(session) {
+    ns <- session$ns
+    modalDialog(
+      title = "Metadata completion - Before / After",
+      uiOutput(ns("enrichmentComparison")),
+      size = "l",
+      easyClose = TRUE,
+      footer = tagList(
+        actionButton(
+          label = "Show full audit",
+          inputId = "enrichmentBackToAudit",
+          icon = icon("list", lib = "glyphicon")
+        ),
+        actionButton(
+          label = "Undo",
+          inputId = "enrichmentUndoFromResult",
+          icon = icon("repeat", lib = "glyphicon")
+        ),
+        modalButton(label = "Close")
+      )
+    )
+  }
+
+  output$enrichmentComparison <- renderUI({
+    before <- values$missingdf_before
+    ## Prefer the post-enrichment snapshot returned by completeMetadata().
+    ## values$missingdf is stale until output$missingDataTable re-renders.
+    after  <- values$missingdf_after
+    if (is.null(after)) after <- values$missingdf
+    report <- values$enrichmentReport
+    if (is.null(before) || is.null(after) || is.null(report)) {
+      return(div(em("No enrichment result to display.")))
+    }
+
+    ## Aggregate filled counts per (field, source).
+    by_oa <- stats::setNames(integer(length(after$tag)), after$tag)
+    by_cr <- stats::setNames(integer(length(after$tag)), after$tag)
+    if (nrow(report) > 0) {
+      for (i in seq_len(nrow(report))) {
+        f <- report$field[i]; s <- report$source[i]; n <- report$n_filled[i]
+        if (!(f %in% names(by_oa))) next
+        if (s == "openalex") by_oa[f] <- by_oa[f] + n
+        else if (s == "crossref") by_cr[f] <- by_cr[f] + n
+      }
+    }
+
+    before_pct <- before$missing_pct[match(after$tag, before$tag)]
+    ## Natural sign: delta = after - before. Negative = improvement (good),
+    ## positive = regression (should not happen with fill-only enrichment).
+    delta <- round(after$missing_pct - before_pct, 2)
+
+    ## Status colour mapping mirrors the existing missingDataTable.
+    status_html <- function(s) {
+      if (is.na(s)) return("")
+      bg <- switch(
+        s,
+        "Completely missing" = "#b22222",
+        "Critical"           = "#f08080",
+        "Poor"               = "lightgrey",
+        "Acceptable"         = "#f0e68c",
+        "Good"               = "#90ee90",
+        "Excellent"          = "#32cd32",
+        "white"
+      )
+      fg <- if (s %in% c("Completely missing","Critical","Excellent")) "white" else "black"
+      sprintf(
+        '<span style="display:block;background-color:%s;color:%s;padding:4px;border-radius:3px;text-align:center;font-weight:600;font-size:13px;">%s</span>',
+        bg, fg, s
+      )
+    }
+    delta_html <- function(d) {
+      if (is.na(d) || d == 0) {
+        return('<span style="color:#888;">0.00</span>')
+      }
+      ## Non-zero deltas are rendered as full coloured badges so the gain
+      ## from the enrichment is immediately visible. Improvement = blue,
+      ## regression = red (should not happen with fill-only enrichment).
+      ## A leading arrow icon serves a second purpose: it makes the visible
+      ## text non-numeric, so renderBibliobox does NOT auto-detect this
+      ## column as numeric (which would strip the HTML and reformat the
+      ## values with formatC(), killing the badge).
+      bg    <- if (d < 0) "#1d8fe1" else "#b22222"
+      arrow <- if (d < 0) "&#9660;" else "&#9650;"   # ▼ or ▲
+      sprintf(
+        '<span style="display:block;background-color:%s;color:white;padding:4px;border-radius:3px;text-align:center;font-weight:700;font-size:13px;">%s %.2f</span>',
+        bg, arrow, abs(d)
+      )
+    }
+
+    df <- data.frame(
+      Metadata    = sprintf('<strong>%s</strong>', after$tag),
+      Description = sprintf('<strong>%s</strong>', after$description),
+      `Before %`  = sprintf('%.2f', before_pct),
+      `After %`   = sprintf('<b>%.2f</b>', after$missing_pct),
+      `Delta`     = vapply(delta, delta_html, character(1)),
+      OpenAlex    = sprintf('<span style="color:%s;">%d</span>',
+                            ifelse(by_oa[after$tag] > 0, "#1a7f37", "#888"),
+                            by_oa[after$tag]),
+      Crossref    = sprintf('<span style="color:%s;">%d</span>',
+                            ifelse(by_cr[after$tag] > 0, "#1a7f37", "#888"),
+                            by_cr[after$tag]),
+      Status      = vapply(after$status, status_html, character(1)),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+
+    n_filled_total <- sum(report$n_filled, na.rm = TRUE)
+    n_failed_total <- sum(report$n_failed, na.rm = TRUE)
+    headline <- sprintf(
+      'Filled <b>%d</b> cells across %d records (Open Access: %d &middot; Crossref: %d)%s',
+      n_filled_total,
+      sum(report$n_attempted, na.rm = TRUE),
+      sum(by_oa), sum(by_cr),
+      if (n_failed_total > 0) sprintf(' &middot; <i>%d records not retrieved</i>', n_failed_total) else ""
+    )
+
+    tagList(
+      div(HTML(headline), style = "text-align:center;margin-bottom:14px;font-size:14px;"),
+      renderBibliobox(
+        df         = df,
+        nrow       = nrow(df),
+        escape     = FALSE,
+        scrollX    = TRUE,
+        dom        = FALSE,
+        filter     = "none",
+        pagelength = FALSE,
+        button     = FALSE,
+        round      = 2
+      )
+    )
+  })
+
+  observeEvent(input$enrichmentBackToAudit, {
+    removeModal()
+    if (ncol(values$M) > 1) {
+      showModal(missingModal(session))
+    }
+  })
+
+  observeEvent(input$enrichmentUndoFromResult, {
+    if (is.null(values$M_pre_enrich)) {
+      show_alert(
+        title = "Nothing to undo",
+        text = "No enrichment has been applied in this session.",
+        type = "info"
+      )
+      return()
+    }
+    values$M <- values$M_pre_enrich
+    values$M_pre_enrich <- NULL
+    values$enrichmentReport <- NULL
+    values$missingdf_before <- NULL
+    values$missingdf_after <- NULL
+    removeModal()
+    show_alert(
+      title = "Enrichment reverted",
+      text = "Restored the collection to its pre-enrichment state.",
+      type = "success"
+    )
+    if (ncol(values$M) > 1) {
+      showModal(missingModal(session))
+    }
+  })
+
+  ## ---- Metadata completion via Crossref (DOI lookup) ----------------------
+  ## The missingModal exposes a "Complete" button that opens a small config
+  ## sub-modal. Running the enrichment updates values$M; the missingDataTable
+  ## reactive then re-renders automatically. The pre-enrichment snapshot is
+  ## stashed in values$M_pre_enrich so "Undo" can restore it.
+
+  observeEvent(input$missingComplete, {
+    if (!ncol(values$M) > 1 || nrow(values$M) < 1) return()
+
+    ## Build the field checkbox list, pre-selecting fields that are Poor /
+    ## Critical / Completely missing. Crossref does not provide DE/ID/WC/TC;
+    ## OpenAlex covers TC plus all the others except DE/ID/WC.
+    md <- values$missingdf
+    all_fields <- c("AB","AU","C1","CR","DT","LA","PY","RP","SO","TC","TI")
+    cr_fields  <- setdiff(all_fields, "TC")  # TC requires OpenAlex
+    if (!is.null(md)) {
+      bad_status <- c("Poor","Critical","Completely missing")
+      preselect <- md$tag[md$tag %in% all_fields & md$status %in% bad_status]
+      if (length(preselect) == 0) preselect <- intersect(all_fields, md$tag)
+    } else {
+      preselect <- all_fields
+    }
+    n_eligible <- sum(!is.na(.bib_doi_norm(values$M$DI)))
+
+    ## Auto-disable OpenAlex when the source DB is OpenAlex itself.
+    db_is_oa <- length(values$M$DB) > 0 &&
+      !is.na(values$M$DB[1]) &&
+      toupper(values$M$DB[1]) == "OPENALEX"
+
+    default_sources <- if (db_is_oa) "crossref" else c("openalex", "crossref")
+
+    ## Read polite email and OpenAlex API key from biblioshiny Settings.
+    polite_email <- if (!is.null(values$oaPoliteEmail) &&
+                        nzchar(values$oaPoliteEmail)) values$oaPoliteEmail else NULL
+    oa_apikey    <- if (!is.null(values$oaApiKey) &&
+                        nzchar(values$oaApiKey)) values$oaApiKey else NULL
+
+    creds_html <- paste0(
+      "<small>",
+      if (!is.null(polite_email)) {
+        sprintf("Polite email from Settings: <code>%s</code>", polite_email)
+      } else {
+        "<i>No polite email set in Settings; requests will use the public pool.</i>"
+      },
+      "<br>",
+      if (!is.null(oa_apikey)) {
+        "OpenAlex API key from Settings: <code>configured</code>"
+      } else {
+        "<i>No OpenAlex API key set in Settings; the public pool will be used.</i>"
+      },
+      "</small>"
+    )
+
+    removeModal()
+    showModal(modalDialog(
+      title = "Complete missing metadata via DOI lookup",
+      tagList(
+        p(HTML(sprintf(
+          "We will query the selected sources for the %d records that have a DOI and try to fill the selected fields. <b>Existing values are never overwritten.</b>",
+          n_eligible
+        ))),
+        checkboxGroupInput(
+          "missingCompleteSources",
+          label = "Sources",
+          choices = c("OpenAlex" = "openalex", "Crossref" = "crossref"),
+          selected = default_sources,
+          inline = TRUE
+        ),
+        if (db_is_oa) {
+          helpText(HTML(
+            "<small><i>The collection was imported from OpenAlex; the OpenAlex pass is unavailable for this dataset.</i></small>"
+          ))
+        },
+        helpText(HTML(creds_html)),
+        checkboxGroupInput(
+          "missingCompleteFields",
+          label = "Fields to attempt to fill",
+          choices = all_fields,
+          selected = preselect,
+          inline = TRUE
+        ),
+        helpText(HTML(
+          "<small>Always skipped: <b>ID</b> (Keywords Plus) and <b>WC</b> (WoS categories) are WoS-proprietary. <b>DE</b> (author keywords) is not provided by Crossref; OpenAlex \"keywords\" are AI-derived topic labels and are not filled by default. <b>TC</b> requires the OpenAlex pass.</small>"
+        ))
+      ),
+      size = "m",
+      easyClose = FALSE,
+      footer = tagList(
+        actionButton(
+          label = "Run",
+          inputId = "missingCompleteRun",
+          icon = icon("play", lib = "glyphicon"),
+          class = "btn-primary"
+        ),
+        actionButton(
+          label = "Back",
+          inputId = "missingCompleteBack",
+          icon = icon("arrow-left", lib = "glyphicon")
+        )
+      )
+    ))
+  })
+
+  observeEvent(input$missingCompleteBack, {
+    removeModal()
+    if (ncol(values$M) > 1) {
+      showModal(missingModal(session))
+    }
+  })
+
+  observeEvent(input$missingCompleteRun, {
+    fields <- input$missingCompleteFields
+    if (is.null(fields) || length(fields) == 0) {
+      show_alert(
+        title = "No fields selected",
+        text = "Pick at least one field to enrich.",
+        type = "warning"
+      )
+      return()
+    }
+    sources <- input$missingCompleteSources
+    if (is.null(sources) || length(sources) == 0) {
+      show_alert(
+        title = "No sources selected",
+        text = "Pick at least one of OpenAlex or Crossref.",
+        type = "warning"
+      )
+      return()
+    }
+    ## Pick credentials from biblioshiny Settings (no per-modal input).
+    email <- if (!is.null(values$oaPoliteEmail) &&
+                 nzchar(values$oaPoliteEmail)) values$oaPoliteEmail else NULL
+    oa_key <- if (!is.null(values$oaApiKey) &&
+                  nzchar(values$oaApiKey)) values$oaApiKey else NULL
+
+    removeModal()
+
+    ## Snapshot the pre-enrichment state for Undo and the missingData table
+    ## for the Before/After comparison view.
+    values$M_pre_enrich      <- values$M
+    values$missingdf_before  <- values$missingdf
+
+    res <- NULL
+    progress_msg <- if (length(sources) == 1) {
+      sprintf("Querying %s...",
+              if (sources == "openalex") "OpenAlex" else "Crossref")
+    } else {
+      "Querying OpenAlex + Crossref..."
+    }
+    withProgress(
+      message = progress_msg,
+      value = 0,
+      {
+        progress_cb <- function(done, total, label) {
+          incProgress(amount = min(1, (done / max(total, 1))) - 0,
+                      detail = label)
+        }
+        res <- tryCatch(
+          completeMetadata(
+            values$M,
+            sources   = sources,
+            fields    = fields,
+            email     = email,
+            oa_apikey = oa_key,
+            progress  = progress_cb,
+            verbose   = FALSE
+          ),
+          error = function(e) {
+            list(error = conditionMessage(e))
+          }
+        )
+      }
+    )
+
+    if (!is.null(res$error)) {
+      show_alert(
+        title = "Metadata enrichment failed",
+        text = res$error,
+        type = "error"
+      )
+      ## Reopen the missingModal so the user is not left empty-handed
+      if (ncol(values$M) > 1) {
+        showModal(missingModal(session))
+      }
+      return()
+    }
+
+    ## Apply the enriched collection
+    values$M <- res$M
+    values$enrichmentReport <- res$report
+    ## Stash the post-enrichment missingData() snapshot. We cannot rely on
+    ## values$missingdf because it is only re-set when output$missingDataTable
+    ## is re-rendered, which has not happened yet (its modal is closed).
+    values$missingdf_after <- res$after
+    n_filled <- sum(res$report$n_filled, na.rm = TRUE)
+    n_failed <- sum(res$report$n_failed, na.rm = TRUE)
+
+    summary_html <- if (nrow(res$report) > 0) {
+      ## Per source -> field breakdown so the user sees who filled what.
+      lines <- vapply(seq_len(nrow(res$report)), function(i) {
+        if (res$report$n_filled[i] == 0) return(NA_character_)
+        sprintf("- <b>%s</b> via <i>%s</i>: %d filled",
+                res$report$field[i],
+                res$report$source[i],
+                res$report$n_filled[i])
+      }, character(1))
+      lines <- lines[!is.na(lines)]
+      if (length(lines) > 0) {
+        paste(lines, collapse = "<br>")
+      } else {
+        "Nothing to fill."
+      }
+    } else {
+      "Nothing to fill."
+    }
+
+    show_alert(
+      title = sprintf("Enrichment done: %d cells filled", n_filled),
+      text = tagList(div(HTML(paste0(
+        summary_html,
+        if (n_failed > 0) sprintf("<br><br><i>%d records could not be retrieved.</i>", n_failed) else ""
+      )), style = "text-align:left")),
+      type = if (n_filled > 0) "success" else "info",
+      html = TRUE,
+      btn_labels = "Show before/after",
+      btn_colors = "#1d8fe1"
+    )
+
+    ## Open the comparison modal showing Before vs After side by side.
+    if (ncol(values$M) > 1) {
+      showModal(enrichmentResultModal(session))
+    }
+  })
+
+  observeEvent(input$missingCompleteUndo, {
+    if (is.null(values$M_pre_enrich)) {
+      show_alert(
+        title = "Nothing to undo",
+        text = "No enrichment has been applied in this session.",
+        type = "info"
+      )
+      return()
+    }
+    values$M <- values$M_pre_enrich
+    values$M_pre_enrich <- NULL
+    values$enrichmentReport <- NULL
+    values$missingdf_before <- NULL
+    values$missingdf_after <- NULL
+    show_alert(
+      title = "Enrichment reverted",
+      text = "Restored the collection to its pre-enrichment state.",
+      type = "success"
+    )
+    if (ncol(values$M) > 1) {
+      removeModal()
+      showModal(missingModal(session))
+    }
+  })
+
+  ## Local helper: same DOI normaliser used by completeMetadata, for the
+  ## eligibility count shown in the config sub-modal. Inlined to avoid
+  ## reaching for an unexported helper from biblioshiny.
+  .bib_doi_norm <- function(x) {
+    if (is.null(x)) return(character(0))
+    s <- trimws(as.character(x))
+    s[s == "" | s == "NA" | s == "none"] <- NA_character_
+    s <- sub("^https?://(dx\\.)?doi\\.org/", "", s, ignore.case = TRUE)
+    s <- sub("^doi:\\s*", "", s, ignore.case = TRUE)
+    ok <- grepl("^10\\.[0-9]{4,9}/", s)
+    s[!ok] <- NA_character_
+    s
+  }
+
 
   observeEvent(input$showMissingData, {
     if (ncol(values$M) > 1) {
@@ -5538,17 +6004,36 @@ To ensure the functionality of Biblioshiny,
   observeEvent(input$applyDLC, {
     req(values$M)
     if (nrow(values$M) > 1) {
-      values$DLC <- lifeCycle(
-        values$M %>% group_by(PY) %>% count(),
-        forecast_years = 20,
-        plot = FALSE
+      # Records with missing PY are excluded: the logistic model needs a
+      # complete yearly time series. count() keeps the NA-year bucket, so
+      # it is dropped here before fitting.
+      dlc_data <- values$M %>%
+        filter(!is.na(PY)) %>%
+        group_by(PY) %>%
+        count()
+
+      values$DLC <- tryCatch(
+        lifeCycle(dlc_data, forecast_years = 20, plot = FALSE),
+        error = function(e) {
+          showNotification(
+            paste("Life Cycle analysis could not be computed:", conditionMessage(e)),
+            type = "error", duration = 8
+          )
+          NULL
+        }
       )
-      values$DLCplotYear <- plotLifeCycle(values$DLC, plot_type = "annual")
-      values$DLCplotCum <- plotLifeCycle(values$DLC, plot_type = "cumulative")
-      values$DLC$parameters <- values$DLC$parameters %>%
-        as.data.frame() %>%
-        tibble::rownames_to_column("Metrics") %>%
-        rename(Value = ".")
+
+      if (!is.null(values$DLC)) {
+        values$DLCplotYear <- plotLifeCycle(values$DLC, plot_type = "annual")
+        values$DLCplotCum <- plotLifeCycle(values$DLC, plot_type = "cumulative")
+        values$DLC$parameters <- values$DLC$parameters %>%
+          as.data.frame() %>%
+          tibble::rownames_to_column("Metrics") %>%
+          rename(Value = ".")
+      } else {
+        values$DLCplotYear <- NULL
+        values$DLCplotCum <- NULL
+      }
     } else {
       values$DLC = NULL
     }
@@ -6466,6 +6951,8 @@ To ensure the functionality of Biblioshiny,
       output$AuthorLocalProfileUI <- renderUI({
         create_empty_local_author_bio_card()
       })
+      values$authorGlobalCard <- NULL
+      values$authorLocalCard <- NULL
     }
   )
 
@@ -6498,6 +6985,7 @@ To ensure the functionality of Biblioshiny,
           output$AuthorBioPageUI <- renderUI({
             authorGlobalProfile
           })
+          values$authorGlobalCard <- authorGlobalProfile
 
           local_author <- values$author_data %>%
             dplyr::filter(AUid == selected_author) %>%
@@ -6525,6 +7013,12 @@ To ensure the functionality of Biblioshiny,
           output$AuthorLocalProfileUI <- renderUI({
             authorLocalProfile
           })
+          values$authorLocalCard <- authorLocalProfile
+          values$authorProfileName <- if (length(local_author) > 0) {
+            local_author[1]
+          } else {
+            selected_author
+          }
         },
         error = function(e) {
           # Manage the error
@@ -6541,6 +7035,66 @@ To ensure the functionality of Biblioshiny,
       )
     }
   )
+
+  ## Export the author profile card (Global or Local) as PNG ----
+  observeEvent(input$exportAuthorCard, {
+    active <- input$authorProfileTabs
+    if (is.null(active) || identical(active, "Info & References")) {
+      active <- "Global Profile"
+    }
+    if (identical(active, "Local Profile")) {
+      card <- values$authorLocalCard
+      selector <- ".local-author-bio-card"
+      tag <- "LocalProfile"
+    } else {
+      card <- values$authorGlobalCard
+      selector <- ".author-bio-card"
+      tag <- "GlobalProfile"
+    }
+
+    if (is.null(card)) {
+      showNotification(
+        "Search and apply an author first, then export the profile card.",
+        type = "warning",
+        duration = 5
+      )
+      return()
+    }
+
+    author_name <- gsub(
+      "[^A-Za-z0-9]+", "_",
+      values$authorProfileName %||% "Author"
+    )
+    base_name <- paste0(
+      "AuthorProfile_", tag, "_", author_name, "-",
+      gsub(" |:", "", Sys.time()), ".png"
+    )
+    full_path <- file.path(getWD(), base_name)
+
+    tryCatch(
+      {
+        authorCard2png(
+          card = card,
+          filename = full_path,
+          selector = selector,
+          dpi = values$dpi,
+          height = values$h
+        )
+        img_data <- base64enc::dataURI(file = full_path, mime = "image/png")
+        shinyjs::runjs(sprintf(
+          "var link = document.createElement('a'); link.href = '%s'; link.download = '%s'; document.body.appendChild(link); link.click(); document.body.removeChild(link);",
+          img_data, base_name
+        ))
+      },
+      error = function(e) {
+        showNotification(
+          paste("Error exporting author profile card:", conditionMessage(e)),
+          type = "error",
+          duration = 6
+        )
+      }
+    )
+  })
 
   ### Most Relevant Authors ----
   MRAuthorsResult <- eventReactive(input$applyMRAuthors, {
@@ -8981,8 +9535,15 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$stopwordList <- renderUI({
+    df_sl <- values$GenericSL
+    if (!is.null(df_sl) && "term" %in% names(df_sl)) {
+      df_sl$term <- sprintf(
+        '<span style="white-space:nowrap;">%s</span>',
+        as.character(df_sl$term)
+      )
+    }
     renderBibliobox(
-      values$GenericSL,
+      df_sl,
       nrow = Inf,
       filename = "Stopword_List",
       pagelength = FALSE,
@@ -9004,10 +9565,36 @@ To ensure the functionality of Biblioshiny,
   })
 
   output$synonymList <- renderUI({
+    df_syn <- values$GenericSYN
+    if (!is.null(df_syn)) {
+      if ("term" %in% names(df_syn)) {
+        ## Keep single-word terms (e.g. "bibliometrics") on one line; the
+        ## modal width is bounded so without nowrap the column would split
+        ## mid-word. Wrapping the term in a fixed-min-width block also
+        ## prevents the auto-layout from collapsing the column when the
+        ## synonyms cell contains a very long unbroken string.
+        df_syn$term <- sprintf(
+          '<span style="white-space:nowrap; display:inline-block; min-width:140px;">%s</span>',
+          as.character(df_syn$term)
+        )
+      }
+      if ("synonyms" %in% names(df_syn)) {
+        ## The synonyms string uses ";" as separator with no spaces. Without
+        ## explicit break opportunities the whole list is treated as a single
+        ## unbreakable token by the browser, which then steals all the
+        ## horizontal space from the term column. Insert a space after each
+        ## ";" so the cell wraps cleanly across multiple lines.
+        df_syn$synonyms <- gsub(";", "; ", as.character(df_syn$synonyms), fixed = TRUE)
+        df_syn$synonyms <- sprintf(
+          '<span style="word-break:break-word; white-space:normal;">%s</span>',
+          df_syn$synonyms
+        )
+      }
+    }
     renderBibliobox(
-      values$GenericSYN,
+      df_syn,
       nrow = Inf,
-      filename = "Stopword_List",
+      filename = "Synonym_List",
       pagelength = FALSE,
       left = 1,
       right = NULL,
@@ -10304,11 +10891,14 @@ To ensure the functionality of Biblioshiny,
     values$field <- coc_field
     values$ngrams <- coc_ngrams
 
-    showNotification(
-      "Co-occurrence Network: computing...",
-      id = "COC_progress",
-      type = "message",
-      duration = NULL
+    show_alert(
+      title = "Analysis in progress...",
+      text = "Building co-occurrence network",
+      type = "info",
+      showConfirmButton = FALSE,
+      closeOnEsc = FALSE,
+      closeOnClickOutside = FALSE,
+      timer = NULL
     )
 
     # Build NetWords synchronously if needed (fast for cached), then run networkPlot in future
@@ -10400,10 +10990,10 @@ To ensure the functionality of Biblioshiny,
           verbose = FALSE
         )
       }, error = function(e) {
+        closeSweetAlert(session)
         showNotification(paste("Co-occurrence Network error:", e$message), type = "error", duration = 8)
         return(NULL)
       })
-    removeNotification("COC_progress")
     req(cocnet)
 
     # Add year info to graph
@@ -10426,6 +11016,73 @@ To ensure the functionality of Biblioshiny,
     }
     cocnet$graph <- g
     values$cocnet <- cocnet
+
+    ## Fuzzy assignment of documents to network clusters
+    cocDTC <- tryCatch(
+      {
+        if (
+          !is.null(cocnet$cluster_res) &&
+            nrow(cocnet$cluster_res) > 0
+        ) {
+          occ <- diag(as.matrix(NetWords))
+          words_coc <- data.frame(
+            Words = cocnet$cluster_res$vertex,
+            Cluster_Label = paste(
+              "Cluster",
+              cocnet$cluster_res$cluster
+            ),
+            pagerank_centrality = cocnet$cluster_res$pagerank_centrality,
+            stringsAsFactors = FALSE
+          )
+          words_coc$Occurrences <- occ[match(
+            words_coc$Words,
+            rownames(NetWords)
+          )]
+          words_coc$Occurrences[
+            is.na(words_coc$Occurrences) | words_coc$Occurrences == 0
+          ] <- 1
+          bibliometrix:::clusterAssignment(
+            M_data,
+            words = words_coc,
+            field = coc_field,
+            remove.terms = remove.terms,
+            synonyms = synonyms,
+            threshold = 0.5
+          )
+        } else {
+          NULL
+        }
+      },
+      error = function(e) NULL
+    )
+    if (!is.null(cocDTC)) {
+      ## simplified frame for Biblio AI (same structure as Thematic Map)
+      values$cocnet$doc2clust <- cocDTC[, c(
+        "Assigned_cluster",
+        "SR",
+        "pagerank"
+      )]
+      ## display table: clickable DOI + readable column names
+      cocDTC$DI <- paste0(
+        '<a href="https://doi.org/',
+        cocDTC$DI,
+        '" target="_blank">',
+        cocDTC$DI,
+        '</a>'
+      )
+      names(cocDTC)[1:9] <- c(
+        "DOI",
+        "Authors",
+        "Title",
+        "Source",
+        "Year",
+        "TotalCitation",
+        "TCperYear",
+        "NTC",
+        "SR"
+      )
+    }
+    values$cocnet$documentToClusters <- cocDTC
 
     values$COCnetwork <- igraph2vis(
       g = cocnet$graph,
@@ -10467,6 +11124,7 @@ To ensure the functionality of Biblioshiny,
 
   output$cocPlot <- renderVisNetwork({
     req(values$COCnetwork)
+    closeSweetAlert(session)
     values$COCnetwork$VIS
   })
 
@@ -10662,15 +11320,49 @@ To ensure the functionality of Biblioshiny,
       "Closeness",
       "PageRank"
     )
+    Q <- values$cocnet$modularity
+    tagList(
+      tags$p(
+        style = "font-size:14px; margin-top:10px; margin-bottom:10px;",
+        tags$b("Community Detection Modularity (Q): "),
+        round(Q, 4)
+      ),
+      renderBibliobox(
+        cocData,
+        nrow = 10,
+        filename = "CoWord_Network",
+        pagelength = TRUE,
+        left = NULL,
+        right = NULL,
+        numeric = 3:5,
+        dom = FALSE,
+        size = '100%',
+        filter = "top",
+        columnShort = NULL,
+        columnSmall = NULL,
+        round = 3,
+        title = "",
+        button = TRUE,
+        escape = FALSE,
+        selection = FALSE
+      )
+    )
+  })
+
+  ### Documents-to-clusters fuzzy assignment ----
+  output$cocTableDocument <- renderUI({
+    req(values$cocnet)
+    cocDataDoc <- values$cocnet$documentToClusters
+    req(cocDataDoc)
     renderBibliobox(
-      cocData,
+      cocDataDoc,
       nrow = 10,
-      filename = "CoWord_Network",
+      filename = "CoWord_Network_Documents",
       pagelength = TRUE,
       left = NULL,
       right = NULL,
-      numeric = 3:5,
-      dom = FALSE,
+      numeric = c(7:8, 10:(ncol(cocDataDoc) - 2), ncol(cocDataDoc)),
+      dom = TRUE,
       size = '100%',
       filter = "top",
       columnShort = NULL,
@@ -10701,6 +11393,9 @@ To ensure the functionality of Biblioshiny,
       )
       sheetname <- "CoWordNet"
       list_df <- list(values$cocnet$cluster_res)
+      if (!is.null(values$cocnet$documentToClusters)) {
+        list_df[[2]] <- values$cocnet$documentToClusters
+      }
       list_plot <- list(values$degreePlot)
       res <- addDataScreenWb(list_df, wb = values$wb, sheetname = sheetname)
       values$wb <- addGgplotsWb(
@@ -10929,7 +11624,7 @@ To ensure the functionality of Biblioshiny,
         #paste("MostContribDocuments_", Sys.Date(), ".png", sep=""),
         #paste("MostCitedDocuments_", Sys.Date(), ".png", sep="")
       )
-      safe_safe_ggsave(
+      safe_ggsave(
         filename = files[1],
         plot = values$CS$graph_terms,
         dpi = values$dpi,
@@ -11343,24 +12038,32 @@ To ensure the functionality of Biblioshiny,
   output$TMTableCluster <- renderUI({
     req(values$TM)
     tmData <- values$TM$clusters
-    renderBibliobox(
-      tmData,
-      nrow = 10,
-      filename = "Thematic_Map_Clusters",
-      pagelength = TRUE,
-      left = NULL,
-      right = NULL,
-      numeric = 2:3,
-      dom = TRUE,
-      size = '100%',
-      filter = "top",
-      columnShort = NULL,
-      columnSmall = NULL,
-      round = 3,
-      title = "",
-      button = TRUE,
-      escape = FALSE,
-      selection = FALSE
+    Q <- values$TM$modularity
+    tagList(
+      tags$p(
+        style = "font-size:14px; margin-top:10px; margin-bottom:10px;",
+        tags$b("Community Detection Modularity (Q): "),
+        round(Q, 4)
+      ),
+      renderBibliobox(
+        tmData,
+        nrow = 10,
+        filename = "Thematic_Map_Clusters",
+        pagelength = TRUE,
+        left = NULL,
+        right = NULL,
+        numeric = 2:3,
+        dom = TRUE,
+        size = '100%',
+        filter = "top",
+        columnShort = NULL,
+        columnSmall = NULL,
+        round = 3,
+        title = "",
+        button = TRUE,
+        escape = FALSE,
+        selection = FALSE
+      )
     )
   })
 
@@ -12011,120 +12714,160 @@ To ensure the functionality of Biblioshiny,
   output$TMTableCluster1 <- renderUI({
     req(values$nexus)
     tmData <- values$nexus$TM[[1]]$clusters
-    renderBibliobox(
-      tmData,
-      nrow = 10,
-      filename = "Thematic_Map_Period_1_Clusters",
-      pagelength = TRUE,
-      left = NULL,
-      right = NULL,
-      numeric = 2:3,
-      dom = TRUE,
-      size = '100%',
-      filter = "top",
-      columnShort = NULL,
-      columnSmall = NULL,
-      round = 3,
-      title = "",
-      button = TRUE,
-      escape = FALSE,
-      selection = FALSE
+    Q <- values$nexus$TM[[1]]$modularity
+    tagList(
+      tags$p(
+        style = "font-size:14px; margin-top:10px; margin-bottom:10px;",
+        tags$b("Community Detection Modularity (Q): "),
+        round(Q, 4)
+      ),
+      renderBibliobox(
+        tmData,
+        nrow = 10,
+        filename = "Thematic_Map_Period_1_Clusters",
+        pagelength = TRUE,
+        left = NULL,
+        right = NULL,
+        numeric = 2:3,
+        dom = TRUE,
+        size = '100%',
+        filter = "top",
+        columnShort = NULL,
+        columnSmall = NULL,
+        round = 3,
+        title = "",
+        button = TRUE,
+        escape = FALSE,
+        selection = FALSE
+      )
     )
   })
 
   output$TMTableCluster2 <- renderUI({
     req(values$nexus)
     tmData <- values$nexus$TM[[2]]$clusters
-    renderBibliobox(
-      tmData,
-      nrow = 10,
-      filename = "Thematic_Map_Period_2_Clusters",
-      pagelength = TRUE,
-      left = NULL,
-      right = NULL,
-      numeric = 2:3,
-      dom = TRUE,
-      size = '100%',
-      filter = "top",
-      columnShort = NULL,
-      columnSmall = NULL,
-      round = 3,
-      title = "",
-      button = TRUE,
-      escape = FALSE,
-      selection = FALSE
+    Q <- values$nexus$TM[[2]]$modularity
+    tagList(
+      tags$p(
+        style = "font-size:14px; margin-top:10px; margin-bottom:10px;",
+        tags$b("Community Detection Modularity (Q): "),
+        round(Q, 4)
+      ),
+      renderBibliobox(
+        tmData,
+        nrow = 10,
+        filename = "Thematic_Map_Period_2_Clusters",
+        pagelength = TRUE,
+        left = NULL,
+        right = NULL,
+        numeric = 2:3,
+        dom = TRUE,
+        size = '100%',
+        filter = "top",
+        columnShort = NULL,
+        columnSmall = NULL,
+        round = 3,
+        title = "",
+        button = TRUE,
+        escape = FALSE,
+        selection = FALSE
+      )
     )
   })
 
   output$TMTableCluster3 <- renderUI({
     req(values$nexus)
     tmData <- values$nexus$TM[[3]]$clusters
-    renderBibliobox(
-      tmData,
-      nrow = 10,
-      filename = "Thematic_Map_Period_3_Clusters",
-      pagelength = TRUE,
-      left = NULL,
-      right = NULL,
-      numeric = 2:3,
-      dom = TRUE,
-      size = '100%',
-      filter = "top",
-      columnShort = NULL,
-      columnSmall = NULL,
-      round = 3,
-      title = "",
-      button = TRUE,
-      escape = FALSE,
-      selection = FALSE
+    Q <- values$nexus$TM[[3]]$modularity
+    tagList(
+      tags$p(
+        style = "font-size:14px; margin-top:10px; margin-bottom:10px;",
+        tags$b("Community Detection Modularity (Q): "),
+        round(Q, 4)
+      ),
+      renderBibliobox(
+        tmData,
+        nrow = 10,
+        filename = "Thematic_Map_Period_3_Clusters",
+        pagelength = TRUE,
+        left = NULL,
+        right = NULL,
+        numeric = 2:3,
+        dom = TRUE,
+        size = '100%',
+        filter = "top",
+        columnShort = NULL,
+        columnSmall = NULL,
+        round = 3,
+        title = "",
+        button = TRUE,
+        escape = FALSE,
+        selection = FALSE
+      )
     )
   })
 
   output$TMTableCluster4 <- renderUI({
     req(values$nexus)
     tmData <- values$nexus$TM[[4]]$clusters
-    renderBibliobox(
-      tmData,
-      nrow = 10,
-      filename = "Thematic_Map_Period_4_Clusters",
-      pagelength = TRUE,
-      left = NULL,
-      right = NULL,
-      numeric = 2:3,
-      dom = TRUE,
-      size = '100%',
-      filter = "top",
-      columnShort = NULL,
-      columnSmall = NULL,
-      round = 3,
-      title = "",
-      button = TRUE,
-      escape = FALSE,
-      selection = FALSE
+    Q <- values$nexus$TM[[4]]$modularity
+    tagList(
+      tags$p(
+        style = "font-size:14px; margin-top:10px; margin-bottom:10px;",
+        tags$b("Community Detection Modularity (Q): "),
+        round(Q, 4)
+      ),
+      renderBibliobox(
+        tmData,
+        nrow = 10,
+        filename = "Thematic_Map_Period_4_Clusters",
+        pagelength = TRUE,
+        left = NULL,
+        right = NULL,
+        numeric = 2:3,
+        dom = TRUE,
+        size = '100%',
+        filter = "top",
+        columnShort = NULL,
+        columnSmall = NULL,
+        round = 3,
+        title = "",
+        button = TRUE,
+        escape = FALSE,
+        selection = FALSE
+      )
     )
   })
 
   output$TMTableCluster5 <- renderUI({
     req(values$nexus)
     tmData <- values$nexus$TM[[5]]$clusters
-    renderBibliobox(
-      tmData,
-      nrow = 10,
-      filename = "Thematic_Map_Period_5_Clusters",
-      pagelength = TRUE,
-      left = NULL,
-      right = NULL,
-      numeric = 2:3,
-      dom = TRUE,
-      size = '100%',
-      filter = "top",
-      columnShort = NULL,
-      columnSmall = NULL,
-      round = 3,
-      title = "",
+    Q <- values$nexus$TM[[5]]$modularity
+    tagList(
+      tags$p(
+        style = "font-size:14px; margin-top:10px; margin-bottom:10px;",
+        tags$b("Community Detection Modularity (Q): "),
+        round(Q, 4)
+      ),
+      renderBibliobox(
+        tmData,
+        nrow = 10,
+        filename = "Thematic_Map_Period_5_Clusters",
+        pagelength = TRUE,
+        left = NULL,
+        right = NULL,
+        numeric = 2:3,
+        dom = TRUE,
+        size = '100%',
+        filter = "top",
+        columnShort = NULL,
+        columnSmall = NULL,
+        round = 3,
+        title = "",
       button = TRUE,
       escape = FALSE,
       selection = FALSE
+      )
     )
   })
 
@@ -12569,24 +13312,32 @@ To ensure the functionality of Biblioshiny,
       "Closeness",
       "PageRank"
     )
-    renderBibliobox(
-      cocitData,
-      nrow = 10,
-      filename = "CoCitation_Network",
-      pagelength = TRUE,
-      left = NULL,
-      right = NULL,
-      numeric = 3:5,
-      dom = TRUE,
-      size = '100%',
-      filter = "top",
-      columnShort = NULL,
-      columnSmall = NULL,
-      round = 3,
-      title = "",
-      button = TRUE,
-      escape = FALSE,
-      selection = FALSE
+    Q <- values$cocitnet$modularity
+    tagList(
+      tags$p(
+        style = "font-size:14px; margin-top:10px; margin-bottom:10px;",
+        tags$b("Community Detection Modularity (Q): "),
+        round(Q, 4)
+      ),
+      renderBibliobox(
+        cocitData,
+        nrow = 10,
+        filename = "CoCitation_Network",
+        pagelength = TRUE,
+        left = NULL,
+        right = NULL,
+        numeric = 3:5,
+        dom = TRUE,
+        size = '100%',
+        filter = "top",
+        columnShort = NULL,
+        columnSmall = NULL,
+        round = 3,
+        title = "",
+        button = TRUE,
+        escape = FALSE,
+        selection = FALSE
+      )
     )
   })
 
@@ -13195,24 +13946,32 @@ To ensure the functionality of Biblioshiny,
   output$colTable <- renderUI({
     req(values$colnet)
     colData = values$colnet$cluster_res
-    renderBibliobox(
-      colData,
-      nrow = 10,
-      filename = "Collaboration_Network",
-      pagelength = TRUE,
-      left = NULL,
-      right = NULL,
-      numeric = 3:5,
-      dom = TRUE,
-      size = '100%',
-      filter = "top",
-      columnShort = NULL,
-      columnSmall = NULL,
-      round = 3,
-      title = "",
-      button = TRUE,
-      escape = FALSE,
-      selection = FALSE
+    Q <- values$colnet$modularity
+    tagList(
+      tags$p(
+        style = "font-size:14px; margin-top:10px; margin-bottom:10px;",
+        tags$b("Community Detection Modularity (Q): "),
+        round(Q, 4)
+      ),
+      renderBibliobox(
+        colData,
+        nrow = 10,
+        filename = "Collaboration_Network",
+        pagelength = TRUE,
+        left = NULL,
+        right = NULL,
+        numeric = 3:5,
+        dom = TRUE,
+        size = '100%',
+        filter = "top",
+        columnShort = NULL,
+        columnSmall = NULL,
+        round = 3,
+        title = "",
+        button = TRUE,
+        escape = FALSE,
+        selection = FALSE
+      )
     )
   })
 
@@ -13517,6 +14276,12 @@ To ensure the functionality of Biblioshiny,
   observe({ .toggleDownloadBtn("AIplot.save", !is.null(values$AIplot)) })
   observe({ .toggleDownloadBtn("APOTplot.save", !is.null(values$AUProdOverTime)) })
   observe({ .toggleDownloadBtn("LLplot.save", !is.null(values$LLplot)) })
+  observe({
+    .toggleDownloadBtn(
+      "exportAuthorCard",
+      !is.null(values$authorGlobalCard) || !is.null(values$authorLocalCard)
+    )
+  })
   # Affiliations
   observe({ .toggleDownloadBtn("AFFplot.save", !is.null(values$AFFplot)) })
   observe({ .toggleDownloadBtn("AffOverTimeplot.save", !is.null(values$AffOverTimePlot)) })
@@ -13934,19 +14699,22 @@ To ensure the functionality of Biblioshiny,
       selectInput(
         inputId = "gemini_api_model",
         label = "Select the Gemini Model",
-        choices = c(
-          "Gemini 2.5 Flash" = "2.5-flash",
-          "Gemini 2.5 Flash Lite" = "2.5-flash-lite",
-          "Gemini 3.0 Flash" = "3-flash-preview",
-          "Gemini 3.1 Pro" = "3.1-pro-preview",
-          "Gemini Pro Latest" = "pro-latest"
-          # "Gemini 2.0 Flash Lite" = "2.0-flash-lite",
-          # "Gemini 1.5 Flash" = "1.5-flash",
-          # "Gemini 1.5 Flash Lite" = "1.5-flash-8b"
+        choices = list(
+          "Free tier" = c(
+            "Gemini 2.5 Flash" = "2.5-flash",
+            "Gemini 2.5 Flash Lite" = "2.5-flash-lite",
+            "Gemini 3.0 Flash" = "3-flash-preview",
+            "Gemma 4 31B (experimental)" = "gemma-4-31b-it",
+            "Gemma 4 26B (experimental)" = "gemma-4-26b-a4b-it"
+          ),
+          "Paid API key required" = c(
+            "Gemini 3.1 Pro" = "3.1-pro-preview",
+            "Gemini Pro Latest" = "pro-latest"
+          )
         ),
         selected = ifelse(
           is.null(values$gemini_api_model),
-          "2.5-flash",
+          "2.5-flash-lite",
           values$gemini_api_model
         )
       ),
@@ -13990,6 +14758,19 @@ To ensure the functionality of Biblioshiny,
           "Pro models require a paid (non-free tier) API key.",
           tags$br(),
           "Free tier API keys will not work with these models."
+        ))
+      ),
+      conditionalPanel(
+        condition = "input.gemini_api_model == 'gemma-4-31b-it' || input.gemini_api_model == 'gemma-4-26b-a4b-it'",
+        helpText(strong(style = "color: #d9534f;", "Experimental — open Gemma models")),
+        helpText(em(
+          "Free tier, low latency, no extra setup (same Google API key).",
+          tags$br(),
+          "These open models can be unstable: the Google servers may return",
+          " temporary errors. Calls are retried automatically; if they keep",
+          " failing, switch back to a Gemini model.",
+          tags$br(),
+          "Analytical quality is lower than Gemini Flash — best used as a fallback."
         ))
       )
     )
@@ -14234,6 +15015,8 @@ To ensure the functionality of Biblioshiny,
     writeLines(email, path_oa_email)
     Sys.setenv(openalexR.mailto = email)
     options(openalexR.mailto = email)
+    Sys.setenv(PUBMED_EMAIL = email)
+    Sys.setenv(ENTREZ_EMAIL = email)
     values$oaPoliteEmail <- email
 
     output$oaEmailStatus <- renderUI({
@@ -14254,6 +15037,8 @@ To ensure the functionality of Biblioshiny,
     }
     Sys.unsetenv("openalexR.mailto")
     options(openalexR.mailto = NULL)
+    Sys.unsetenv("PUBMED_EMAIL")
+    Sys.unsetenv("ENTREZ_EMAIL")
     values$oaPoliteEmail <- NULL
     updateTextInput(session, "oaPoliteEmail", value = "")
 
@@ -14262,6 +15047,98 @@ To ensure the functionality of Biblioshiny,
         style = "color: #856404; background-color: #fff3cd; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
         icon("exclamation-triangle"),
         " Email removed. Using common pool (slower rate limits)."
+      )
+    })
+  })
+
+  # ============================================
+  # PubMed / NCBI E-utilities API Key
+  # ============================================
+
+  # Show API key status on load
+  output$pmApiKeyStatus <- renderUI({
+    if (!is.null(values$pmApiKey) && nchar(values$pmApiKey) >= 10) {
+      masked_key <- paste0(
+        "...",
+        substr(
+          values$pmApiKey,
+          nchar(values$pmApiKey) - 3,
+          nchar(values$pmApiKey)
+        )
+      )
+      div(
+        style = "color: #155724; background-color: #d4edda; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+        icon("check-circle"),
+        sprintf(" API key active: %s", masked_key)
+      )
+    } else {
+      div(
+        style = "color: #856404; background-color: #fff3cd; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+        icon("exclamation-triangle"),
+        " No API key set. Limited to 3 requests/second."
+      )
+    }
+  })
+
+  # Pre-fill API key input if already saved
+  observeEvent(
+    TRUE,
+    {
+      if (!is.null(values$pmApiKey) && nchar(values$pmApiKey) >= 10) {
+        updateTextInput(session, "pmApiKey", value = values$pmApiKey)
+      }
+    },
+    once = TRUE
+  )
+
+  # Save API key
+  observeEvent(input$pmSetApiKey, {
+    key <- trimws(input$pmApiKey)
+    if (is.null(key) || nchar(key) < 10) {
+      output$pmApiKeyStatus <- renderUI({
+        div(
+          style = "color: #721c24; background-color: #f8d7da; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+          icon("times-circle"),
+          " Please enter a valid API key (at least 10 characters)."
+        )
+      })
+      return()
+    }
+
+    home <- homeFolder()
+    path_pm_apikey <- file.path(home, ".biblio_pubmed_apikey.txt")
+    writeLines(key, path_pm_apikey)
+    Sys.setenv(PUBMED_API_KEY = key)
+    Sys.setenv(ENTREZ_KEY = key)
+    values$pmApiKey <- key
+
+    masked_key <- paste0("...", substr(key, nchar(key) - 3, nchar(key)))
+    output$pmApiKeyStatus <- renderUI({
+      div(
+        style = "color: #155724; background-color: #d4edda; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+        icon("check-circle"),
+        sprintf(" API key saved: %s", masked_key)
+      )
+    })
+  })
+
+  # Remove API key
+  observeEvent(input$pmRemoveApiKey, {
+    home <- homeFolder()
+    path_pm_apikey <- file.path(home, ".biblio_pubmed_apikey.txt")
+    if (file.exists(path_pm_apikey)) {
+      file.remove(path_pm_apikey)
+    }
+    Sys.unsetenv("PUBMED_API_KEY")
+    Sys.unsetenv("ENTREZ_KEY")
+    values$pmApiKey <- NULL
+    updateTextInput(session, "pmApiKey", value = "")
+
+    output$pmApiKeyStatus <- renderUI({
+      div(
+        style = "color: #856404; background-color: #fff3cd; padding: 8px 12px; border-radius: 4px; font-size: 13px;",
+        icon("exclamation-triangle"),
+        " API key removed. Limited to 3 requests/second."
       )
     })
   })
