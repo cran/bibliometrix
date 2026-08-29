@@ -93,9 +93,33 @@ openAlexUI <- function() {
 
             # Help text for search syntax
             div(
-              style = "margin-bottom: 15px; font-size: 12px; color: #666;",
+              style = "margin-bottom: 8px; font-size: 12px; color: #666;",
               HTML(
-                "<strong>Search tips:</strong> Use quotes for exact phrases (e.g., \"science mapping\"). Boolean operators AND, OR, NOT must be UPPERCASE."
+                "<strong>Search tips:</strong> Use quotes for exact phrases (e.g., \"science mapping\"). Boolean operators AND, OR, NOT must be UPPERCASE. OR only works between rows searching the same field."
+              )
+            ),
+
+            # Stemming switch: mirrors the "Enable stemming" option of the
+            # OpenAlex website. Checked here == stemming disabled on the API.
+            div(
+              style = "margin-bottom: 15px;",
+              div(
+                style = "display: inline-block;",
+                title = paste(
+                  "Stemming makes OpenAlex match word variants:",
+                  "\"bone\" also retrieves \"bones\".",
+                  "Check this box to match your terms exactly, as when you turn",
+                  "\"Enable stemming\" off on the OpenAlex website.",
+                  "Quotes and Boolean operators keep working either way."
+                ),
+                checkboxInput(
+                  "oaExactMatch",
+                  label = HTML(
+                    "<strong>Exact match</strong> &ndash; disable stemming (unchecked, <em>bone</em> also matches <em>bones</em>)"
+                  ),
+                  value = FALSE,
+                  width = "100%"
+                )
               )
             ),
 
@@ -827,7 +851,17 @@ openAlexServer <- function(input, output, session, values) {
       return()
     }
 
-    search_filters <- build_query_filters(queryList)
+    built <- build_query_filters(
+      queryList,
+      exact = isTRUE(input$oaExactMatch)
+    )
+    search_filters <- built$filters
+
+    # Cross-field operators OpenAlex cannot honour: say so rather than run a
+    # query that quietly means something else.
+    for (msg in built$warnings) {
+      showNotification(msg, type = "warning", duration = 12)
+    }
 
     # Add date range filter
     if (showDateRange()) {
@@ -843,9 +877,15 @@ openAlexServer <- function(input, output, session, values) {
   })
 
   # Helper function to get field name for filter
-  # Fields that can be filtered directly on the /works endpoint
-  get_filter_name <- function(field) {
-    switch(
+  # Fields that can be filtered directly on the /works endpoint.
+  #
+  # OpenAlex exposes an ".exact" variant of every search filter, which disables
+  # stemming: with "title.search" the term "bones" also matches "bone", with
+  # "title.search.exact" it does not. It is the API counterpart of the
+  # "Enable stemming" switch on the OpenAlex website (exact = stemming off).
+  # Boolean operators, parentheses and quoted phrases work in both variants.
+  get_filter_name <- function(field, exact = FALSE) {
+    filter_name <- switch(
       field,
       "title" = "title.search",
       "abstract" = "abstract.search",
@@ -853,6 +893,29 @@ openAlexServer <- function(input, output, session, values) {
       "default" = "default.search",
       NULL
     )
+
+    if (is.null(filter_name) || !isTRUE(exact)) {
+      return(filter_name)
+    }
+
+    paste0(filter_name, ".exact")
+  }
+
+  # Human-readable labels of the query-builder fields, mirroring the choices of
+  # the "oaField_*" selectInput. Used to name a row back to the user in the
+  # warnings raised by build_query_filters().
+  field_labels <- c(
+    "default" = "All Fields",
+    "title" = "Title",
+    "abstract" = "Abstract",
+    "title_abstract" = "Title and Abstract",
+    "author" = "Author",
+    "concept" = "Concept"
+  )
+
+  field_label <- function(field) {
+    label <- unname(field_labels[field])
+    if (is.na(label)) field else label
   }
 
   # Entity-based fields require a two-step approach:
@@ -893,13 +956,37 @@ openAlexServer <- function(input, output, session, values) {
     })
   }
 
+  # OpenAlex ANDs the filters of a request together and offers no way to OR two
+  # of them, so an OR that joins rows searching *different* fields cannot be
+  # expressed. The row is ANDed instead and the user is told so.
+  cross_field_or_warning <- function(field_data) {
+    paste0(
+      "OpenAlex cannot combine different search fields with OR. The row \"",
+      field_data$lead_term, "\" (", field_label(field_data$lead_field),
+      ") was joined with AND instead. To search two terms with OR, put them in ",
+      "the same row - for example a single \"All Fields\" row with: bone OR cartilage"
+    )
+  }
+
   # Helper function to build query filters
-  build_query_filters <- function(queryList) {
+  #
+  # Rows are grouped by the filter they map to and, within a group, joined with
+  # their Boolean operators. The operator of the row that *opens* a group joins
+  # it to a different field, and only some of those cross-field operators have
+  # an API counterpart:
+  #   AND -> nothing to do, filters are ANDed by default
+  #   NOT -> a "NOT " prefix on a search filter, a "!" prefix on an ID filter
+  #   OR  -> not expressible; see cross_field_or_warning()
+  #
+  # Returns list(filters = <named list to splat into oa_fetch>,
+  #              warnings = <character vector for the caller to display>).
+  build_query_filters <- function(queryList, exact = FALSE) {
     if (length(queryList) == 0) {
-      return(list())
+      return(list(filters = list(), warnings = character(0)))
     }
 
     search_filters <- list()
+    query_warnings <- character(0)
 
     # Separate direct filters from entity-based filters
     direct_queries <- list()
@@ -908,14 +995,19 @@ openAlexServer <- function(input, output, session, values) {
     for (i in seq_along(queryList)) {
       item <- queryList[[i]]
       field <- item$field
-      filter_name <- get_filter_name(field)
+      filter_name <- get_filter_name(field, exact = exact)
 
       if (!is.null(filter_name)) {
         # Direct works filter (title, abstract, etc.)
         if (is.null(direct_queries[[filter_name]])) {
           direct_queries[[filter_name]] <- list(
             terms = c(item$query),
-            operators = c()
+            operators = c(),
+            # Operator joining this group to the rows above it; NULL on the
+            # very first row of the query.
+            lead = item$operator,
+            lead_term = item$query,
+            lead_field = field
           )
         } else {
           direct_queries[[filter_name]]$operators <- c(
@@ -932,7 +1024,10 @@ openAlexServer <- function(input, output, session, values) {
         if (is.null(entity_queries[[field]])) {
           entity_queries[[field]] <- list(
             terms = c(item$query),
-            operators = c()
+            operators = c(),
+            lead = item$operator,
+            lead_term = item$query,
+            lead_field = field
           )
         } else {
           entity_queries[[field]]$operators <- c(
@@ -952,14 +1047,25 @@ openAlexServer <- function(input, output, session, values) {
       field_data <- direct_queries[[filter_name]]
 
       if (length(field_data$terms) == 1) {
-        search_filters[[filter_name]] <- field_data$terms[1]
+        query_string <- field_data$terms[1]
       } else {
         query_parts <- c(field_data$terms[1])
         for (j in seq_along(field_data$operators)) {
           query_parts <- c(query_parts, field_data$operators[j], field_data$terms[j + 1])
         }
-        search_filters[[filter_name]] <- paste(query_parts, collapse = " ")
+        query_string <- paste(query_parts, collapse = " ")
       }
+
+      # A leading NOT binds to the term right after it, so "NOT a AND b" is read
+      # as "(NOT a) AND b" and needs no parentheses. Search filters reject the
+      # "!" operator, which is why the word is used here.
+      if (identical(field_data$lead, "NOT")) {
+        query_string <- paste0("NOT ", query_string)
+      } else if (identical(field_data$lead, "OR")) {
+        query_warnings <- c(query_warnings, cross_field_or_warning(field_data))
+      }
+
+      search_filters[[filter_name]] <- query_string
     }
 
     # Resolve entity-based filters to IDs
@@ -974,13 +1080,35 @@ openAlexServer <- function(input, output, session, values) {
         }
       }
 
+      if (identical(field_data$lead, "OR")) {
+        query_warnings <- c(query_warnings, cross_field_or_warning(field_data))
+      }
+
+      # All terms of an entity field resolve into one OR-ed list of IDs, so a NOT
+      # *between* them has nowhere to go: excluding one would need a second
+      # filter of the same name, which oa_fetch() cannot be given.
+      excluded <- field_data$terms[which(field_data$operators == "NOT") + 1]
+      if (length(excluded) > 0) {
+        query_warnings <- c(query_warnings, paste0(
+          "OpenAlex cannot exclude individual ", field_label(field),
+          " terms: the NOT on ",
+          paste0("\"", excluded, "\"", collapse = ", "),
+          " was ignored and the term stays included. Remove the row instead."
+        ))
+      }
+
       if (length(all_ids) > 0) {
         config <- entity_field_config[[field]]
-        search_filters[[config$works_filter]] <- paste(unique(all_ids), collapse = "|")
+        id_string <- paste(unique(all_ids), collapse = "|")
+        # ID filters do take "!", unlike the search filters above.
+        if (identical(field_data$lead, "NOT")) {
+          id_string <- paste0("!", id_string)
+        }
+        search_filters[[config$works_filter]] <- id_string
       }
     }
 
-    return(search_filters)
+    return(list(filters = search_filters, warnings = query_warnings))
   }
 
   # Reactive: base search filters (without Topic and Journal)

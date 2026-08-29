@@ -332,7 +332,7 @@ total_downloads <- function(
     }
   )
 
-  # Se già nel tryCatch è tornato "NA", esci subito
+  # Se gi\u{00E0} nel tryCatch \u{00E8} tornato "NA", esci subito
   if (identical(json_text, "NA")) {
     return(NA)
   }
@@ -366,6 +366,14 @@ total_downloads <- function(
 # }
 
 # FILTER FUNCTIONS ----
+## Read an uploaded journal ranking list.
+##
+## The first two columns that are NOT an ISSN remain the journal name and its
+## ranking, so a plain two-column file behaves exactly as before. Any column
+## whose header mentions ISSN -- "ISSN", "eISSN", "ISSN-L", "Print ISSN", ...
+## -- is collected as an additional matching key, wherever it sits in the
+## file. Journals can then be matched on their identifier rather than on the
+## spelling of their title (issue #643).
 read_journal_ranking <- function(file_path) {
   ext <- tools::file_ext(file_path)
 
@@ -381,13 +389,125 @@ read_journal_ranking <- function(file_path) {
       )
     )
   )
-  journals <- journals %>% select(1, 2)
-  # journals <- journals[!is.na(journals)]
-  # journals <- toupper(trimws(journals))
-  names(journals) <- c("SO", "Ranking")
-  journals <- journals %>%
-    mutate(SO = toupper(trimws(SO)))
-  return(journals)
+  journals <- as.data.frame(journals, stringsAsFactors = FALSE)
+
+  issnIdx <- grep("issn", names(journals), ignore.case = TRUE)
+  otherIdx <- setdiff(seq_along(journals), issnIdx)
+
+  if (length(otherIdx) < 2) {
+    stop(
+      "The ranking file needs a journal name column and a ranking column, ",
+      "besides any ISSN column."
+    )
+  }
+
+  out <- data.frame(
+    SO = toupper(trimws(as.character(journals[[otherIdx[1]]]))),
+    Ranking = as.character(journals[[otherIdx[2]]]),
+    stringsAsFactors = FALSE
+  )
+
+  out$ISSN <- if (length(issnIdx) > 0) {
+    do.call(
+      paste,
+      c(lapply(issnIdx, function(i) as.character(journals[[i]])), sep = ";")
+    )
+  } else {
+    NA_character_
+  }
+
+  return(out)
+}
+
+## --- Journal ranking matching -------------------------------------------
+##
+## The ranking list used to be matched against the collection on the journal
+## name alone, compared exactly after trimming and upper-casing. Any
+## difference in punctuation, abbreviation or "&" vs "AND" therefore dropped
+## the journal, and because unmatched sources are labelled "Not Ranked" the
+## loss was invisible. The ISSN is unambiguous, so it is tried first and the
+## name is kept as a fallback -- an ISSN-only match would silently return
+## nothing on the exports that carry no ISSN at all (issue #643).
+
+## ISSN columns of a bibliometrix collection. WoS exports use SN/EI, the
+## Scopus and OpenAlex CSV paths use ISSN/ISSN_I.
+issnColumns <- function(M) {
+  intersect(c("SN", "EI", "ISSN", "ISSN_I", "EISSN"), names(M))
+}
+
+## Normalized ISSNs found in each element of x. A single cell may hold more
+## than one, separated by ";", "," or whitespace. Anything that is not eight
+## digits (a final "X" check digit included) is discarded.
+extractISSN <- function(x) {
+  parts <- strsplit(as.character(x), "[;,/|[:space:]]+")
+  lapply(parts, function(p) {
+    p <- toupper(gsub("[^0-9Xx]", "", p))
+    # NA has to be dropped explicitly: nchar(NA_character_) is NA, not a
+    # number, so a length test alone lets it through -- and NA %in% NA is
+    # TRUE, which would match every document with no ISSN against every
+    # ranking row with no ISSN.
+    unique(p[!is.na(p) & nchar(p) == 8])
+  })
+}
+
+## Documents of M whose journal belongs to `ranking`, by ISSN or by name.
+matchJournalRanking <- function(M, ranking) {
+  byISSN <- rep(FALSE, nrow(M))
+
+  wanted <- unique(unlist(extractISSN(ranking$ISSN)))
+  cols <- issnColumns(M)
+  if (length(wanted) > 0 && length(cols) > 0) {
+    for (cl in cols) {
+      byISSN <- byISSN |
+        vapply(extractISSN(M[[cl]]), function(v) any(v %in% wanted), logical(1))
+    }
+  }
+
+  byName <- toupper(trimws(M$SO)) %in% toupper(trimws(ranking$SO))
+
+  list(keep = byISSN | byName, byISSN = byISSN, byName = byName)
+}
+
+## One-line summary of what an uploaded ranking list actually matched, in
+## sources and in documents, and on which key.
+rankingMatchReport <- function(M, hit, ranking) {
+  sources <- unique(toupper(trimws(M$SO)))
+  matchedSources <- unique(toupper(trimws(M$SO[hit$keep])))
+
+  hasISSN <- length(unique(unlist(extractISSN(ranking$ISSN)))) > 0
+  key <- if (!hasISSN) {
+    paste(
+      "The list carries no ISSN column, so journals were matched on their",
+      "name alone: add an ISSN or eISSN column to match them by identifier."
+    )
+  } else if (length(issnColumns(M)) == 0) {
+    paste(
+      "The collection carries no ISSN field, so journals were matched on",
+      "their name alone."
+    )
+  } else {
+    onlyISSN <- sum(hit$byISSN & !hit$byName)
+    paste0(
+      "Matched by ISSN: ",
+      sum(hit$byISSN),
+      " documents (",
+      onlyISSN,
+      " of them missed by the journal name)."
+    )
+  }
+
+  paste0(
+    "Journal ranking list loaded. Recognised ",
+    length(matchedSources),
+    " of ",
+    length(sources),
+    " sources (",
+    sum(hit$keep),
+    " of ",
+    nrow(M),
+    " documents); the rest are listed as 'Not Ranked'. ",
+    key
+  )
 }
 
 read_journal_list <- function(file_path) {
@@ -415,8 +535,11 @@ read_journal_list <- function(file_path) {
 }
 
 wcTable <- function(M) {
-  # Function to extract Science Category (WC) information from metadata
-  if ("WC" %in% names(M)) {
+  # Function to extract Science Category (WC) information from metadata.
+  # The WC column may be present but entirely empty/NA (e.g. an OpenAlex CSV
+  # exported without the subject/topic field): treat that as missing, otherwise
+  # SCdf$WC becomes all-NA and downstream NA comparisons crash biblioshiny.
+  if ("WC" %in% names(M) && !all(is.na(M$WC) | trimws(M$WC) == "")) {
     WC <- strsplit(M$WC, ";")
     df <- data.frame(
       SR = rep(M$SR, lengths(WC)),
@@ -425,6 +548,7 @@ wcTable <- function(M) {
     )
 
     df$WC <- trimws(df$WC) # Remove leading and trailing whitespace
+    df$WC[is.na(df$WC) | df$WC == ""] <- "N.A." # never leave NA/empty categories
   } else {
     df <- data.frame(SR = M$SR, WC = "N.A.", stringsAsFactors = FALSE)
   }
@@ -557,18 +681,18 @@ merge_files <- function(files) {
 ## dynamic watch emoji icons ---
 watchEmoji <- function(i) {
   emoji <- c(
-    "🕐",
-    "🕑",
-    "🕒",
-    "🕓",
-    "🕔",
-    "🕕",
-    "🕖",
-    "🕗",
-    "🕘",
-    "🕙",
-    "🕚",
-    "🕛"
+    "\U{1F550}",
+    "\U{1F551}",
+    "\U{1F552}",
+    "\U{1F553}",
+    "\U{1F554}",
+    "\U{1F555}",
+    "\U{1F556}",
+    "\U{1F557}",
+    "\U{1F558}",
+    "\U{1F559}",
+    "\U{1F55A}",
+    "\U{1F55B}"
   )
   # i is a positive int number, reduce it to an int from 1 to 12
   multiple <- floor(i / 12)
@@ -723,7 +847,7 @@ ggplotLifeCycle <- function(results, plot_type = c("annual", "cumulative")) {
         "text",
         x = max(complete_curve$year),
         y = max_annual * 1.05,
-        label = sprintf("R² = %.3f", R2),
+        label = sprintf("R\u{00B2} = %.3f", R2),
         hjust = 1,
         size = 4
       ) +
@@ -896,7 +1020,7 @@ plotLifeCycle <- function(results, plot_type = c("annual", "cumulative")) {
       plotly::layout(
         title = list(
           text = sprintf(
-            "Life Cycle - Annual Publications<br><sup>R² = %.3f | Peak = %.0f publications in %.1f</sup>",
+            "Life Cycle - Annual Publications<br><sup>R\u{00B2} = %.3f | Peak = %.0f publications in %.1f</sup>",
             metrics$R_squared,
             params$peak_annual,
             params$tm_year
@@ -1307,7 +1431,7 @@ create_empty_author_bio_card <- function(
             style = "margin: 0 0 5px 0; color: #BDC3C7; font-weight: 400;"
           ),
           p(
-            "📍 Country not available",
+            "\U{1F4CD} Country not available",
             style = "margin: 0 0 10px 0; color: #BDC3C7;"
           )
         ),
@@ -1641,7 +1765,7 @@ create_author_bio_card <- function(
             institution_link,
             style = "margin: 0 0 5px 0; color: #7F8C8D; font-weight: 400;"
           ),
-          p(paste("📍", country), style = "margin: 0 0 10px 0; color: #95A5A6;")
+          p(paste("\U{1F4CD}", country), style = "margin: 0 0 10px 0; color: #95A5A6;")
         ),
         column(
           4,
@@ -2054,7 +2178,7 @@ create_local_author_bio_card <- function(
         style = "margin: 0 0 10px 0; color: #2C3E50; font-weight: 600;"
       ),
       p(
-        "📊 Local Collection Profile",
+        "\U{1F4CA} Local Collection Profile",
         style = "margin: 0 0 10px 0; color: #7F8C8D; font-style: italic;"
       )
     ),
@@ -2183,7 +2307,7 @@ create_empty_local_author_bio_card <- function(
       div(
         style = "text-align: center; color: #95A5A6;",
         tags$div(
-          "📊",
+          "\U{1F4CA}",
           style = "font-size: 48px; margin-bottom: 10px; opacity: 0.3;"
         ),
         br(),
@@ -2202,7 +2326,7 @@ create_empty_local_author_bio_card <- function(
       div(
         style = "color: #95A5A6;",
         tags$div(
-          "🏷️",
+          "\U{1F3F7}\u{FE0F}",
           style = "font-size: 36px; margin-bottom: 10px; opacity: 0.3;"
         ),
         br(),
@@ -2221,7 +2345,7 @@ create_empty_local_author_bio_card <- function(
       div(
         style = "text-align: center; color: #95A5A6;",
         tags$div(
-          "📄",
+          "\U{1F4C4}",
           style = "font-size: 48px; margin-bottom: 10px; opacity: 0.3;"
         ),
         br(),
@@ -2256,7 +2380,7 @@ create_empty_local_author_bio_card <- function(
         style = "margin: 0 0 10px 0; color: #95A5A6; font-weight: 600;"
       ),
       p(
-        "📊 Local Collection Profile",
+        "\U{1F4CA} Local Collection Profile",
         style = "margin: 0 0 10px 0; color: #BDC3C7; font-style: italic;"
       )
     ),
@@ -2265,7 +2389,7 @@ create_empty_local_author_bio_card <- function(
     div(
       style = "margin: 20px 0; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; 
                  border-radius: 8px; color: #856404;",
-      tags$span("ℹ️", style = "margin-right: 8px; font-size: 16px;"),
+      tags$span("\u{2139}\u{FE0F}", style = "margin-right: 8px; font-size: 16px;"),
       strong("Information: "),
       message
     ),
@@ -2591,18 +2715,25 @@ check_online <- function(
       }
     )
   } else if (method == "http") {
-    # Richiesta HTTP
+    # Richiesta HTTP.
+    #
+    # La domanda e' se l'host risponde, non se la richiesta ha successo: un 401,
+    # un 403 o un 404 provano che il server e' raggiungibile. url() invece
+    # solleva un errore su qualunque stato diverso da 2xx, quindi l'endpoint di
+    # Gemini - che sulla radice risponde 404 - risultava irraggiungibile.
+    # Solo un errore di trasporto (DNS, connessione rifiutata, timeout) significa
+    # davvero offline.
+    if (!grepl("^https?://", host)) {
+      host <- paste0("https://", host)
+    }
     tryCatch(
       {
-        # check if host start with http or https and add if missing
-        if (!grepl("^https?://", host)) {
-          host <- paste0("https://", host)
-        }
-
-        # con <- url("https://www.google.com", open = "rb")
-        con <- url(host, open = "rb")
-        on.exit(close(con))
-        readLines(con, n = 1, warn = FALSE)
+        httr2::request(host) |>
+          httr2::req_method("HEAD") |>
+          httr2::req_timeout(timeout) |>
+          # qualunque stato HTTP e' una risposta, quindi l'host c'e'
+          httr2::req_error(is_error = function(resp) FALSE) |>
+          httr2::req_perform()
         return(TRUE)
       },
       error = function(e) {
@@ -2629,12 +2760,12 @@ check_online <- function(
 #   success <- any(grepl("time=", result, ignore.case = TRUE))
 #
 #   if (success) {
-#     # message("✅ Host is reachable.")
+#     # message("\u{2705} Host is reachable.")
 #     # Extract average latency (optional)
 #     latency_line <- result[grepl("time=", result)]
 #     times <- as.numeric(sub(".*time=([0-9.]+).*", "\\1", latency_line))
 #     avg_time <- mean(times, na.rm = TRUE)
-#     # message(sprintf("📶 Average latency: %.1f ms", avg_time))
+#     # message(sprintf("\U{1F4F6} Average latency: %.1f ms", avg_time))
 #     if (avg_time < 200) {
 #       return(TRUE)
 #     } else {
@@ -2970,6 +3101,33 @@ ValueBoxes <- function(M) {
     mutate(Results = replace_na(Results, ""))
 
   return(df)
+}
+
+## Country analyses need affiliations ----
+## Some sources carry no affiliation at all: a Lens.org export never includes
+## them, and a PubMed or OpenAlex CSV may omit them depending on the fields
+## selected at export time. AU_CO is then empty for every document, and every
+## country panel used to fail somewhere deeper with a technical message
+## ("missing value where TRUE/FALSE needed", "Join columns in `x` must be
+## present in the data"). Detect the condition once and say it plainly.
+hasCountryData <- function(M) {
+  # Both AU_CO and AU1_CO are derived from the addresses, so the affiliations
+  # are what actually decides this -- and reading them costs nothing, whereas
+  # re-extracting AU_CO would walk the whole collection. The literal string
+  # "NA" is checked too: the extraction writes it where an address is missing.
+  nonEmpty <- function(x) {
+    !is.null(x) && any(!is.na(x) & nchar(trimws(x)) > 0 & trimws(x) != "NA")
+  }
+  nonEmpty(M$C1) || nonEmpty(M$RP) || nonEmpty(M$AU_CO)
+}
+
+noCountryDataMessage <- function() {
+  paste(
+    "This collection contains no affiliation data, so country-level analyses",
+    "are not available. Lens.org exports never include affiliations; PubMed",
+    "and OpenAlex exports may omit them depending on the fields selected when",
+    "the file was downloaded."
+  )
 }
 
 countryCollab <- function(M) {
@@ -4355,17 +4513,24 @@ countrycollaboration_plotly <- function(
   COedges <- tab <- count.duplicates(COedges)
   COedges <- COedges[COedges$count >= min.edges, ]
 
-  # Calcola gli spessori degli edge normalizzati
-  edge_weights <- sqrt(COedges$count)
-  # Normalizza tra min_edgesize e edgesize
-  if (length(unique(edge_weights)) > 1) {
-    COedges$width <- min_edgesize +
-      (edge_weights - min(edge_weights)) /
-        (max(edge_weights) - min(edge_weights)) *
-        (edgesize - min_edgesize)
-  } else {
-    # Se tutti gli edge hanno lo stesso peso, usa il valore medio
-    COedges$width <- (min_edgesize + edgesize) / 2
+  # Una collezione puo' legittimamente non avere alcuna coppia di paesi sopra la
+  # soglia: pochi documenti, oppure nessuna collaborazione internazionale. La
+  # mappa resta significativa (la coropleta c'e'), quindi la si disegna senza
+  # archi invece di assegnare uno scalare a un data frame di zero righe, che
+  # fallirebbe con "replacement has 1 row, data has 0".
+  if (nrow(COedges) > 0) {
+    # Calcola gli spessori degli edge normalizzati
+    edge_weights <- sqrt(COedges$count)
+    # Normalizza tra min_edgesize e edgesize
+    if (length(unique(edge_weights)) > 1) {
+      COedges$width <- min_edgesize +
+        (edge_weights - min(edge_weights)) /
+          (max(edge_weights) - min(edge_weights)) *
+          (edgesize - min_edgesize)
+    } else {
+      # Se tutti gli edge hanno lo stesso peso, usa il valore medio
+      COedges$width <- (min_edgesize + edgesize) / 2
+    }
   }
 
   # Crea la mappa base con choropleth (SENZA legenda)
@@ -4391,7 +4556,8 @@ countrycollaboration_plotly <- function(
     )
 
   # Aggiungi le linee di collaborazione curve con spessore controllato
-  for (i in 1:nrow(COedges)) {
+  # seq_len(): con zero archi 1:nrow() itererebbe su 1 e 0.
+  for (i in seq_len(nrow(COedges))) {
     # Crea arco geodetico
     path <- geosphere::gcIntermediate(
       c(COedges$Longitude.x[i], COedges$Latitude.x[i]),
@@ -4416,7 +4582,7 @@ countrycollaboration_plotly <- function(
         text = paste0(
           "<b>",
           COedges$V1[i],
-          " ↔ ",
+          " \u{2194} ",
           COedges$V2[i],
           "</b>",
           "<br>Collaborations: ",
@@ -5706,14 +5872,24 @@ addGgplotsWb <- function(
     # or an unrecognised class would skip every writer branch below and
     # then crash openxlsx::insertImage with "File does not exist".
     if (is.null(p)) {
-      warning(sprintf("Plot %d for sheet '%s' is NULL — skipped from report.",
+      warning(sprintf("Plot %d for sheet '%s' is NULL \u{2014} skipped from report.",
                       i, sheetname), call. = FALSE)
       next
     }
 
+    # Include the (period-unique) sheet name in the file name. Otherwise two
+    # sheets written within the same second (e.g. consecutive Thematic
+    # Evolution periods in the report loop) collide on
+    # "figureImage_<i>_<ts>.png": the later period overwrites the former's PNG,
+    # and since openxlsx::insertImage only reads the file at saveWorkbook time,
+    # both sheets end up showing the same (last-written) image.
+    safeSheet <- gsub("[^A-Za-z0-9]+", "_", sheetname)
     fileName <- file.path(
       getWD(),
-      paste0("figureImage_", i, "_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".png")
+      paste0(
+        "figureImage_", safeSheet, "_", i, "_",
+        format(Sys.time(), "%Y%m%d_%H%M%S"), ".png"
+      )
     )
 
     written <- tryCatch({
@@ -5750,7 +5926,7 @@ addGgplotsWb <- function(
         TRUE
       } else {
         warning(sprintf(
-          "Plot %d for sheet '%s' has unsupported class (%s) — skipped from report.",
+          "Plot %d for sheet '%s' has unsupported class (%s) \u{2014} skipped from report.",
           i, sheetname, paste(class(p), collapse = "/")
         ), call. = FALSE)
         FALSE
@@ -5825,7 +6001,12 @@ plot2png <- function(p, filename, type = "vis", dpi = 300, height = 7) {
   switch(
     type,
     vis = {
-      visSave(p, html_name)
+      # selfcontained = FALSE: visSave() defaults to TRUE, which routes through
+      # rmarkdown::pandoc_self_contained_html() and aborts with "Saving a widget
+      # with selfcontained = TRUE requires pandoc" on installations without it.
+      # The page is only ever loaded locally by biblioShot() and deleted right
+      # after, so the sidecar "_files" directory is harmless.
+      visSave(p, html_name, selfcontained = FALSE)
     },
     plotly = {
       htmlwidgets::saveWidget(p, file = html_name, selfcontained = FALSE)
@@ -5865,7 +6046,14 @@ plotlySankey2png <- function(p, filename, dpi = 300, height = 7) {
     ", vw, vh, img_scale))
 
   html_name <- paste0(tools::file_path_sans_ext(filename), ".html")
-  htmlwidgets::saveWidget(export_plot, file = html_name, selfcontained = TRUE)
+  # selfcontained = FALSE: bundling the widget into a single file requires
+  # pandoc, which is not part of the bibliometrix dependency chain, so
+  # selfcontained = TRUE aborted the export on any installation without it
+  # (Saving a widget with selfcontained = TRUE requires pandoc). The page is
+  # loaded locally via file:// by the chromote session below and removed
+  # afterwards together with its "_files" directory, so the split form is
+  # equivalent here.
+  htmlwidgets::saveWidget(export_plot, file = html_name, selfcontained = FALSE)
 
   b <- chromote::ChromoteSession$new(width = vw, height = vh)
   tryCatch({
@@ -6058,7 +6246,7 @@ addScreenWb <- function(df, wb, width = 14, height = 8, dpi = 75) {
         if (is.null(fileName) || is.na(fileName) || !nzchar(fileName) ||
             !file.exists(fileName)) {
           warning(sprintf(
-            "Screenshot file '%s' for sheet '%s' is missing — skipped from report.",
+            "Screenshot file '%s' for sheet '%s' is missing \u{2014} skipped from report.",
             fileName %||% "<NA>", sh
           ), call. = FALSE)
           next
@@ -7133,5 +7321,54 @@ drawPrismaFlowDiagram <- function(db_name = "Web of Science",
            font_size = fs, font_face = "bold")
 
   grid::popViewport()
+  invisible(NULL)
+}
+
+## Write a bibliographic collection to file, in Excel or RData format.
+##
+## An Excel cell cannot hold more than 32767 characters, a limit the CR field
+## regularly exceeds: in that case the user is warned that the column will be
+## truncated and pointed at the RData format, and the export proceeds anyway.
+saveCollectionFile <- function(M, file, fmt) {
+  if (!identical(fmt, "xlsx")) {
+    save(list = "M", file = file, envir = environment())
+    return(invisible(NULL))
+  }
+
+  truncated <- FALSE
+  if ("CR" %in% names(M)) {
+    truncated <- sum(nchar(M$CR) > 32767, na.rm = TRUE) > 0
+  }
+
+  if (isTRUE(truncated)) {
+    show_alert(
+      text = tags$span(
+        tags$h4(
+          "Some documents have too long a list of references that cannot be saved in excel (>32767 characters).",
+          style = "color: firebrick;"
+        ),
+        tags$br(),
+        tags$h4(
+          "Data in the column CR could be truncated.",
+          style = "color: firebrick;"
+        )
+      ),
+      title = "Please save the collection using the 'RData' format",
+      type = "warning",
+      width = "50%",
+      closeOnEsc = TRUE,
+      closeOnClickOutside = TRUE,
+      html = FALSE,
+      showConfirmButton = TRUE,
+      showCancelButton = FALSE,
+      btn_labels = "OK",
+      btn_colors = "#913333",
+      timer = 0,
+      imageUrl = "",
+      animation = TRUE
+    )
+  }
+
+  suppressWarnings(openxlsx::write.xlsx(M, file = file))
   invisible(NULL)
 }

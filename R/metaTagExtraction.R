@@ -51,6 +51,16 @@ metaTagExtraction <- function(M, Field = "CR_AU", sep = ";", aff.disamb = TRUE) 
     M$CR <- gsub("DOI;", "DOI ", as.character(M$CR))
   }
 
+  ## RP and C1 empty strings have to be treated as missing values:
+  ## RP == "" survives the is.na() checks in AU_UN() (wiping out all
+  ## affiliations) and overwrites valid C1 data in AU1_CO()
+  if ("RP" %in% names(M)) {
+    M$RP[which(trimws(M$RP) == "")] <- NA
+  }
+  if ("C1" %in% names(M)) {
+    M$C1[which(trimws(M$C1) == "")] <- NA
+  }
+
 
   ### SR field creation
 
@@ -188,10 +198,18 @@ CR_SO <- function(M, sep) {
 
   # vector of cited Journals
   if (db == "SCOPUS") {
-    # SCOPUS reference layout: "AUTHORS, TITLE (YEAR) JOURNAL, VOL, PAGE"
-    # -> after dropping everything up to ") ", the journal is the 1st field.
+    # SCOPUS ships TWO reference layouts: the classic "AUTHORS, TITLE (YEAR)
+    # JOURNAL, VOL, PAGE" (year before journal) and the newer "AUTHORS, TITLE,
+    # JOURNAL, VOL, ISSUE, PP. PAGES, (YEAR)" (year last). Normalize the new layout
+    # to the classic one first (convert_scopus_new_to_classic moves the trailing
+    # year back after the title) so that, after dropping everything up to ") ",
+    # the journal is the 1st field for both. The previous code skipped the
+    # conversion and returned the first author for new-format refs.
     for (i in seq_len(size[1])) {
-      refs <- gsub(".*?\\) ", "", listCAU[[i]])
+      cr_i <- vapply(listCAU[[i]],
+                     function(r) convert_scopus_new_to_classic(r),
+                     character(1), USE.NAMES = FALSE)
+      refs <- gsub(".*?\\) ", "", cr_i)
       elem <- strsplit(as.character(refs), ",")
       ind <- lengths(elem)
       if (length(ind) > 0 && max(ind) > 2) {
@@ -225,7 +243,7 @@ CR_SO <- function(M, sep) {
 AU_CO <- function(M) {
   # Countries
   size <- dim(M)[1]
-  data("countries", envir = environment())
+  data("countries", package = "bibliometrix", envir = environment())
   countries <- as.character(countries[[1]])
   if (M$DB[1] %in% c("ISI", "PUBMED")) {
     countries <- as.character(sapply(countries, function(s) paste0(s, ".", collapse = "")))
@@ -325,12 +343,19 @@ AU1_CO <- function(M, sep) {
   } else {
     size <- dim(M)[1]
     # Countries
-    data("countries", envir = environment())
+    data("countries", package = "bibliometrix", envir = environment())
     countries <- as.character(countries[[1]])
     countries <- paste(" ", countries, " ", sep = "")
     M$AU1_CO <- NA
-    C1 <- M$C1
-    C1[which(!is.na(M$RP))] <- M$RP[which(!is.na(M$RP))]
+    ## A collection whose source carries no affiliation at all -- Lens exports
+    ## never do -- has neither C1 nor RP. Recycling a NULL through paste()
+    ## below collapses it to a single element, so RP[i] was NA from the second
+    ## document on, gregexpr() returned NA and sum() then fed NA to if():
+    ## "missing value where TRUE/FALSE needed". Normalise both fields to
+    ## full-length vectors and let the loop simply find no country.
+    C1 <- if ("C1" %in% names(M)) M$C1 else rep(NA_character_, size)
+    RPfield <- if ("RP" %in% names(M)) M$RP else rep(NA_character_, size)
+    C1[which(!is.na(RPfield))] <- RPfield[which(!is.na(RPfield))]
     ## do this before strsplit(), otherwise entries with multiple (reprint) author would be split between first group of authors
     C1 <- gsub("\\[.*?\\] ", "", C1)
     ## remove string before the first "(REPRINT AUTHOR)", otherwise C1 may get split between first group of authors, thus removing address, forcing it to default to RP.
@@ -345,7 +370,7 @@ AU1_CO <- function(M, sep) {
     C1 <- gsub("[[:punct:][:blank:]]+", " ", C1)
     C1 <- paste(trim(C1), " ", sep = "")
     if (M$DB[1] != "PUBMED") {
-      RP <- M$RP
+      RP <- RPfield
       # RP[which(is.na(RP))]=M$RRP)
       RP <- paste(RP, ";", sep = "")
       RP <- gsub("[[:punct:][:blank:]]+", " ", RP)
@@ -353,18 +378,20 @@ AU1_CO <- function(M, sep) {
       RP <- C1 <- paste(" ", gsub("[[:punct:]]", "", C1), sep = "")
     }
 
-    for (i in 1:size[1]) {
+    ## gregexpr() on a missing string returns NA, so the sums below are guarded:
+    ## a document with no usable address leaves AU1_CO as NA instead of aborting.
+    for (i in seq_len(size)) {
       if (!is.na(C1[i])) {
         ind <- unlist(sapply(countries, function(l) (gregexpr(l, C1[i], fixed = TRUE))))
-        if (sum(ind > -1) > 0) {
+        if (sum(ind > -1, na.rm = TRUE) > 0) {
           M$AU1_CO[i] <- paste(unique(names(ind[ind > -1][1])), collapse = ";")
           # print(i)
           # print(M$AU1_CO[i])
         }
       }
-      if (is.na(M$AU1_CO[i])) {
+      if (is.na(M$AU1_CO[i]) && !is.na(RP[i])) {
         ind <- unlist(sapply(countries, function(l) (gregexpr(l, RP[i], fixed = TRUE))))
-        if (sum(ind > -1) > 0) {
+        if (sum(ind > -1, na.rm = TRUE) > 0) {
           M$AU1_CO[i] <- paste(unique(names(ind[ind > -1][1])), collapse = ";")
         }
       }

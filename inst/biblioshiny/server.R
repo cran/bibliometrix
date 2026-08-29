@@ -10,11 +10,21 @@ source("openalex_api.R", local = TRUE)
 source("pubmed_api.R", local = TRUE)
 source("Htmlboxformat.R", local = TRUE)
 
-suppressMessages(res <- libraries())
+# Not wrapped in suppressMessages(): libraries() reports here which package
+# could not be installed and why, and package startup chatter is already
+# silenced inside it by suppressPackageStartupMessages().
+res <- libraries()
 
-if (!res) {
+if (!isTRUE(res$ok)) {
   stop(
-    "Biblioshiny cannot be loaded, some packages are missing. Please check your internet connection and try again."
+    "Biblioshiny cannot start. These packages could not be loaded:\n  ",
+    paste(res$missing, collapse = "\n  "),
+    "\n\nInstall them from the R console with:\n\n  install.packages(c(",
+    paste0("\"", res$missing_names, "\"", collapse = ", "),
+    "))\n\nthen run biblioshiny() again. If the installation itself fails, the message\n",
+    "it prints says why: no network, no write permission on the library path, a\n",
+    "missing system library, or no binary for this version of R.\n",
+    call. = FALSE
   )
 }
 
@@ -165,7 +175,7 @@ server <- function(input, output, session) {
     chromote::set_default_chromote_object(
       chromote::Chromote$new(chromote::Chrome$new(
         args = c(
-          "--headless=new", # Usa la nuova modalità headless
+          "--headless=new", # Usa la nuova modalit\u{00E0} headless
           "--disable-gpu", # Disabilita GPU
           "--no-sandbox", # Necessario per server
           "--disable-dev-shm-usage", # Evita problemi memoria condivisa
@@ -1543,13 +1553,59 @@ To ensure the functionality of Biblioshiny,
           )
         },
         openalex = {
-          withProgress(message = 'Conversion in progress', value = 0, {
-            M <- convert2df(
-              inFile$datapath,
-              dbsource = input$dbsource,
-              format = "csv"
+          # Fault tolerance: an OpenAlex CSV without the required fields must not
+          # crash the app. Capture conversion warnings (missing recommended
+          # fields) and errors (missing required fields) and surface them to the
+          # user via a notification / dialog.
+          oa_warnings <- character(0)
+          M <- withProgress(message = 'Conversion in progress', value = 0, {
+            tryCatch(
+              withCallingHandlers(
+                convert2df(
+                  inFile$datapath,
+                  dbsource = input$dbsource,
+                  format = "csv"
+                ),
+                warning = function(w) {
+                  oa_warnings <<- c(oa_warnings, conditionMessage(w))
+                  invokeRestart("muffleWarning")
+                }
+              ),
+              error = function(e) {
+                showModal(modalDialog(
+                  title = tags$strong(
+                    icon("exclamation-triangle"),
+                    " OpenAlex import: missing required fields"
+                  ),
+                  tags$p("The selected OpenAlex CSV could not be imported:"),
+                  tags$pre(
+                    style = "white-space: pre-wrap;",
+                    conditionMessage(e)
+                  ),
+                  footer = modalButton("OK"),
+                  easyClose = TRUE
+                ))
+                NULL
+              }
             )
           })
+
+          # Abort gracefully if required fields were missing
+          if (is.null(M)) {
+            return(NULL)
+          }
+
+          # Inform the user about missing recommended fields (non-blocking)
+          if (length(oa_warnings) > 0) {
+            showNotification(
+              HTML(paste(
+                "<strong>OpenAlex import notice</strong><br>",
+                paste(gsub("\n", "<br>", oa_warnings), collapse = "<br>")
+              )),
+              duration = 15,
+              type = "warning"
+            )
+          }
 
           # Resolve cited references if requested
           if (isTRUE(input$importFetchRefs)) {
@@ -2792,7 +2848,7 @@ To ensure the functionality of Biblioshiny,
       ## column as numeric (which would strip the HTML and reformat the
       ## values with formatC(), killing the badge).
       bg    <- if (d < 0) "#1d8fe1" else "#b22222"
-      arrow <- if (d < 0) "&#9660;" else "&#9650;"   # ▼ or ▲
+      arrow <- if (d < 0) "&#9660;" else "&#9650;"   # \u{25BC} or \u{25B2}
       sprintf(
         '<span style="display:block;background-color:%s;color:white;padding:4px;border-radius:3px;text-align:center;font-weight:700;font-size:13px;">%s %.2f</span>',
         bg, arrow, abs(d)
@@ -2896,14 +2952,24 @@ To ensure the functionality of Biblioshiny,
     } else {
       preselect <- all_fields
     }
-    n_eligible <- sum(!is.na(.bib_doi_norm(values$M$DI)))
+    ## A record is enrichable if it has a usable lookup key: a DOI (used by both
+    ## OpenAlex and Crossref) OR an OpenAlex Work ID (id_oa, used by OpenAlex).
+    ## The Work ID makes OpenAlex enrichment possible even for minimal OpenAlex
+    ## CSV exports that omitted the DOI.
+    has_doi <- !is.na(.bib_doi_norm(values$M$DI))
+    oa_id_col <- if ("id_oa" %in% names(values$M)) values$M$id_oa else NULL
+    has_oa_id <- !is.na(.bib_oa_id_norm(oa_id_col))
+    if (length(has_oa_id) == 0) has_oa_id <- rep(FALSE, nrow(values$M))
+    n_eligible <- sum(has_doi | has_oa_id)
 
-    ## Auto-disable OpenAlex when the source DB is OpenAlex itself.
     db_is_oa <- length(values$M$DB) > 0 &&
       !is.na(values$M$DB[1]) &&
       toupper(values$M$DB[1]) == "OPENALEX"
 
-    default_sources <- if (db_is_oa) "crossref" else c("openalex", "crossref")
+    ## OpenAlex enrichment is always available now: for OpenAlex collections it
+    ## looks records up by Work ID (filling fields omitted from the CSV export);
+    ## for other databases it uses the DOI.
+    default_sources <- c("openalex", "crossref")
 
     ## Read polite email and OpenAlex API key from biblioshiny Settings.
     polite_email <- if (!is.null(values$oaPoliteEmail) &&
@@ -2929,10 +2995,10 @@ To ensure the functionality of Biblioshiny,
 
     removeModal()
     showModal(modalDialog(
-      title = "Complete missing metadata via DOI lookup",
+      title = "Complete missing metadata via DOI / OpenAlex Work ID lookup",
       tagList(
         p(HTML(sprintf(
-          "We will query the selected sources for the %d records that have a DOI and try to fill the selected fields. <b>Existing values are never overwritten.</b>",
+          "We will query the selected sources for the %d records that have a DOI or an OpenAlex Work ID and try to fill the selected fields. <b>Existing values are never overwritten.</b>",
           n_eligible
         ))),
         checkboxGroupInput(
@@ -2944,7 +3010,7 @@ To ensure the functionality of Biblioshiny,
         ),
         if (db_is_oa) {
           helpText(HTML(
-            "<small><i>The collection was imported from OpenAlex; the OpenAlex pass is unavailable for this dataset.</i></small>"
+            "<small><i>The collection was imported from OpenAlex. OpenAlex looks records up by their Work ID, so it can fill fields that were not selected in the CSV export (Crossref still requires a DOI).</i></small>"
           ))
         },
         helpText(HTML(creds_html)),
@@ -3144,6 +3210,19 @@ To ensure the functionality of Biblioshiny,
     s <- sub("^doi:\\s*", "", s, ignore.case = TRUE)
     ok <- grepl("^10\\.[0-9]{4,9}/", s)
     s[!ok] <- NA_character_
+    s
+  }
+
+  ## Local helper: OpenAlex Work ID normaliser, mirroring completeMetadata()'s
+  ## .normalize_oa_id(). Used so the eligibility count includes records that can
+  ## be enriched via Work ID even when they have no DOI.
+  .bib_oa_id_norm <- function(x) {
+    if (is.null(x)) return(character(0))
+    s <- trimws(as.character(x))
+    s <- sub("^https?://openalex\\.org/", "", s, ignore.case = TRUE)
+    s <- toupper(s)
+    s[s %in% c("", "NA", "NONE")] <- NA_character_
+    s[!grepl("^W[0-9]+$", s)] <- NA_character_
     s
   }
 
@@ -4879,20 +4958,46 @@ To ensure the functionality of Biblioshiny,
   #### Journal Ranking list ----
   observeEvent(input$journal_ranking_upload, {
     req(input$journal_ranking_upload)
-    # Load the journal ranking data
-    ranking <- read_journal_ranking(input$journal_ranking_upload$datapath)
+    # Load the journal ranking data. read_journal_ranking() rejects a file
+    # without a name and a ranking column, and an error raised here would
+    # abort the observer and grey out the session, so report it instead.
+    ranking <- tryCatch(
+      read_journal_ranking(input$journal_ranking_upload$datapath),
+      error = function(e) {
+        showNotification(
+          paste("Journal ranking list not loaded:", conditionMessage(e)),
+          type = "error",
+          duration = 10
+        )
+        NULL
+      }
+    )
+
     if (!is.null(ranking)) {
-      SOnotRanked <- setdiff(values$Morig$SO, ranking$SO)
+      hit <- matchJournalRanking(values$Morig, ranking)
+
+      SOnotRanked <- unique(values$Morig$SO[!hit$keep])
       if (length(SOnotRanked) > 0) {
         ranking <- bind_rows(
           ranking,
           data.frame(
             SO = SOnotRanked,
-            Ranking = rep("Not Ranked", length(SOnotRanked))
+            Ranking = rep("Not Ranked", length(SOnotRanked)),
+            stringsAsFactors = FALSE
           )
         )
       }
+
+      # Say how many sources were recognised and on which key. Unmatched
+      # journals are labelled "Not Ranked", so without this the loss is
+      # indistinguishable from a journal the list genuinely does not rank.
+      showNotification(
+        rankingMatchReport(values$Morig, hit, ranking),
+        type = "message",
+        duration = 12
+      )
     }
+
     values$journal_ranking <- ranking
     shinyjs::show("journal_ranking_subset")
   })
@@ -5046,15 +5151,16 @@ To ensure the functionality of Biblioshiny,
       choices = sort(unique(values$SCdf$WC)),
       selected = sort(unique(values$SCdf$WC))
     )
-    if (length(unique(values$SCdf$WC)) == 1) {
-      if (unique(values$SCdf$WC) == "N.A.") shinyjs::hide("subject_category")
+    uniqueWC <- unique(values$SCdf$WC)
+    if (length(uniqueWC) == 1 && (is.na(uniqueWC) || uniqueWC == "N.A.")) {
+      shinyjs::hide("subject_category")
     } else {
       shinyjs::show("subject_category")
     }
   })
 
   observe({
-    req(values$Morig) # assicurati che i dati siano già caricati
+    req(values$Morig) # assicurati che i dati siano gi\u{00E0} caricati
     CO <- sort(unique(
       values$COdf %>% dplyr::filter(continent %in% input$region) %>% pull(CO)
     ))
@@ -5149,7 +5255,7 @@ To ensure the functionality of Biblioshiny,
         "OCEANIA",
         "Unknown"
       )
-    ) # supponendo sia già calcolato
+    ) # supponendo sia gi\u{00E0} calcolato
     CO <- sort(unique(
       values$COdf %>% dplyr::filter(continent %in% input$region) %>% pull(CO)
     ))
@@ -5211,12 +5317,11 @@ To ensure the functionality of Biblioshiny,
     }
 
     if (inherits(values$journal_ranking, "data.frame")) {
-      soR <- values$journal_ranking %>%
-        dplyr::filter(Ranking %in% input$journal_ranking_subset) %>%
-        pull(SO) %>%
-        unique()
-      M <- M %>%
-        dplyr::filter(SO %in% soR) # filter by journal ranking
+      # filter by journal ranking, on the ISSN where the list carries one and
+      # on the journal name otherwise
+      selectedRanking <- values$journal_ranking %>%
+        dplyr::filter(Ranking %in% input$journal_ranking_subset)
+      M <- M[matchJournalRanking(M, selectedRanking)$keep, , drop = FALSE]
     }
 
     M <- M %>%
@@ -5259,11 +5364,44 @@ To ensure the functionality of Biblioshiny,
       size = "l",
       uiOutput("dataFiltered"),
       footer = tagList(
-        #downloadButton("collection.save", "Save Filtered Data"),
-        modalButton("Close")
+        div(
+          style = "display: flex; align-items: center; justify-content: flex-end; gap: 10px;",
+          div(
+            # .modal-footer right-aligns its text: the selectize box would
+            # render its label flush right without this.
+            style = "margin-bottom: 0; min-width: 170px; text-align: left;",
+            selectInput(
+              "saveFiltered_file",
+              label = NULL,
+              choices = c("Excel" = "xlsx", "R Data Format" = "RData"),
+              selected = "xlsx",
+              width = "100%"
+            )
+          ),
+          downloadButton("collectionFiltered.save", "Save Filtered Data"),
+          modalButton("Close")
+        )
       )
     ))
   })
+
+  # Export of the filtered collection. It needs an id of its own: the Export
+  # Collection button on the Import or Load page already owns "collection.save",
+  # and two UI elements bound to the same output are not addressable.
+  output$collectionFiltered.save <- downloadHandler(
+    filename = function() {
+      paste0(
+        "Bibliometrix-Filtered-Data-",
+        Sys.Date(),
+        ".",
+        input$saveFiltered_file
+      )
+    },
+    content = function(file) {
+      req(values$M)
+      saveCollectionFile(values$M, file, input$saveFiltered_file)
+    }
+  )
 
   output$dataFiltered <- renderUI({
     DTfiltered()
@@ -6056,14 +6194,20 @@ To ensure the functionality of Biblioshiny,
 
   observeEvent(input$reportDLC, {
     if (!is.null(values$DLC)) {
-      values$DLC$residuals <- values$DLC$residuals %>%
+      # Reshape a local copy, never values$DLC itself: the two conversions
+      # below are not idempotent, so writing them back would make a second
+      # click on the same results abort on a duplicated "Year" column and
+      # leave the session hanging. values$DLC is also shared with the plots,
+      # the summary panel and the download handlers, none of which read
+      # residuals or base_year.
+      list_df <- values$DLC
+      list_df$residuals <- list_df$residuals %>%
         as.data.frame() %>%
         tibble::rownames_to_column("Year") %>%
         rename(Residuals = ".")
-      values$DLC$base_year <- values$DLC$base_year %>%
+      list_df$base_year <- list_df$base_year %>%
         as.data.frame() %>%
         rename(base_year = ".")
-      list_df <- values$DLC
       list_plot <- list(
         ggplotLifeCycle(values$DLC, plot_type = c("annual")),
         ggplotLifeCycle(values$DLC, plot_type = c("cumulative"))
@@ -8081,12 +8225,17 @@ To ensure the functionality of Biblioshiny,
       k <- input$MostRelCountriesK
       logoGrid <- values$logoGrid
 
-      TABCo <- tryCatch({
-        countryCollab(M_data)
-      }, error = function(e) {
-        showNotification(paste("Countries error:", e$message), type = "error", duration = 8)
-        return(NULL)
-      })
+      TABCo <- if (!hasCountryData(M_data)) {
+        showNotification(noCountryDataMessage(), type = "warning", duration = 12)
+        NULL
+      } else {
+        tryCatch({
+          countryCollab(M_data)
+        }, error = function(e) {
+          showNotification(paste("Countries error:", e$message), type = "error", duration = 8)
+          NULL
+        })
+      }
     })
     req(TABCo)
     {
@@ -8258,6 +8407,10 @@ To ensure the functionality of Biblioshiny,
 
   ### Country Production ----
   output$countryProdPlot <- renderPlotly({
+    if (!hasCountryData(values$M)) {
+      showNotification(noCountryDataMessage(), type = "warning", duration = 12)
+      req(FALSE)
+    }
     values$mapworld <- mapworld(values$M, values)
     plot.ly(
       values$mapworld$g,
@@ -11248,7 +11401,7 @@ To ensure the functionality of Biblioshiny,
     # if paused show the button "export_coc" else hide it
     if (values$paused_coc) {
       output$export_cocUI <- renderUI({
-        actionButton("export_coc", "⬇ Export", width = "90%")
+        actionButton("export_coc", "\u{2B07} Export", width = "90%")
       })
     } else {
       output$export_cocUI <- renderUI({})
@@ -13576,6 +13729,10 @@ To ensure the functionality of Biblioshiny,
           )
         },
         COL_CO = {
+          if (!hasCountryData(M_data)) {
+            showNotification(noCountryDataMessage(), type = "warning", duration = 12)
+            return(NULL)
+          }
           if (!("AU_CO" %in% names(M_data))) {
             M_data <- bibliometrix::metaTagExtraction(
               M_data,
@@ -13821,7 +13978,7 @@ To ensure the functionality of Biblioshiny,
     values$paused_col <- !values$paused_col
     if (values$paused_col) {
       output$export_colUI <- renderUI({
-        actionButton("export_col", "⬇ Export", width = "90%")
+        actionButton("export_col", "\u{2B07} Export", width = "90%")
       })
     } else {
       output$export_colUI <- renderUI({})
@@ -13964,6 +14121,11 @@ To ensure the functionality of Biblioshiny,
     M_data <- values$M
     wm_min_edges <- input$WMedges.min
     wm_edgesize <- input$WMedgesize * 2
+
+    if (!hasCountryData(M_data)) {
+      showNotification(noCountryDataMessage(), type = "warning", duration = 12)
+      return(NULL)
+    }
 
     WMmap <- tryCatch({
       withProgress(message = 'World Collaboration Map: computing...', value = 0, {
@@ -14594,10 +14756,40 @@ To ensure the functionality of Biblioshiny,
     values$random_seed <- input$random_seed
   })
 
+  # Renders the Gemini API-key status line.
+  #
+  # The previous implementation assigned `output$status <- renderText(...)`
+  # from *inside* `renderUI()`. `status` is not an output id declared in ui.R
+  # (the panel only holds `uiOutput("apiStatus")`), and `renderUI()` never
+  # returned any UI, so every message \u{2014} success and failure alike \u{2014} was
+  # silently dropped: a user pasting an invalid key got no feedback at all.
+  # The status is now a plain reactive value rendered by a single output.
+  geminiStatusUI <- function(message, type = c("info", "success", "error")) {
+    type <- match.arg(type)
+    div(
+      style = paste0(
+        "white-space: pre-wrap; word-break: break-word; font-weight: 600; ",
+        "color: ",
+        switch(type, info = "#3c8dbc", success = "#00a65a", error = "#dd4b39"),
+        ";"
+      ),
+      message
+    )
+  }
+
   output$apiStatus <- renderUI({
-    if (values$geminiAPI) {
-      last <- showGeminiAPI()
-      output$status <- renderText(paste0("✅ API key has been set: ", last))
+    st <- values$geminiStatus
+    if (!is.null(st)) {
+      return(geminiStatusUI(st$message, st$type))
+    }
+    # No interaction yet: reflect the key restored from disk at startup.
+    if (isTRUE(values$geminiAPI)) {
+      geminiStatusUI(
+        paste0("\u{2705} API key has been set: ", showGeminiAPI()),
+        "success"
+      )
+    } else {
+      NULL
     }
   })
 
@@ -14633,8 +14825,7 @@ To ensure the functionality of Biblioshiny,
         label = "Select the Gemini Model",
         choices = list(
           "Free tier" = c(
-            "Gemini 2.5 Flash" = "2.5-flash",
-            "Gemini 2.5 Flash Lite" = "2.5-flash-lite",
+            "Gemini 3.5 Flash Lite" = "3.5-flash-lite",
             "Gemini 3.0 Flash" = "3-flash-preview",
             "Gemma 4 31B (experimental)" = "gemma-4-31b-it",
             "Gemma 4 26B (experimental)" = "gemma-4-26b-a4b-it"
@@ -14642,13 +14833,30 @@ To ensure the functionality of Biblioshiny,
           "Paid API key required" = c(
             "Gemini 3.1 Pro" = "3.1-pro-preview",
             "Gemini Pro Latest" = "pro-latest"
+          ),
+          # Still served to keys created before Google retired the 2.5 family,
+          # so they stay selectable \u{2014} but they 404 on newer keys and must not
+          # be the default any more.
+          "Legacy (not available for recently created API keys)" = c(
+            "Gemini 2.5 Flash" = "2.5-flash",
+            "Gemini 2.5 Flash Lite" = "2.5-flash-lite"
           )
         ),
         selected = ifelse(
           is.null(values$gemini_api_model),
-          "2.5-flash-lite",
+          "3.5-flash-lite",
           values$gemini_api_model
         )
+      ),
+      conditionalPanel(
+        condition = "input.gemini_api_model == '2.5-flash' || input.gemini_api_model == '2.5-flash-lite'",
+        helpText(strong(style = "color: #d9534f;", "Legacy model")),
+        helpText(em(
+          "Google no longer serves the Gemini 2.5 family to API keys created",
+          " recently: those keys get \"this model is no longer available to",
+          " new users\" (HTTP 404). Keep it only if it already works for you,",
+          " otherwise choose a Gemini 3.x model."
+        ))
       ),
       conditionalPanel(
         condition = "input.gemini_api_model == '2.5-flash'",
@@ -14684,6 +14892,19 @@ To ensure the functionality of Biblioshiny,
         ))
       ),
       conditionalPanel(
+        condition = "input.gemini_api_model == '3.5-flash-lite'",
+        helpText(strong("Works with both free and paid API keys")),
+        helpText(em(
+          "Higher quality than Gemini 2.5 Flash at Flash-Lite speed",
+          " (thinking level set to \"minimal\").",
+          tags$br(),
+          "Latency time: Low",
+          tags$br(),
+          "Current rate limits depend on your key tier and are shown in",
+          " Google AI Studio (Rate limits)."
+        ))
+      ),
+      conditionalPanel(
         condition = "input.gemini_api_model == '3.1-pro-preview' || input.gemini_api_model == 'pro-latest'",
         helpText(strong(style = "color: #d9534f;", "Paid API Key Required")),
         helpText(em(
@@ -14694,7 +14915,7 @@ To ensure the functionality of Biblioshiny,
       ),
       conditionalPanel(
         condition = "input.gemini_api_model == 'gemma-4-31b-it' || input.gemini_api_model == 'gemma-4-26b-a4b-it'",
-        helpText(strong(style = "color: #d9534f;", "Experimental — open Gemma models")),
+        helpText(strong(style = "color: #d9534f;", "Experimental \u{2014} open Gemma models")),
         helpText(em(
           "Free tier, low latency, no extra setup (same Google API key).",
           tags$br(),
@@ -14702,7 +14923,7 @@ To ensure the functionality of Biblioshiny,
           " temporary errors. Calls are retried automatically; if they keep",
           " failing, switch back to a Gemini model.",
           tags$br(),
-          "Analytical quality is lower than Gemini Flash — best used as a fallback."
+          "Analytical quality is lower than Gemini Flash \u{2014} best used as a fallback."
         ))
       )
     )
@@ -14743,33 +14964,34 @@ To ensure the functionality of Biblioshiny,
   })
 
   observeEvent(input$set_key, {
-    key <- input$api_key
+    key <- trimws(input$api_key)
+    # Snapshot the selected model (no reactive refs inside the promise): the
+    # validator uses it only to warn when that model is not in the key's
+    # catalogue \u{2014} it never gates the key itself on a single model.
+    selected_model <- values$gemini_api_model
 
     # Show validating message
-    output$apiStatus <- renderUI({
-      output$status <- renderText("Validating API key...")
-    })
+    values$geminiStatus <- list(
+      type = "info",
+      message = "\u{23F3} Validating API key..."
+    )
 
     # Async: validate API key in background
     promises::future_promise(
       {
-        setGeminiAPI(key)
+        setGeminiAPI(key, model = selected_model)
       },
       seed = TRUE
     ) %...>%
       (function(last) {
         if (!last$valid) {
-          output$apiStatus <- renderUI({
-            output$status <- renderText(last$message)
-          })
+          values$geminiStatus <- list(type = "error", message = last$message)
           values$geminiAPI <- FALSE
         } else {
-          output$apiStatus <- renderUI({
-            output$status <- renderText(paste0(
-              "✅ API key has been set: ",
-              last$message
-            ))
-          })
+          values$geminiStatus <- list(
+            type = "success",
+            message = paste0("\u{2705} API key has been set: ", last$message)
+          )
           values$geminiAPI <- TRUE
           home <- homeFolder()
           path_gemini_key <- paste0(
@@ -14777,17 +14999,18 @@ To ensure the functionality of Biblioshiny,
             "/.biblio_gemini_key.txt",
             collapse = ""
           )
-          Sys.setenv(GEMINI_API_KEY = key)
-          writeLines(key, path_gemini_key)
+          # Persist the validated (trimmed) key, not the raw input: a key
+          # pasted with a trailing space or newline would otherwise be saved
+          # broken and fail on the next launch.
+          Sys.setenv(GEMINI_API_KEY = last$key)
+          writeLines(last$key, path_gemini_key)
         }
       }) %...!%
       (function(err) {
-        output$apiStatus <- renderUI({
-          output$status <- renderText(paste(
-            "Error validating key:",
-            conditionMessage(err)
-          ))
-        })
+        values$geminiStatus <- list(
+          type = "error",
+          message = paste("\u{274C} Error validating key:", conditionMessage(err))
+        )
         values$geminiAPI <- FALSE
       })
   })
@@ -14797,10 +15020,12 @@ To ensure the functionality of Biblioshiny,
       home <- homeFolder()
       path_gemini_key <- paste0(home, "/.biblio_gemini_key.txt", collapse = "")
       file.remove(path_gemini_key)
+      Sys.setenv(GEMINI_API_KEY = "")
       values$geminiAPI <- FALSE
-      output$apiStatus <- renderUI({
-        output$status <- renderText(paste0("❌ API key has been removed"))
-      })
+      values$geminiStatus <- list(
+        type = "info",
+        message = "\u{274C} API key has been removed"
+      )
     }
   })
 
